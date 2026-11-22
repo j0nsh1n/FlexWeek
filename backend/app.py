@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from flexweek_engine import ServiceRefusal  # type: ignore[import-untyped]
@@ -1519,15 +1519,11 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            raw = db.preference_row(account["id"])
-        assert raw is not None
-        return preferences_from_row(json.loads(raw))
+        return served(flexweek_engine.service_read_preferences, account["id"])
 
     @app.put("/api/preferences")
-    def put_preferences(preferences: Preferences, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            return write_preferences(db, account["id"], preferences)
+    def put_preferences(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        return served(flexweek_engine.service_write_preferences, account["id"], json.dumps(given))
 
     @app.get("/api/routines")
     def get_routines(account: Annotated[dict, Depends(user)]) -> dict:

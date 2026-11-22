@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +11,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend import app
 from backend.app import create_app, replace_account
 from backend.models import Routine
 from backend.storage import connect, initialize
@@ -164,40 +162,6 @@ def test_the_reply_to_a_batch_of_changes_lists_each_changed_week_before_its_revi
     )
     assert batch.status_code == 200, batch.text
     assert f'"changed_weeks":[{{"week_start":"{WEEK_B}","revision":2}}]' in batch.text
-
-
-def test_reading_preferences_goes_through_the_store_not_raw_sql(
-    alice: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Routines are read by the Rust service now (flexweek_service::views::routines, the store's list).
-    calls: list[tuple[str, tuple]] = []
-
-    class Spy:
-        def __init__(self, db: Any) -> None:
-            self.db = db
-
-        def __getattr__(self, name: str) -> Any:
-            member = getattr(self.db, name)
-
-            def recorded(*args: Any) -> Any:
-                calls.append((name, args))
-                return member(*args)
-
-            return recorded
-
-    @contextmanager
-    def spied(path: Path) -> Iterator[Spy]:
-        with connect(path) as db:
-            yield Spy(db)
-
-    monkeypatch.setattr(app, "connect", spied)
-    preferences = alice.get("/api/preferences")
-    assert preferences.status_code == 200
-    assert preferences.json()["theme"] == "system"
-    names = [name for name, _args in calls]
-    assert "preference_row" in names
-    statements = [args[0] for name, args in calls if name == "execute"]
-    assert not [text for text in statements if "preferences" in text]
 
 
 def test_a_write_is_undone_when_a_later_write_in_the_same_connection_fails(tmp_path: Path) -> None:

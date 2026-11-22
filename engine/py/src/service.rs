@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
-use flexweek_service::{Refusal, ServiceError, views, weeks};
+use flexweek_service::{Refusal, ServiceError, preferences, views, weeks};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::prelude::*;
@@ -386,6 +386,29 @@ fn service_restore_points(py: Python<'_>, path: &str, user_id: i64) -> PyResult<
     guard(|| json_text(py, views::restore_points(Path::new(path), user_id)))
 }
 
+#[pyfunction]
+fn service_read_preferences(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
+    guard(|| json_text(py, preferences::read_preferences(Path::new(path), user_id)))
+}
+
+/// `given` is the request body as JSON text; the service checks it.
+#[pyfunction]
+fn service_write_preferences(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    given: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        json_text(
+            py,
+            preferences::write_preferences(Path::new(path), user_id, &given),
+        )
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("ServiceRefusal", module.py().get_type::<ServiceRefusal>())?;
     crate::export!(
@@ -406,6 +429,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_homework,
         service_routines,
         service_restore_points,
+        service_read_preferences,
+        service_write_preferences,
     );
     Ok(())
 }

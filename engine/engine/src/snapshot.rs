@@ -185,6 +185,25 @@ pub fn canonical(value: &Value) -> String {
     canonical_value(value)
 }
 
+/// `json.dumps(value, separators=(",", ":"))`: keys in the order they were written, every non-ASCII
+/// character escaped, as `backend/app.py` writes the preference columns.
+pub fn dumps_compact(value: &Value) -> String {
+    match value {
+        Value::Array(items) => {
+            let parts: Vec<String> = items.iter().map(dumps_compact).collect();
+            format!("[{}]", parts.join(","))
+        }
+        Value::Object(map) => {
+            let parts: Vec<String> = map
+                .iter()
+                .map(|(key, item)| format!("{}:{}", py_string(key), dumps_compact(item)))
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+        other => json_text(other, ",", ":"),
+    }
+}
+
 /// `json.dumps(value, sort_keys=True)` with Python's default `", "` and `": "` separators.
 pub fn dumps_sorted(value: &Value) -> String {
     json_text(value, ", ", ": ")

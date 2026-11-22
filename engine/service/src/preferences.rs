@@ -624,3 +624,216 @@ pub fn check_preferences(value: &Value) -> Checked<Value> {
     }
     Ok(Value::Object(out))
 }
+
+/// What `check_preferences` leaves out at its default, put back: the store keeps every value.
+fn with_defaults(written: &Value) -> Map<String, Value> {
+    let mut full = written.as_object().cloned().unwrap_or_default();
+    let defaults: [(&str, Value); 26] = [
+        ("protected", Value::Array(Vec::new())),
+        ("work_windows", Value::Array(Vec::new())),
+        ("day_cutoff", Value::Null),
+        ("weekend_homework_free", Value::Bool(false)),
+        ("buffer_min", Value::from(15)),
+        ("urgent_first", Value::Bool(true)),
+        ("split_long_tasks", Value::Bool(false)),
+        ("show_weekends", Value::Bool(true)),
+        ("alert_volume", Value::from(80)),
+        ("end_chime", Value::Bool(false)),
+        ("tray_notifications", Value::Bool(true)),
+        ("start_at_login", Value::Bool(false)),
+        ("preferred_view", Value::Null),
+        ("sidebar_collapsed", Value::Bool(false)),
+        ("sidebar_width_px", Value::Null),
+        ("theme_pack", Value::from("system")),
+        ("accent", Value::from("default")),
+        ("accent_chips", Value::Bool(false)),
+        ("motion", Value::Null),
+        ("alarm_tone", Value::from("chime")),
+        ("planning_style", Value::from("suggest")),
+        ("drag_step_min", Value::from(15)),
+        ("clock_24h", Value::Bool(false)),
+        ("focus_audio", Value::from("off")),
+        ("focus_auto_mute", Value::Bool(true)),
+        ("focus_auto_complete", Value::Bool(false)),
+    ];
+    for (name, value) in defaults {
+        full.entry(name.to_string()).or_insert(value);
+    }
+    full.entry("setup".to_string()).or_insert(Value::Null);
+    full
+}
+
+/// The columns `backend/app.py`'s write_preferences stores, from checked preferences.
+fn stored_columns(written: &Value) -> Value {
+    use flexweek_engine::snapshot::dumps_compact;
+    let full = with_defaults(written);
+    let get = |name: &str| full.get(name).cloned().unwrap_or(Value::Null);
+    let int_flag = |name: &str| {
+        Value::from(i64::from(
+            full.get(name).and_then(Value::as_bool).unwrap_or(false),
+        ))
+    };
+    let mut availability = Map::new();
+    availability.insert("protected".into(), get("protected"));
+    availability.insert("work_windows".into(), get("work_windows"));
+    availability.insert("day_cutoff".into(), get("day_cutoff"));
+    let mut comfort = Map::new();
+    for name in [
+        "alert_volume",
+        "end_chime",
+        "tray_notifications",
+        "start_at_login",
+        "preferred_view",
+        "sidebar_collapsed",
+        "sidebar_width_px",
+        "theme_pack",
+        "accent",
+        "accent_chips",
+        "motion",
+        "alarm_tone",
+        "planning_style",
+        "drag_step_min",
+        "clock_24h",
+        "setup",
+    ] {
+        comfort.insert(name.into(), get(name));
+    }
+    // The focus choices are stored only away from their defaults.
+    if get("focus_audio") != "off" {
+        comfort.insert("focus_audio".into(), get("focus_audio"));
+    }
+    if get("focus_auto_mute") == Value::Bool(false) {
+        comfort.insert("focus_auto_mute".into(), Value::Bool(false));
+    }
+    if get("focus_auto_complete") == Value::Bool(true) {
+        comfort.insert("focus_auto_complete".into(), Value::Bool(true));
+    }
+    let mut columns = Map::new();
+    columns.insert("theme".into(), get("theme"));
+    columns.insert("reminders_enabled".into(), int_flag("reminders_enabled"));
+    columns.insert("reminder_lead_min".into(), get("reminder_lead_min"));
+    columns.insert("reminder_sound".into(), int_flag("reminder_sound"));
+    columns.insert(
+        "reminder_dnd_override".into(),
+        int_flag("reminder_dnd_override"),
+    );
+    for name in [
+        "timer_work_min",
+        "timer_break_min",
+        "timer_long_break_min",
+        "timer_long_break_every",
+    ] {
+        columns.insert(name.into(), get(name));
+    }
+    columns.insert(
+        "auto_split_pomodoro".into(),
+        int_flag("auto_split_pomodoro"),
+    );
+    columns.insert(
+        "weekend_homework_free".into(),
+        int_flag("weekend_homework_free"),
+    );
+    columns.insert("buffer_min".into(), get("buffer_min"));
+    columns.insert("urgent_first".into(), int_flag("urgent_first"));
+    columns.insert("split_long_tasks".into(), int_flag("split_long_tasks"));
+    columns.insert("show_weekends".into(), int_flag("show_weekends"));
+    columns.insert("default_spotify_url".into(), get("default_spotify_url"));
+    columns.insert(
+        "alarms_json".into(),
+        Value::from(dumps_compact(&get("alarms"))),
+    );
+    columns.insert(
+        "availability_json".into(),
+        Value::from(dumps_compact(&Value::Object(availability))),
+    );
+    columns.insert(
+        "comfort_json".into(),
+        Value::from(dumps_compact(&Value::Object(comfort))),
+    );
+    Value::Object(columns)
+}
+
+/// The account's preferences as `GET /api/preferences` answers them.
+pub fn read_preferences(path: &std::path::Path, user_id: i64) -> crate::ServiceResult<Value> {
+    use flexweek_store as store;
+    let row = crate::with_db(path, |conn| Ok(store::preference_row(conn, user_id)?))?
+        .ok_or_else(|| crate::ServiceError::Broken("the account has no preferences row".into()))?;
+    let row: Value = serde_json::from_str(&row).map_err(|error| store::StoreError::Json {
+        text: row.clone(),
+        error,
+    })?;
+    let mut fields = store::preferences_fields(&row)?;
+    // The engine's reader drops the comfort keys it does not know; the focus choices are those.
+    let comfort: Value = row
+        .get("comfort_json")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+        .and_then(|text| serde_json::from_str(text).ok())
+        .unwrap_or(Value::Null);
+    if let (Some(fields), Value::Object(comfort)) = (fields.as_object_mut(), &comfort) {
+        if let Some(audio) = comfort.get("focus_audio").and_then(Value::as_str)
+            && ["rain", "lo-fi", "white-noise", "spotify"].contains(&audio)
+        {
+            fields.insert("focus_audio".into(), Value::from(audio));
+        }
+        for name in ["focus_auto_mute", "focus_auto_complete"] {
+            if let Some(flag) = comfort.get(name).filter(|value| value.is_boolean()) {
+                fields.insert(name.into(), flag.clone());
+            }
+        }
+    }
+    check_preferences(&fields).map_err(|refused| {
+        crate::ServiceError::Broken(format!(
+            "stored preferences no longer read as preferences: {}",
+            refused.0
+        ))
+    })
+}
+
+/// Saves the preferences `given` as `PUT /api/preferences` does and answers them as written; bad input
+/// is refused with the one sentence every bad request gets.
+pub fn write_preferences(
+    path: &std::path::Path,
+    user_id: i64,
+    given: &Value,
+) -> crate::ServiceResult<Value> {
+    let written = check_preferences(given).map_err(|_| {
+        crate::ServiceError::from(crate::Refusal::Invalid(
+            crate::accounts::INVALID_INPUT.to_string(),
+        ))
+    })?;
+    let columns = stored_columns(&written).to_string();
+    crate::with_db(path, |conn| {
+        Ok(flexweek_store::write_preferences(conn, user_id, &columns)?)
+    })?;
+    Ok(written)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The columns stored for each accepted preference set in the corpus are the ones Python's
+    /// write_preferences stored (captured by fixtures/make_preferences_corpus.py), text for text.
+    #[test]
+    fn the_stored_columns_are_the_ones_python_stored() {
+        let cases: Vec<Value> =
+            serde_json::from_str(include_str!("../tests/fixtures/preferences_parity.json"))
+                .unwrap();
+        let mut checked = 0;
+        for case in cases.iter().filter(|case| case.get("stored").is_some()) {
+            let written = check_preferences(&case["input"]).unwrap();
+            assert_eq!(
+                stored_columns(&written),
+                case["stored"],
+                "{}",
+                case["input"]
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 400,
+            "only {checked} accepted cases carry stored columns"
+        );
+    }
+}

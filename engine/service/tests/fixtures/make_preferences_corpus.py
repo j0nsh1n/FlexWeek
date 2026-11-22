@@ -6,7 +6,7 @@ import json
 import random
 import sys
 
-from backend.app import Preferences
+from backend.app import Preferences, write_preferences
 
 rng = random.Random(20261122)
 BOOLS = [True, False, 0, 1, "yes", "no", "on", "2", None, 0.5]
@@ -126,26 +126,37 @@ def case() -> dict:
     return prefs
 
 
+class Captured:
+    """Stands in for the store: keeps the columns write_preferences would save."""
+
+    def write_preferences(self, _user_id: int, text: str) -> None:
+        self.columns = json.loads(text)
+
+
+def written(prefs: dict) -> dict:
+    try:
+        checked = Preferences.model_validate(prefs)
+    except Exception:
+        return {"input": prefs, "written": None}
+    store = Captured()
+    write_preferences(store, 1, checked)  # type: ignore[arg-type]
+    return {"input": prefs, "written": checked.model_dump(), "stored": store.columns}
+
+
 cases = []
 seen = set()
 # Fixed cases for rules the random ones can miss: pydantic searches an alarm's time for HH:MM anywhere.
 for time in ["07:00", "x07:00y", "07:00x", "107:00", "7:00", "24:00"]:
     fixed = {"theme": "system", "alarms": [{"id": "a1", "name": "Wake", "time": time, "days": [2, 0]}]}
     seen.add(json.dumps(fixed, sort_keys=True))
-    try:
-        cases.append({"input": fixed, "written": Preferences.model_validate(fixed).model_dump()})
-    except Exception:
-        cases.append({"input": fixed, "written": None})
+    cases.append(written(fixed))
 while len(cases) < int(sys.argv[2]):
     prefs = case()
     key = json.dumps(prefs, sort_keys=True)
     if key in seen:
         continue
     seen.add(key)
-    try:
-        cases.append({"input": prefs, "written": Preferences.model_validate(prefs).model_dump()})
-    except Exception:
-        cases.append({"input": prefs, "written": None})
+    cases.append(written(prefs))
 with open(sys.argv[1], "w") as out:
     json.dump(cases, out, ensure_ascii=False, separators=(",", ":"))
 accepted = sum(1 for c in cases if c["written"] is not None)
