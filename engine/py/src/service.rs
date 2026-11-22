@@ -6,8 +6,8 @@ use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
 use flexweek_service::{
-    Refusal, ServiceError, ServiceResult, comfort, homework_saves, preferences, records, views,
-    week_saves, weeks,
+    Refusal, ServiceError, ServiceResult, comfort, homework_saves, plans, preferences, records,
+    views, week_saves, weeks,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
@@ -495,6 +495,21 @@ fn service_save_homework(
     })
 }
 
+/// `given` is the request body as JSON text; the service checks it. The planner's 150 ms budget runs from
+/// when this call starts.
+#[pyfunction]
+fn service_plan(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let started = std::time::Instant::now();
+        served_json(py, || {
+            let elapsed = || started.elapsed().as_secs_f64() * 1000.0;
+            plans::plan(Path::new(path), user_id, &given, &elapsed)
+        })
+    })
+}
+
 /// `given` is the request body as JSON text; the service checks it.
 #[pyfunction]
 fn service_repeat_edits(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
@@ -648,6 +663,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_save_routine,
         service_spread_preview,
         service_repeat_edits,
+        service_plan,
         service_restore_preview,
         service_restore,
         service_create_restore_point,

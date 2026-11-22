@@ -47,7 +47,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | availability | spread_sessions | ADAPTER | One engine call (`spread_sessions_around`, with the days the homework's timed sessions sit on); the session text is decoded and the remainder is returned beside it. |
 | comfort | snap_minutes | ADAPTER | One `snap_minutes_wide` call. Integers f64 holds exactly keep `plan::snap_minutes`; past 2^53 the engine uses Python's formula. |
 | comfort | split_plan | ADAPTER | One engine call, JSON decoded. |
-| comfort | preview_split | ADAPTER | One engine call, JSON decoded. |
 | day | is_work_session | ADAPTER | Encodes the block, one call, `bool` of the result. |
 | day | build_day | ADAPTER | Encodes rows and weeks, one call, then pydantic on sessions and locked blocks. |
 | explain | sentence | ADAPTER | Looks up engine copy cached at import, so an unknown code stays a `KeyError`. |
@@ -56,7 +55,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | recovery | recovery_code_matches | ADAPTER | One engine call. ASCII comparison and the non-ASCII `TypeError` live in the engine. |
 | restore | canonical | ADAPTER | Encodes the value, one call. |
 | restore | state_token | ADAPTER | Encodes the snapshot, one call. |
-| restore | diff_snapshots | ADAPTER | Encodes both snapshots, one call, JSON decoded. |
 | restore | diff_transfer | ADAPTER | Encodes both snapshots, one call, JSON decoded. |
 | solver | _clock | STAYS | Reads `time.perf_counter`. A budget test patches that clock. |
 | solver | _clock.elapsed | STAYS | Nested in `_clock`. Turns later readings of the same clock into milliseconds. |
@@ -160,8 +158,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | app | payload_digest | ADAPTER | One engine call; the engine hashes the canonical text. |
 | app | insert_restore_point | ADAPTER | One connection call. Python reads `secrets` and the clock and passes both in; the engine names the point, counts, snapshots, protects and prunes. |
 | app | preferences_from_row | ADAPTER | One engine call fills every default; `Preferences` is the pydantic check. |
-| app | validate_windows | ADAPTER | The pydantic check the engine calls for each window list. |
-| app | solve_availability | ADAPTER | One engine call splits the stored text, folds an older row's study windows into the work windows and builds the occupancy; Python revalidates each list first. |
 | app | naive_now | STAYS | Reads the clock. |
 
 `upsert_assignment`, `delete_assignment`, `save_week_row`, `upsert_routine`, and `delete_routine` are not in the table and the test does not check them. Each makes one store call and turns the status it gets back into an HTTP error (409, 422, 404) by comparing it with a status word. The store decides the status; the comparison only picks the error. None of the five holds a rule beyond that mapping: the revision check, the cap, and the identical-body shortcut are all in the store.

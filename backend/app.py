@@ -17,9 +17,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend import clock as wall_clock
-from backend.assignments import (
-    prepare_solve,
-)
 from backend.availability import fold_study_windows
 from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
@@ -27,7 +24,6 @@ from backend.models import (
     AssignmentContent,
     ProtectedWindow,
     Routine,
-    SolveRequest,
     StudyWindow,
     TimeBlock,
     WeekRequest,
@@ -40,7 +36,6 @@ from backend.recovery import (
 )
 from backend.restore import canonical, diff_transfer, state_token
 from backend.slots import DAY_END_MIN, SLOT_MIN
-from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
     Connection,
     Row,
@@ -52,13 +47,11 @@ from backend.storage import (
 )
 from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
 from backend.weeks import (
-    availability_on_shown_week,
     compose_shown_week,
     current_week_start,
     is_calendar_date,
     is_week_start,
     repeat_changes_from_shown_week,
-    rules_on_shown_week,
     shown_week_parts,
     split_shown_week,
 )
@@ -968,23 +961,6 @@ def write_preferences(db: Connection, user_id: int, preferences: Preferences) ->
     return preferences.model_dump()
 
 
-WINDOW_MODELS: dict[str, type[BaseModel]] = {
-    "protected": ProtectedWindow,
-    "study": StudyWindow,
-    "work": WorkWindow,
-}
-
-
-def validate_windows(kind: str, text: str) -> str:
-    model = WINDOW_MODELS[kind]
-    return json.dumps([model.model_validate(item).model_dump() for item in json.loads(text)])
-
-
-def solve_availability(stored: str | None) -> tuple[list[int], list[WorkWindow]]:
-    occupancy, work = flexweek_engine.solve_availability(stored, validate_windows)
-    return list(occupancy), [WorkWindow.model_validate(item) for item in json.loads(work)]
-
-
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
     path = database or Path(os.environ.get("FLEXWEEK_DATABASE", str(ROOT / "var" / "flexweek.db")))
     public_origin = (origin or os.environ.get("FLEXWEEK_ORIGIN", "http://127.0.0.1:8000")).rstrip("/")
@@ -1513,63 +1489,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         )
 
     @app.post("/api/solve")
-    def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:
-        ids = assignment_ids_of(week.blocks)
-        with connect(path) as db:
-            owned = require_own_assignments(db, account["id"], ids) if ids else {}
-            availability = db.availability_json(account["id"])
-            stored_prefs = db.preference_row(account["id"])
-        plan_rules = json.loads(stored_prefs) if stored_prefs else None
-        extra_occ, work_windows = solve_availability(availability)
-        if week.week_start is not None and shown_parts_of(week.week_start) is not None:
-            # A week on screen from another day than Monday: each weekday's hours and the weekend go on
-            # the days that weekday falls on.
-            stored_work = json.dumps([window.model_dump(mode="json") for window in work_windows])
-            extra_occ, moved = availability_on_shown_week(week.week_start, extra_occ, stored_work)
-            work_windows = [WorkWindow.model_validate(item) for item in json.loads(moved)]
-            plan_rules = rules_on_shown_week(week.week_start, plan_rules)
-        blocks = week.blocks
-        extra_deadlines = None
-        extra_slack = None
-        if ids:
-            if week.week_start is None:
-                raise HTTPException(422, "week_start is required when a block has assignment_id")
-            blocks, extra_deadlines, extra_slack = prepare_solve(week.blocks, week.week_start, owned)
-        if week.recover is not None:
-            return reschedule_after_miss(
-                blocks,
-                week.recover.missed_block_id,
-                week.recover.missed_day,
-                week.recover.previous_placed,
-                deadlines=extra_deadlines,
-                slack_deadlines=extra_slack,
-                extra_occ=extra_occ,
-                work_windows=work_windows,
-                plan_rules=plan_rules,
-            ).model_dump()
-        if week.running_late is not None:
-            return reschedule_running_late(
-                blocks,
-                week.running_late.day,
-                week.running_late.minutes,
-                week.running_late.from_start,
-                week.running_late.previous_placed,
-                deadlines=extra_deadlines,
-                slack_deadlines=extra_slack,
-                extra_occ=extra_occ,
-                work_windows=work_windows,
-                now_floor=week.running_late.now_floor,
-                plan_rules=plan_rules,
-            ).model_dump()
-        return solve(
-            blocks,
-            deadlines=extra_deadlines,
-            slack_deadlines=extra_slack,
-            extra_occ=extra_occ,
-            work_windows=work_windows,
-            now_floor=week.now_floor,
-            plan_rules=plan_rules,
-        ).model_dump()
+    def post_solve(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        return served(flexweek_engine.service_plan, account["id"], json.dumps(given))
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:

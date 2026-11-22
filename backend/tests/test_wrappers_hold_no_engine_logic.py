@@ -56,8 +56,6 @@ APP_HELPERS = (
     "payload_digest",
     "insert_restore_point",
     "preferences_from_row",
-    "validate_windows",
-    "solve_availability",
 )
 
 ROOT = Path(__file__).resolve().parents[2]

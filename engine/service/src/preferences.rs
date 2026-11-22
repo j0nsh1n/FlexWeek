@@ -96,6 +96,12 @@ fn minutes(text: &str) -> i64 {
     clock_to_minutes(text).unwrap_or(-1)
 }
 
+/// The minute of the day `HH:MM` names, read as Python's pattern and `int()` read it; None when it is not
+/// `HH:MM`.
+pub(crate) fn grid_minutes(text: &str) -> Option<i64> {
+    hhmm(text).then(|| minutes(text))
+}
+
 /// A start on the 15-minute grid, as GridWindow and WorkWindow read it.
 fn grid_start(value: &Value) -> Checked<String> {
     let start = text_field(value, "start", 5, 5)?;
@@ -137,7 +143,7 @@ fn trimmed_subject(value: Option<&Value>) -> Checked<Option<String>> {
     Ok(Some(trimmed))
 }
 
-fn study_window(value: &Value) -> Checked<Value> {
+pub(crate) fn study_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a study window",
@@ -155,7 +161,7 @@ fn study_window(value: &Value) -> Checked<Value> {
     Ok(Value::Object(out))
 }
 
-fn work_window(value: &Value) -> Checked<Value> {
+pub(crate) fn work_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a study hours window",
@@ -185,7 +191,7 @@ fn work_window(value: &Value) -> Checked<Value> {
     Ok(Value::Object(out))
 }
 
-fn protected_window(value: &Value) -> Checked<Value> {
+pub(crate) fn protected_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a protected window",
