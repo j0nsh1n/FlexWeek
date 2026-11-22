@@ -95,7 +95,7 @@ fn stored_with_standing(
 }
 
 /// A stored week as the week answer gives it, every block written out in full, and its revision.
-fn seen_week(
+pub(crate) fn seen_week(
     conn: &Connection,
     user_id: i64,
     week_start: &str,
@@ -132,7 +132,7 @@ fn monday_week(conn: &Connection, user_id: i64, week_start: &str) -> ServiceResu
 }
 
 /// `between` runs just before the second stored week is read as saved, so a test can commit there.
-fn shown_week(
+pub(crate) fn shown_week(
     conn: &Connection,
     user_id: i64,
     week_start: &str,

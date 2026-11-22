@@ -724,7 +724,7 @@ impl PyConn {
     }
 
     /// Changes to School and Setup's activities (`flexweek_engine::repeats::Intent`, a JSON list),
-    /// as `post_changes` and the assistant apply them. A change that is not one raises ValueError
+    /// as the app's batch save and the assistant apply them. A change that is not one raises ValueError
     /// with the sentence why.
     fn apply_repeat_intents(
         &self,

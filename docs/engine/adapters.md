@@ -144,7 +144,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 `backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
 
-`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `POST /api/repeat-edits` is one call to the Rust service (`service_repeat_edits`), which checks the list and asks `flexweek_store::preview_edited_weeks` for the later weeks that have their own edit. `GET /api/week` reads them with `db.standing_blocks`.
+`POST /api/changes` is one call to the Rust service (`service_changes`, `flexweek_service::changes::apply_changes`), which applies a batch's `repeats` through `flexweek_store::apply_repeat_intents`, the function the assistant's `changes::apply` calls too. `POST /api/repeat-edits` is one call to the Rust service (`service_repeat_edits`), which checks the list and asks `flexweek_store::preview_edited_weeks` for the later weeks that have their own edit. `GET /api/week` reads them with `db.standing_blocks`.
 
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
@@ -160,7 +160,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | app | preferences_from_row | ADAPTER | One engine call fills every default; `Preferences` is the pydantic check. |
 | app | naive_now | STAYS | Reads the clock. |
 
-`upsert_assignment`, `delete_assignment`, and `save_week_row` are not in the table and the test does not check them. Each makes one store call and turns the status it gets back into an HTTP error (409, 422, 404) by comparing it with a status word. The store decides the status; the comparison only picks the error. None of the three holds a rule beyond that mapping: the revision check, the cap, and the identical-body shortcut are all in the store.
+The helpers that saved and deleted homework and wrote a week's row for the routes left `backend/app.py` when those routes moved to the Rust service; the revision check, the cap, and the identical-body shortcut were always in the store.
 
 ## Desktop
 

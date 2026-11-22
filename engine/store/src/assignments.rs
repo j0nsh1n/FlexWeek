@@ -78,7 +78,7 @@ pub fn insert_assignment(conn: &Connection, user_id: i64, id: &str, body: &str) 
     Ok(())
 }
 
-/// The same decisions as `upsert_assignment`: an identical body keeps its revision, a stale
+/// A homework save: an identical body keeps its revision, a stale
 /// revision conflicts before any write, and a new row past `max_count` is refused.
 pub fn save_assignment(
     conn: &Connection,

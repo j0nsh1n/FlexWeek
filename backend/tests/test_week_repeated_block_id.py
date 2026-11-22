@@ -8,11 +8,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import backend.app as backend_app
-from backend.app import create_app, save_week_row
+from backend.app import create_app
 from backend.storage import connect
 
 PASSWORD = "a-long-test-password"
@@ -62,20 +62,6 @@ def stored_weeks(path: Path) -> list[tuple]:
         ).fetchall()
     finally:
         plain.close()
-
-
-def test_the_store_refuses_a_doubled_id_in_words_and_writes_nothing(
-    client: TestClient, database: Path
-) -> None:
-    with connect(database) as db:
-        user_id = db.execute("SELECT id FROM users WHERE username = 'alice'").fetchone()[0]
-        with pytest.raises(HTTPException) as refused:
-            save_week_row(db, user_id, WEEK, [school(), school("School again")], 0)
-    assert refused.value.status_code == 422
-    assert (
-        refused.value.detail == 'Two blocks in this week share the id "school". Each block needs its own id.'
-    )
-    assert stored_weeks(database) == []
 
 
 def test_a_backup_file_with_a_doubled_id_is_refused_and_the_account_stays_as_it_was(
