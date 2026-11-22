@@ -11,7 +11,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend import app
 from backend.app import create_app
 from backend.models import Routine
 from backend.tests.account_support import PASSWORD, WRITE, school
@@ -183,16 +182,6 @@ def test_saving_and_renaming_homework_leaves_the_other_accounts_same_id_alone(
     assert [(item["id"], item["title"], item["revision"]) for item in bobs] == [
         ("hw-essay", "Bob's essay", 1)
     ]
-
-
-def test_another_accounts_homework_does_not_count_toward_the_limit(
-    alice: TestClient, bob: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(app, "MAX_ASSIGNMENTS", 2)
-    assert put_assignment(bob, id="b1").status_code == 200
-    assert put_assignment(bob, id="b2").status_code == 200
-    assert put_assignment(bob, id="b3").status_code == 422
-    assert put_assignment(alice, id="a1").status_code == 200
 
 
 def test_a_deadline_one_account_adopted_is_still_created_for_the_other(

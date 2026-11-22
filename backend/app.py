@@ -27,7 +27,6 @@ from backend.availability import fold_study_windows, spread_sessions
 from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
-    Assignment,
     AssignmentContent,
     ProtectedWindow,
     Routine,
@@ -1275,14 +1274,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.put("/api/assignments/{assignment_id}")
     def put_assignment(
-        assignment_id: str, payload: Assignment, account: Annotated[dict, Depends(user)]
+        assignment_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
     ) -> dict:
-        if payload.id != assignment_id:
-            raise HTTPException(422, "assignment id in the path and body must match")
-        content = AssignmentContent.model_validate(payload.model_dump(exclude={"revision"}))
-        with connect(path) as db:
-            db.begin_immediate()
-            return upsert_assignment(db, account["id"], content, payload.revision)
+        saved = flexweek_engine.service_save_homework
+        return served(saved, account["id"], assignment_id, json.dumps(given))
 
     @app.post("/api/assignments/{assignment_id}/spread")
     def post_spread(

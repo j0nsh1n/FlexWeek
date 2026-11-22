@@ -6,7 +6,8 @@ use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
 use flexweek_service::{
-    Refusal, ServiceError, ServiceResult, comfort, preferences, records, views, week_saves, weeks,
+    Refusal, ServiceError, ServiceResult, comfort, homework_saves, preferences, records, views,
+    week_saves, weeks,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
@@ -441,6 +442,24 @@ fn service_write_preferences(
 
 /// `given` is the request body as JSON text; the service checks it.
 #[pyfunction]
+fn service_save_homework(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    id: &str,
+    given: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        served_json(py, || {
+            homework_saves::save_homework(Path::new(path), user_id, id, &given)
+        })
+    })
+}
+
+/// `given` is the request body as JSON text; the service checks it.
+#[pyfunction]
 fn service_save_week(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
     guard(|| {
         let given: Value = serde_json::from_str(given)
@@ -576,6 +595,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_write_preferences,
         service_split_preview,
         service_save_week,
+        service_save_homework,
         service_restore_preview,
         service_restore,
         service_create_restore_point,

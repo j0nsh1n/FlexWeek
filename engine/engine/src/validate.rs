@@ -527,7 +527,7 @@ fn completed_at_of(map: &Map<String, Value>) -> Result<Option<String>, String> {
 
 fn notes_of(map: &Map<String, Value>) -> Result<String, String> {
     match map.get("notes") {
-        None | Some(Value::Null) => Ok(String::new()),
+        None => Ok(String::new()),
         Some(Value::String(text)) => {
             string_bounds(text, 0, 4000)?;
             Ok(text.clone())
