@@ -122,8 +122,9 @@ pub fn check(checkout: &Path, base: &str) -> Result<(), String> {
         .and_then(|lines| lines.first().map(|line| line.trim().to_string()))
         .unwrap_or_else(|| base.to_string());
     let base_files = git_z(checkout, &["ls-tree", "-r", "-z", "--name-only", &fork])?;
+    let tracked: BTreeSet<String> = git_z(checkout, &["ls-files", "-z"])?.into_iter().collect();
     let ledger_file = checkout.join(LEDGER_PATH);
-    if !ledger_file.is_file() {
+    if !tracked.contains(LEDGER_PATH) || !ledger_file.is_file() {
         if base_files.iter().any(|path| path == LEDGER_PATH) {
             return Err(format!(
                 "{LEDGER_PATH} was deleted; it must stay while Python tests remain"
@@ -135,7 +136,6 @@ pub fn check(checkout: &Path, base: &str) -> Result<(), String> {
     let text =
         std::fs::read_to_string(&ledger_file).map_err(|error| format!("{LEDGER_PATH}: {error}"))?;
     let ledger = Ledger::parse(&text)?;
-    let tracked: BTreeSet<String> = git_z(checkout, &["ls-files", "-z"])?.into_iter().collect();
     let missing = unrecorded(
         base_files.iter().map(String::as_str),
         |path| tracked.contains(path) && checkout.join(path).is_file(),
@@ -162,7 +162,7 @@ red = "zoom's clamp removed by hand: zoom_keeps_the_top_time failed"
 "#;
 
     #[test]
-    fn only_test_files_under_the_two_test_folders_count() {
+    fn only_test_files_in_the_folders_pytest_collects_count() {
         assert!(is_python_test("desktop/tests/week/test_week_zoom.py"));
         assert!(is_python_test("backend/tests/test_saving_a_week.py"));
         assert!(!is_python_test("desktop/tests/week/support_week.py"));

@@ -580,6 +580,18 @@ fn a_name_is_the_same_in_any_case_and_bad_input_is_refused_before_anything_runs(
         let refused = accounts::login(&db.path, at(NOW), &mut entropy, name, password, false, "");
         assert_eq!(refusal(refused), invalid, "{name:?} {password:?}");
     }
+    for code in ["1234567", &"c".repeat(65) as &str] {
+        let refused = accounts::recover(
+            &db.path,
+            at(NOW),
+            &mut entropy,
+            "ana_1",
+            code,
+            "brand new pass 2",
+            false,
+        );
+        assert_eq!(refusal(refused), invalid, "{code:?}");
+    }
     let long = "p".repeat(129);
     let refused = accounts::register(&db.path, at(NOW), &mut entropy, "bob", &long, false, "");
     assert_eq!(refusal(refused), invalid);
@@ -821,4 +833,59 @@ fn wrong_recovery_codes_also_wait_five_minutes() {
         refusal(blocked),
         Refusal::TooMany(TOO_MANY_TRIES.to_string())
     );
+}
+
+#[test]
+fn a_failed_piece_of_work_leaves_nothing_it_wrote() {
+    let db = fresh("rollback");
+    let failed: Result<(), ServiceError> = with_db(&db.path, |conn| {
+        flexweek_store::begin_immediate(conn)?;
+        flexweek_store::insert_user(conn, "ghost", "hash")?;
+        Err(Refusal::Conflict("stop".to_string()).into())
+    });
+    assert!(failed.is_err());
+    let found = with_db(&db.path, |conn| {
+        Ok(flexweek_store::find_user(conn, "ghost")?)
+    })
+    .unwrap();
+    assert!(found.is_none(), "a refused piece of work kept its insert");
+}
+
+#[test]
+fn the_password_gated_actions_wait_five_minutes_after_ten_tries() {
+    for action in ["renew", "change", "delete"] {
+        let db = fresh(&format!("throttle-{action}"));
+        let mut entropy = Counting(0);
+        let made = ana(&db, &mut entropy);
+        let mut last = None;
+        for _ in 0..10 {
+            let tried = match action {
+                "renew" => accounts::renew_recovery_codes(
+                    &db.path,
+                    at(NOW),
+                    &mut entropy,
+                    &made.account,
+                    "nope nope nope 1",
+                )
+                .map(|_| ()),
+                "change" => accounts::change_password(
+                    &db.path,
+                    at(NOW),
+                    &mut entropy,
+                    &made.account,
+                    "nope nope nope 1",
+                    "brand new word 2",
+                )
+                .map(|_| ()),
+                _ => accounts::delete_account(&db.path, at(NOW), &made.account, "nope nope nope 1"),
+            };
+            last = Some(refusal(tried));
+        }
+        // Sign-up was the first try; the tenth here is the eleventh on this name.
+        assert_eq!(
+            last,
+            Some(Refusal::TooMany(TOO_MANY_TRIES.to_string())),
+            "{action}"
+        );
+    }
 }

@@ -115,6 +115,15 @@ fn deleting_the_ledger_itself_fails() {
 }
 
 #[test]
+fn dropping_the_ledger_from_git_fails_even_with_the_file_left_on_disk() {
+    let repo = repo_with_two_tests();
+    git(&repo, &["rm", "-q", "--cached", LEDGER_PATH]);
+    let refused = check(&repo, "HEAD").unwrap_err();
+    assert!(refused.contains("was deleted"), "{refused}");
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
 fn a_rig_test_counts_and_a_file_dropped_from_git_counts_as_deleted() {
     let repo = repo_with_two_tests();
     git(&repo, &["checkout", "-q", "-b", "port"]);
