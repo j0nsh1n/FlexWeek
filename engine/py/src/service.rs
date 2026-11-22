@@ -447,6 +447,42 @@ fn service_create_restore_point(
     })
 }
 
+#[pyfunction]
+fn service_restore_preview(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    point_id: &str,
+) -> PyResult<String> {
+    guard(|| {
+        json_text(
+            py,
+            records::restore_preview(Path::new(path), user_id, point_id),
+        )
+    })
+}
+
+/// `given` is the request body as JSON text; the service checks it.
+#[pyfunction]
+fn service_restore(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    point_id: &str,
+    given: &str,
+    token: &str,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        json_text(
+            py,
+            records::restore(Path::new(path), user_id, point_id, &given, token, now),
+        )
+    })
+}
+
 /// A revision as the store reads it: one past 64 bits can match no stored revision.
 fn in_range(revision: &Bound<'_, PyInt>) -> Option<i64> {
     revision.extract::<i64>().ok()
@@ -511,6 +547,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_read_preferences,
         service_write_preferences,
         service_split_preview,
+        service_restore_preview,
+        service_restore,
         service_create_restore_point,
         service_delete_routine,
         service_delete_homework,

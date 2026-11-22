@@ -43,7 +43,7 @@ from backend.models import (
 from backend.recovery import (
     hash_recovery_code,
 )
-from backend.restore import canonical, diff_snapshots, diff_transfer, state_token
+from backend.restore import canonical, diff_transfer, state_token
 from backend.slots import DAY_END_MIN, SLOT_MIN
 from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
@@ -79,8 +79,6 @@ ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
 ROUTINE_CONFLICT = "This routine changed in another window. Reload before saving."
 ROUTINE_LIMIT = "An account holds at most 50 routines"
-RESTORE_UNKNOWN = "Restore point not found"
-RESTORE_STALE = "This preview is out of date. Refresh it before restoring."
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
 RECOVER_WRONG = "Incorrect username or recovery code"
 PASSWORD_WRONG = "Incorrect password"
@@ -545,12 +543,6 @@ class ChangesRequest(BaseModel):
 class RepeatPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     repeats: list[dict] = Field(max_length=MAX_REPEAT_CHANGES)
-
-
-class RestoreApply(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    state_token: str = Field(min_length=1, max_length=128)
-    operation_id: str = Field(min_length=1, max_length=80)
 
 
 class AlarmPreference(BaseModel):
@@ -1579,46 +1571,16 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.get("/api/restore-points/{point_id}/preview")
     def preview_restore_point(point_id: str, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            row = db.restore_point_body(account["id"], point_id)
-            if row is None:
-                raise HTTPException(404, RESTORE_UNKNOWN)
-            current = capture_account(db, account["id"])
-        stored = json.loads(row[1])
-        return {
-            "id": row[0],
-            "state_token": state_token(current),
-            "changes": diff_snapshots(current, stored),
-        }
+        return served(flexweek_engine.service_restore_preview, account["id"], point_id)
 
     @app.post("/api/restore-points/{point_id}/restore")
     def restore_restore_point(
-        point_id: str, payload: RestoreApply, account: Annotated[dict, Depends(user)]
+        point_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
     ) -> dict:
-        digest_value = payload_digest({"id": point_id, **payload.model_dump()})
-        with connect(path) as db:
-            db.begin_immediate()
-            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
-            if remembered is not None:
-                return remembered
-            row = db.restore_point_body(account["id"], point_id)
-            if row is None:
-                raise HTTPException(404, RESTORE_UNKNOWN)
-            current = capture_account(db, account["id"])
-            if payload.state_token != state_token(current):
-                raise HTTPException(409, RESTORE_STALE)
-            stored = json.loads(row[1])
-            stamp = naive_now()
-            recovery = insert_restore_point(
-                db, account["id"], f"Before restore — {stamp}", keep_ids={point_id}
-            )
-            replaced = replace_account(db, account["id"], stored)
-            # A point made before 0.19.0 has no standing week, so the current one stays.
-            if "standing" in stored:
-                db.replace_standing(account["id"], json.dumps(stored["standing"]))
-            result = {"id": point_id, "recovery_id": recovery["id"], **replaced}
-            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
-        return result
+        restored = flexweek_engine.service_restore
+        return served(
+            restored, account["id"], point_id, json.dumps(given), secrets.token_hex(8), naive_now()
+        )
 
     @app.post("/api/solve")
     def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:
