@@ -92,7 +92,10 @@ def test_the_work_a_worker_runs_holds_no_qt_object(
     class Holding:
         def submit(self, work: object) -> Future:
             handed.append(work)
-            return Future()
+            # Already done, so the client's courier is let go as soon as the client is.
+            done: Future = Future()
+            done.set_result(None)
+            return done
 
     monkeypatch.setattr(client_module, "_workers", lambda: Holding())
     client = client_module.NativeClient(database)

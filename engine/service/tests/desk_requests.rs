@@ -72,7 +72,13 @@ impl<'a> Window<'a> {
     }
 
     fn signed_up(db: &'a TestDb, name: &str) -> Self {
+        Self::signed_up_drawing(db, name, 0)
+    }
+
+    /// Signed up with its own random draws, so a second account's session and salt differ.
+    fn signed_up_drawing(db: &'a TestDb, name: &str, seed: u64) -> Self {
         let mut window = Self::new(db);
+        window.entropy = Counting(seed);
         let made = window.json(
             "POST",
             "/api/auth/register",
@@ -446,4 +452,102 @@ fn a_clock_that_is_not_a_date_is_a_server_error_not_a_panic() {
     };
     let answer = answer(&db.path, &request, &clock, &mut ana.entropy);
     refused(&answer, 500, SERVER_ERROR);
+}
+
+#[test]
+fn every_private_request_needs_a_session_and_a_made_up_one_is_refused() {
+    let db = TestDb::new("desk-private");
+    let mut window = Window::new(&db);
+    let week = json!({ "week_start": "2026-11-02", "blocks": [], "revision": 0 });
+    let private: [(&str, &str, Value); 25] = [
+        ("GET", "/api/auth/me", json!(null)),
+        ("GET", "/api/auth/recovery-status", json!(null)),
+        (
+            "POST",
+            "/api/auth/recovery-codes",
+            json!({ "password": PASSWORD }),
+        ),
+        (
+            "POST",
+            "/api/auth/password",
+            json!({ "current_password": PASSWORD, "new_password": PASSWORD }),
+        ),
+        (
+            "DELETE",
+            "/api/auth/account",
+            json!({ "password": PASSWORD }),
+        ),
+        ("GET", "/api/week", json!(null)),
+        ("PUT", "/api/week", week),
+        ("GET", "/api/weeks", json!(null)),
+        ("GET", "/api/day?date=2026-11-05", json!(null)),
+        ("GET", "/api/month?month=2026-11", json!(null)),
+        ("GET", "/api/assignments?week_start=2026-11-02", json!(null)),
+        ("PUT", "/api/assignments/hw", json!({})),
+        ("POST", "/api/assignments/hw/spread", json!({})),
+        ("DELETE", "/api/assignments/hw?revision=1", json!(null)),
+        ("POST", "/api/repeat-edits", json!({ "repeats": [] })),
+        (
+            "POST",
+            "/api/changes",
+            json!({ "weeks": [], "assignments": [] }),
+        ),
+        ("GET", "/api/preferences", json!(null)),
+        ("PUT", "/api/preferences", json!({})),
+        ("GET", "/api/routines", json!(null)),
+        ("DELETE", "/api/routines/r1?revision=1", json!(null)),
+        ("GET", "/api/storage-info", json!(null)),
+        (
+            "POST",
+            "/api/account-export",
+            json!({ "password": PASSWORD }),
+        ),
+        ("GET", "/api/restore-points", json!(null)),
+        (
+            "POST",
+            "/api/restore-points",
+            json!({ "label": "Before", "operation_id": "op-1" }),
+        ),
+        ("POST", "/api/solve", json!({ "blocks": [] })),
+    ];
+    for token in ["", "made-up-token"] {
+        window.token = token.to_string();
+        for (method, path, body) in &private {
+            let text = if body.is_null() {
+                String::new()
+            } else {
+                body.to_string()
+            };
+            let answer = window.send(method, path, &text);
+            assert_eq!(
+                answer.status, 401,
+                "{method} {path} with {token:?}: {answer:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn signing_out_with_no_session_is_accepted() {
+    let db = TestDb::new("desk-sign-out-none");
+    let mut window = Window::new(&db);
+    let out = window.send("POST", "/api/auth/logout", "");
+    assert_eq!((out.status, out.session), (204, Session::Ended));
+}
+
+#[test]
+fn a_window_that_names_an_older_account_can_not_read_write_or_sign_out_the_new_one() {
+    let db = TestDb::new("desk-older-account");
+    let first = Window::signed_up(&db, "first");
+    let mut second = Window::signed_up_drawing(&db, "second", 1_000);
+    second.account = first.account.clone();
+    assert_eq!(second.send("GET", "/api/week", "").status, 401);
+    let week = json!({ "week_start": "2026-11-02", "blocks": [], "revision": 0 });
+    assert_eq!(second.json("PUT", "/api/week", week).status, 401);
+    assert_eq!(second.send("POST", "/api/auth/logout", "").status, 401);
+    second.account = None;
+    assert_eq!(
+        second.send("GET", "/api/auth/me", "").body.unwrap()["username"],
+        "second"
+    );
 }

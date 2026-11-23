@@ -32,15 +32,21 @@ def test_the_app_does_not_load_a_web_engine(qapp: QApplication) -> None:
     assert web_engine_modules() == []
 
 
+def new_since(before: list[str]) -> list[str]:
+    return [found for found in listening_sockets() or [] if found not in before]
+
+
 def test_the_probe_sees_a_listening_socket(qapp: QApplication) -> None:
     """The check below can tell: a socket this process opens to listen is found, and gone once closed."""
-    if listening_sockets() is None:
+    before = listening_sockets()
+    if before is None:
         pytest.skip("reads Linux's socket tables")
     with socket.socket() as opened:
         opened.bind(("127.0.0.1", 0))
         opened.listen()
-        assert any(found.startswith("tcp ") for found in listening_sockets() or [])
-    assert listening_sockets() == []
+        port = f"{opened.getsockname()[1]:04X}"
+        assert any(found.startswith("tcp ") and found.endswith(port) for found in new_since(before))
+    assert new_since(before) == []
 
 
 def test_signing_up_and_saving_with_phone_sync_set_up_opens_no_network_port(
@@ -48,9 +54,11 @@ def test_signing_up_and_saving_with_phone_sync_set_up_opens_no_network_port(
 ) -> None:
     """As the app starts (desktop/main.py): phone sync set up but no phone paired, so it listens on
     nothing, and the app answers its own requests."""
-    if listening_sockets() is None:
+    # Another test in this worker may have left a socket open; only new ones count here. The smoke run
+    # checks a freshly started app for none at all.
+    before = listening_sockets()
+    if before is None:
         pytest.skip("reads Linux's socket tables")
-    assert listening_sockets() == []
     sync = SyncHost(database)
     sync.start_if_paired()
     window = NativeWindow(database, sync=sync)
@@ -63,7 +71,7 @@ def test_signing_up_and_saving_with_phone_sync_set_up_opens_no_network_port(
         session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
         session.save()
         wait_until(qapp, lambda: not session.busy and not session.dirty and not session.client._waiting)
-        assert listening_sockets() == []
+        assert new_since(before) == []
     finally:
         with contextlib.suppress(RuntimeError):
             window.session.client.reset()

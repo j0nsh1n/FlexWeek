@@ -350,8 +350,8 @@ fn literal_int(value: Option<&Value>, name: &str, default: i64, allowed: &[i64])
     }
 }
 
-/// The model's fields, in its order (unknown fields are refused).
-const FIELDS: &[&str] = &[
+/// The preference fields, in their order (unknown fields are refused). The desktop reads them too.
+pub const FIELDS: &[&str] = &[
     "theme",
     "reminders_enabled",
     "reminder_lead_min",

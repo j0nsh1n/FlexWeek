@@ -378,10 +378,10 @@ paths = [
 ]
 areas = ["updater"]
 
-# --- Backend. The light app runs on the backend's app and storage, so those select every area.
+# --- Backend. The light app runs on the backend's storage and models, so those select every area.
 [[rule]]
 paths = [
-  "backend/__init__.py", "backend/app.py", "backend/storage.py", "backend/models.py",
+  "backend/__init__.py", "backend/storage.py", "backend/models.py",
   "backend/clock.py", "backend/limits.py", "backend/weeks.py", "backend/data/",
 ]
 everything = true

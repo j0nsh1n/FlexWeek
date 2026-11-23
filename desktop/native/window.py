@@ -2029,12 +2029,7 @@ class NativeWindow(QObject):
             self.session._say("This machine doesn't support starting at login.")
 
     def _log_out(self) -> None:
-        where = (
-            "your FlexWeek server"
-            if (self.session.storage_info or {}).get("mode") == "hosted"
-            else "this computer"
-        )
-        question = SIGN_OUT_QUESTION.format(where=where)
+        question = SIGN_OUT_QUESTION.format(where="this computer")
         page = self._material_shown()
         if page is not None:
             page.bridge.sheets.ask_sign_out(question, self._sign_out_confirmed)

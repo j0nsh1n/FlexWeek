@@ -49,21 +49,14 @@ def help_form(numbers: bool, letters: bool) -> dict[str, Any]:
 
 
 def about_form(storage: dict | None) -> dict[str, Any]:
-    """About: the version, what FlexWeek is, and where the week is saved."""
-    hosted = (storage or {}).get("mode") == "hosted"
-    where = (
-        "Your week is saved on your FlexWeek server, "
-        f"{(storage or {}).get('origin') or ''}, under this account."
-        if hosted
-        else ABOUT_HERE
-    )
+    """About: the version, what FlexWeek is, and where the week is saved (always this computer)."""
     return {
         "heading": "About FlexWeek",
         "logo": QUrl.fromLocalFile(str(LOGO)).toString(),
         "version": f"FlexWeek {VERSION}",
         "what": ABOUT_LINE,
-        "where": where,
-        "folder": not hosted,
+        "where": ABOUT_HERE,
+        "folder": True,
     }
 
 

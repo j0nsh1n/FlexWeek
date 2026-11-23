@@ -150,9 +150,6 @@ for that phone). Nothing needs configuring to use it.
 |---|---|
 | `--database FILE` | Use this database file instead of the one in your data folder |
 
-Until part 3 of 2.0.0's P2 removes it, `backend/app.py` (the old local API) is
-still in the repository for its tests; the app no longer starts it.
-
 The database and its journals are gitignored. Back up the database with SQLite's
 backup API or with the app stopped; protect backups as private account data.
 
