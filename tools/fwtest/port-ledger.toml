@@ -518,3 +518,21 @@ rust = [
     "flexweek-service::accounts::a_sign_up_whose_randomness_fails_makes_no_account",
 ]
 red = "codes shown without their four groups, a typed code's capitals kept, a spent code removed from every account, a new password ending every account's sessions, the code count taken over every account, the password read from the first account, and deleting without the password each fail their tests (2026-11-22); the accounts.rs twins were seen red in P0. A short random draw cannot happen in Rust (a code's draw is eight bytes by type); the signed-out answers go with the server in P2"
+
+[[port]]
+python = "backend/tests/test_sign_up_and_sign_in.py"
+rust = [
+    "flexweek-service::sign_up_and_sign_in::a_new_account_starts_with_an_empty_week_and_the_default_preferences",
+    "flexweek-service::accounts::a_name_is_the_same_in_any_case_and_bad_input_is_refused_before_anything_runs",
+    "flexweek-service::accounts::a_taken_name_is_refused_and_nothing_is_made",
+    "flexweek-service::accounts::a_taken_name_keeps_its_first_password",
+    "flexweek-service::sign_up_and_sign_in::a_bad_name_or_password_is_refused_and_makes_no_account",
+    "flexweek-service::sign_up_and_sign_in::a_sign_up_the_database_refuses_at_the_preferences_leaves_no_rows",
+    "flexweek-service::accounts::a_sign_up_that_fails_part_way_leaves_no_account",
+    "flexweek-service::accounts::a_wrong_password_and_an_unknown_name_get_the_same_words",
+    "flexweek-service::accounts::signing_out_from_a_window_of_another_account_leaves_this_session_alone",
+    "flexweek-service::accounts::the_eleventh_try_on_one_name_waits_five_minutes",
+    "flexweek-service::sign_up_and_sign_in::a_name_that_waits_leaves_other_names_free_to_sign_up",
+    "flexweek-service::sign_up_and_sign_in::accounts_weeks_and_the_session_survive_a_restart",
+]
+red = "sign-up making no preferences row, a space allowed in a name, a failed write committing, one try count for every name, and a restart not linking homework each fail their tests (2026-11-22); the accounts.rs twins were seen red in P0. A body with an extra field and a refusal that never echoes the password go with the server in P2"
