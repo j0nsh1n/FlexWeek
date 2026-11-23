@@ -26,6 +26,8 @@ struct Window<'a> {
     token: String,
     account: Option<String>,
     entropy: Counting,
+    /// Requests sent, so each names its own restore point, as the app draws a new name for each.
+    sent: u64,
 }
 
 impl<'a> Window<'a> {
@@ -35,6 +37,7 @@ impl<'a> Window<'a> {
             token: String::new(),
             account: None,
             entropy: Counting(0),
+            sent: 0,
         }
     }
 
@@ -46,10 +49,12 @@ impl<'a> Window<'a> {
             token: &self.token,
             account: self.account.as_deref(),
         };
+        self.sent += 1;
+        let restore_token = format!("{:016x}", self.sent);
         let clock = Clock {
             seconds: SECONDS,
             now: NOW,
-            restore_token: "0123456789abcdef",
+            restore_token: &restore_token,
             stopwatch: &no_time,
         };
         let answer = answer(&self.db.path, &request, &clock, &mut self.entropy);
@@ -459,7 +464,7 @@ fn every_private_request_needs_a_session_and_a_made_up_one_is_refused() {
     let db = TestDb::new("desk-private");
     let mut window = Window::new(&db);
     let week = json!({ "week_start": "2026-11-02", "blocks": [], "revision": 0 });
-    let private: [(&str, &str, Value); 25] = [
+    let private: [(&str, &str, Value); 33] = [
         ("GET", "/api/auth/me", json!(null)),
         ("GET", "/api/auth/recovery-status", json!(null)),
         (
@@ -509,6 +514,14 @@ fn every_private_request_needs_a_session_and_a_made_up_one_is_refused() {
             json!({ "label": "Before", "operation_id": "op-1" }),
         ),
         ("POST", "/api/solve", json!({ "blocks": [] })),
+        ("PUT", "/api/routines/r1", json!({})),
+        ("POST", "/api/account-import/preview", json!({})),
+        ("POST", "/api/account-import", json!({})),
+        ("GET", "/api/timer-presets", json!(null)),
+        ("GET", "/api/reminder-limits", json!(null)),
+        ("POST", "/api/timer-split-preview", json!({})),
+        ("GET", "/api/restore-points/p1/preview", json!(null)),
+        ("POST", "/api/restore-points/p1/restore", json!({})),
     ];
     for token in ["", "made-up-token"] {
         window.token = token.to_string();
@@ -549,5 +562,183 @@ fn a_window_that_names_an_older_account_can_not_read_write_or_sign_out_the_new_o
     assert_eq!(
         second.send("GET", "/api/auth/me", "").body.unwrap()["username"],
         "second"
+    );
+}
+
+#[test]
+fn a_number_too_large_for_a_float_is_refused_not_a_server_error() {
+    let db = TestDb::new("desk-huge-number");
+    let mut ana = Window::signed_up(&db, "ana");
+    let body = r#"{"week_start": "2026-11-02", "blocks": [], "revision": 1e309}"#;
+    refused(&ana.send("PUT", "/api/week", body), 422, INVALID);
+}
+
+#[test]
+fn a_recovery_code_starts_a_new_session_and_a_wrong_one_is_refused() {
+    let db = TestDb::new("desk-recover");
+    let mut window = Window::new(&db);
+    let made = window.json(
+        "POST",
+        "/api/auth/register",
+        json!({ "username": "ana", "password": PASSWORD }),
+    );
+    let code = made.body.unwrap()["recovery_codes"][0].clone();
+    window.send("POST", "/api/auth/logout", "");
+    let wrong =
+        json!({ "username": "ana", "code": "WRONG-CODE-1234", "password": "replacement-pw-1" });
+    refused(
+        &window.json("POST", "/api/auth/recover", wrong),
+        401,
+        "Incorrect username or recovery code",
+    );
+    let right = json!({ "username": "ANA", "code": code, "password": "replacement-pw-1" });
+    let back = window.json("POST", "/api/auth/recover", right);
+    assert_eq!(back.status, 200, "{back:?}");
+    assert!(matches!(back.session, Session::Started(_)));
+    assert_eq!(back.body.unwrap()["username"], "ana");
+    assert_eq!(window.send("GET", "/api/auth/me", "").status, 200);
+}
+
+#[test]
+fn new_recovery_codes_need_the_password_and_replace_the_old_ones() {
+    let db = TestDb::new("desk-codes");
+    let mut ana = Window::signed_up(&db, "ana");
+    refused(
+        &ana.json(
+            "POST",
+            "/api/auth/recovery-codes",
+            json!({ "password": "wrong-password-1" }),
+        ),
+        401,
+        "Incorrect password",
+    );
+    let renewed = ana.json(
+        "POST",
+        "/api/auth/recovery-codes",
+        json!({ "password": PASSWORD }),
+    );
+    let body = renewed.body.unwrap();
+    assert_eq!(body["remaining"], 8);
+    assert_eq!(body["recovery_codes"].as_array().unwrap().len(), 8);
+}
+
+#[test]
+fn the_timer_presets_reminder_limits_and_a_split_preview_are_answered() {
+    let db = TestDb::new("desk-comfort");
+    let mut ana = Window::signed_up(&db, "ana");
+    let presets = ana.send("GET", "/api/timer-presets", "").body.unwrap();
+    assert_eq!(
+        presets["presets"],
+        json!(flexweek_engine::plan::timer_presets())
+    );
+    let limits = ana.send("GET", "/api/reminder-limits", "").body.unwrap();
+    assert_eq!(limits, json!(flexweek_engine::plan::reminder_limits()));
+    let split = ana.json(
+        "POST",
+        "/api/timer-split-preview",
+        json!({ "duration_min": 120, "timer_work_min": 30, "timer_break_min": 15,
+                "timer_long_break_min": 30, "timer_long_break_every": 4 }),
+    );
+    assert_eq!(split.status, 200, "{split:?}");
+    let segments = split.body.unwrap()["segments"].as_array().unwrap().len();
+    assert!(
+        segments >= 4,
+        "{segments} segments for two hours of 30-minute work"
+    );
+}
+
+#[test]
+fn a_save_through_changes_and_a_plan_are_answered() {
+    let db = TestDb::new("desk-changes");
+    let mut ana = Window::signed_up(&db, "ana");
+    let block = json!({ "id": "soccer", "title": "Soccer", "kind": "locked", "duration_min": 60,
+                        "days": [0], "start": "16:00" });
+    let saved = ana.json(
+        "POST",
+        "/api/changes",
+        json!({ "weeks": [{ "week_start": "2026-11-02", "blocks": [block], "revision": 0 }],
+                "assignments": [], "operation_id": "op-1" }),
+    );
+    assert_eq!(saved.status, 200, "{saved:?}");
+    assert_eq!(saved.body.unwrap()["weeks"][0]["revision"], 1);
+    let homework = json!({ "id": "hw", "title": "Homework", "kind": "flexible", "duration_min": 60,
+                           "days": [0] });
+    let plan = ana.json(
+        "POST",
+        "/api/solve",
+        json!({ "blocks": [homework], "week_start": "2026-11-02", "now_floor": null }),
+    );
+    assert_eq!(plan.status, 200, "{plan:?}");
+    assert_eq!(plan.body.unwrap()["placed"][0]["id"], "hw");
+}
+
+#[test]
+fn homework_is_deleted_at_its_revision() {
+    let db = TestDb::new("desk-delete-homework");
+    let mut ana = Window::signed_up(&db, "ana");
+    let essay = json!({ "id": "essay", "title": "Essay", "due": "2026-11-06T23:59",
+                        "estimate_min": 60, "revision": 0 });
+    let saved = ana.json("PUT", "/api/assignments/essay", essay);
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let stale = ana.send("DELETE", "/api/assignments/essay?revision=5", "");
+    assert_eq!(stale.status, 409, "{stale:?}");
+    let gone = ana.send("DELETE", "/api/assignments/essay?revision=1", "");
+    assert_eq!(gone.status, 200, "{gone:?}");
+}
+
+#[test]
+fn an_account_file_is_previewed_and_imported() {
+    let db = TestDb::new("desk-import");
+    let mut ana = Window::signed_up(&db, "ana");
+    let file = ana
+        .json(
+            "POST",
+            "/api/account-export",
+            json!({ "password": PASSWORD }),
+        )
+        .body
+        .unwrap();
+    let preview = ana.json(
+        "POST",
+        "/api/account-import/preview",
+        json!({ "snapshot": file }),
+    );
+    assert_eq!(preview.status, 200, "{preview:?}");
+    let state = preview.body.unwrap()["state_token"].clone();
+    let imported = ana.json(
+        "POST",
+        "/api/account-import",
+        json!({ "snapshot": file, "state_token": state, "operation_id": "imp-1" }),
+    );
+    assert_eq!(imported.status, 200, "{imported:?}");
+    // The import keeps the account as it was in a restore point first, named by the request's token:
+    // sign-up, export, preview and import make the import this window's fourth request.
+    assert_eq!(imported.body.unwrap()["recovery_id"], "rp-0000000000000004");
+}
+
+#[test]
+fn a_restore_point_is_previewed_and_restored() {
+    let db = TestDb::new("desk-restore");
+    let mut ana = Window::signed_up(&db, "ana");
+    let made = ana.json(
+        "POST",
+        "/api/restore-points",
+        json!({ "label": "Before", "operation_id": "rp-op" }),
+    );
+    assert_eq!(made.status, 200, "{made:?}");
+    let id = made.body.unwrap()["id"].as_str().unwrap().to_string();
+    let preview = ana.send("GET", &format!("/api/restore-points/{id}/preview"), "");
+    assert_eq!(preview.status, 200, "{preview:?}");
+    let state = preview.body.unwrap()["state_token"].clone();
+    let restored = ana.json(
+        "POST",
+        &format!("/api/restore-points/{id}/restore"),
+        json!({ "state_token": state, "operation_id": "re-op" }),
+    );
+    assert_eq!(restored.status, 200, "{restored:?}");
+    refused(
+        &ana.send("GET", "/api/restore-points/missing/preview", ""),
+        404,
+        "Restore point not found",
     );
 }

@@ -623,9 +623,10 @@ rust = [
     "flexweek-service::desk_requests::deleting_the_account_ends_the_session",
     "flexweek-service::desk_requests::a_missing_or_unreadable_query_value_gets_its_rule",
     "flexweek-service::desk_requests::a_window_that_names_an_older_account_can_not_read_write_or_sign_out_the_new_one",
+    "flexweek-service::desk_requests::a_number_too_large_for_a_float_is_refused_not_a_server_error",
     "flexweek-service::session_lifetime::an_unticked_session_left_alone_has_ended_on_day_8",
 ]
-red = "reading the week list without a session fails the private-request test, dropping the account check fails the older-account test, and deleting the account keeping the session fails the delete test (2026-11-23); sign-out keeping the session and the query rules were seen red when written (2026-11-23); the session-lifetime tests were seen red in P1. The cookie flags, the cache headers, the request header and origin checks and the request body's encodings went with the server (P2, no HTTP)"
+red = "reading the week list or the timer presets without a session fails the private-request test (33 private requests, the routine save among them), dropping the account check fails the older-account test, deleting the account keeping the session fails the delete test, and a too-large revision read as 0 fails the 1e309 test (2026-11-23); sign-out keeping the session and the query rules were seen red when written (2026-11-23); the session-lifetime tests were seen red in P1 (an expired session is refused by accounts::signed_in, which every private request calls first). The cookie flags, the cache headers, the request header and origin checks, and bodies in UTF-16 or UTF-32 went with the server (P2: no HTTP; the window sends the JSON text it wrote)"
 
 [[port]]
 python = "backend/tests/test_storage_info.py"
@@ -635,7 +636,7 @@ red = "the label changed to \"On this computer\" fails the test (2026-11-23); th
 [[port]]
 python = "backend/tests/test_desk_requests_answer_as_the_server.py"
 rust = ["engine/service/tests/desk_requests.rs"]
-red = "it compared the Rust answers with backend/app.py, which is gone; its cases live on as the 23 desk_requests tests, each seen red by a break in desk_requests.rs (2026-11-23)"
+red = "it compared the Rust answers with backend/app.py, which is gone; every route it reached has a desk_requests test of its own now (31 tests, recover, recovery codes, timer presets, reminder limits, split preview, changes, plan, homework delete, import preview and import, restore preview and restore among them), each seen red by a break of its route in desk_requests.rs (2026-11-23)"
 
 [[port]]
 python = "backend/tests/test_assignment_view_estimate_limit.py"
