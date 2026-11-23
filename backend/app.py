@@ -18,7 +18,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend import clock as wall_clock
 from backend.availability import fold_study_windows
-from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
     AssignmentContent,
@@ -740,11 +739,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.get("/api/timer-presets")
     def get_timer_presets(_account: Annotated[dict, Depends(user)]) -> dict:
-        return {"presets": list(TIMER_PRESETS)}
+        return {"presets": json.loads(flexweek_engine.timer_presets())}
 
     @app.get("/api/reminder-limits")
     def get_reminder_limits(_account: Annotated[dict, Depends(user)]) -> dict:
-        return dict(REMINDER_LIMITS)
+        answer: dict = json.loads(flexweek_engine.reminder_limits())
+        return answer
 
     @app.post("/api/timer-split-preview")
     def post_timer_split_preview(

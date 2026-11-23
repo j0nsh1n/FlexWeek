@@ -34,9 +34,9 @@ Disabled sounds stay silent. The same block start fires at most one reminder.
    block starts. Snooze waits five minutes, or until the start when fewer than
    five minutes remain. At the start the card goes and "starts now" takes over.
    Spotify is a link; FlexWeek plays a built-in
-   sound if the track does not play. `GET /api/reminder-limits` returns the
-   original limit copy, including the retired web client's limits, so existing
-   clients keep working.
+   sound if the track doesn't play. `GET /api/reminder-limits` returns the
+   limit notes from the engine ("doesn't play", "it's handled"), including the
+   retired web client's limits, so existing clients keep working.
 8. **Start at login** is stored on the account. The desktop shell applies it
    on supported Windows and Linux. Unsupported platforms keep the checkbox off
    and say so. The flag does not start a hosted browser session.
@@ -122,8 +122,8 @@ Authenticated GET `/api/reminder-limits`:
 {
   "web_open": "Reminders fire in this browser only while FlexWeek is open in a tab.",
   "desktop_background": "The desktop app can still alert from the tray after the window is closed.",
-  "spotify": "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track does not play.",
-  "duplicate": "The same block start fires at most one reminder until it is handled or the day changes."
+  "spotify": "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track doesn't play.",
+  "duplicate": "The same block start fires at most one reminder until it's handled or the day changes."
 }
 ```
 

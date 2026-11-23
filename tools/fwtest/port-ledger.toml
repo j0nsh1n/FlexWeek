@@ -557,3 +557,21 @@ rust = [
     "flexweek-service::database_transactions::a_write_begun_immediately_commits_or_rolls_back_as_a_whole",
 ]
 red = "a failed write committed instead of rolled back fails both (2026-11-22). The file stays: its third test, that waiting on a held write lock lets other Python threads run, goes with the Python layer in P2 and is added here when that file is deleted"
+
+[[port]]
+python = "backend/tests/test_demo_schedules.py"
+rust = [
+    "flexweek-engine::demo_schedules::each_demo_validates_with_locked_and_flexible_blocks",
+    "flexweek-engine::demo_schedules::each_demo_has_eight_flexible_blocks",
+    "flexweek-engine::demo_schedules::locked_starts_are_on_the_grid",
+    "flexweek-engine::demo_schedules::durations_are_positive_multiples_of_15",
+]
+red = "a demo's locked start set to 23:00, a 50-minute block, a flexible block removed, and a locked block without a start each fail their tests (2026-11-22; the demo data edited, then restored)"
+
+[[port]]
+python = "backend/tests/test_study_hours_in_other_digits.py"
+rust = [
+    "flexweek-engine::test_stage4_availability::test_a_window_start_in_other_digits_ranks_as_python_reads_it",
+    "flexweek-engine::test_stage4_availability::test_a_window_start_in_other_digits_is_read_as_python_reads_it",
+]
+red = "reading only ASCII digits in time::py_int fails both (2026-11-22)"

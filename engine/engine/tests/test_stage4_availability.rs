@@ -375,6 +375,15 @@ fn test_a_window_start_in_other_digits_is_read_as_python_reads_it() {
 }
 
 #[test]
+fn test_a_window_start_in_other_digits_ranks_as_python_reads_it() {
+    // The Rust twin of backend/tests/test_study_hours_in_other_digits.py: "1\u{0660}" is 10, so the
+    // window runs 10:00 to 12:00 and a session at 10:00 is inside it.
+    let windows = [json!({"days": [0], "start": "1\u{0660}:00", "end": "12:00"})];
+    assert_eq!(study_rank(&windows, None, 0, 10 * 60, 60).unwrap(), 1);
+    assert_eq!(study_rank(&windows, None, 0, 0, 60).unwrap(), 2);
+}
+
+#[test]
 fn test_a_window_start_that_is_not_a_time_is_an_error_not_midnight() {
     let windows = [json!({"days": [0], "start": "bad", "end": "12:00"})];
     assert!(study_rank(&windows, None, 0, 0, 60).is_err());
