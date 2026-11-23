@@ -1,8 +1,12 @@
 //! Test support for the desktop crates: seeded accounts and weeks, a clock the test moves by hand, a fake
 //! platform, and the driver that steps the app the way a student would (2.0.0 plan, phase P3). Used only by
-//! tests. So far: a throwaway database with accounts in it, and randomness a test can predict.
+//! tests. So far: a throwaway database with accounts in it, randomness a test can predict, and the Driver with
+//! the Python app's test door behind it (`door`).
 
 use std::path::PathBuf;
+
+#[cfg(unix)]
+pub mod door;
 
 use flexweek_service::accounts::Entropy;
 use flexweek_service::{ServiceResult, with_db};
