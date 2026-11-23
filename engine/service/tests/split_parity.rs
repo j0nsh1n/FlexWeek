@@ -1,5 +1,5 @@
 //! `split_preview` against `POST /api/timer-split-preview`, the route it replaces: 1,200 generated requests
-//! (fixtures/split_parity.json, made by fixtures/make_split_corpus.py with the real `TimerSplitRequest`)
+//! (fixtures/split_parity.json, made by fixtures/make_split_corpus.py, removed with backend/app.py in P2 with the real `TimerSplitRequest`)
 //! must be refused where pydantic refuses them and answered exactly as the route answers them. This test
 //! and its generator go when the Python model does.
 

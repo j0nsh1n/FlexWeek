@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pathlib
 
-from backend.app import Preferences
+import flexweek_engine  # type: ignore[import-untyped]
 
 ROOT = pathlib.Path(__file__).parents[3]
 
@@ -29,7 +29,9 @@ def native_source() -> str:
 def test_every_preference_is_reachable_from_the_desktop_app() -> None:
     source = native_source()
     unreachable = [
-        field for field in Preferences.model_fields if field not in source and field not in WEB_ONLY
+        field
+        for field in flexweek_engine.preference_fields()
+        if field not in source and field not in WEB_ONLY
     ]
     assert unreachable == [], f"the desktop app cannot set: {unreachable}"
 
@@ -42,5 +44,5 @@ def test_a_derived_preference_really_is_derived() -> None:
 
 def test_every_web_only_preference_says_why() -> None:
     for field, reason in WEB_ONLY.items():
-        assert field in Preferences.model_fields, f"{field} is no longer a preference"
+        assert field in flexweek_engine.preference_fields(), f"{field} is no longer a preference"
         assert reason, field

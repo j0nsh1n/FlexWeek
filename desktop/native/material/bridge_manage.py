@@ -56,7 +56,8 @@ RESTORE_QUESTION = {
 
 
 def _where(storage: dict | None) -> str:
-    return "your FlexWeek server" if (storage or {}).get("mode") == "hosted" else "this computer"
+    """Where the week is saved: always this computer, since the hosted server is gone (D4)."""
+    return "this computer"
 
 
 def account_form(storage: dict | None, remaining: int | None) -> dict[str, Any]:

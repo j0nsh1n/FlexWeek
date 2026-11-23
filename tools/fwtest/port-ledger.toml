@@ -613,3 +613,31 @@ red = "its seven tests: no page outside /api/ (404) is the Rust paths test, red 
 [[port]]
 python = "desktop/tests/e2e/test_the_configured_server_origin_is_checked.py"
 gone = "D4 (approved 2026-11-21): the hosted server and the FLEXWEEK_ORIGIN / FLEXWEEK_DESKTOP_ORIGIN settings were removed in P2; test_the_app_starts_and_paints_its_first_screen.py::test_the_old_hosted_server_setting_is_not_read checks the setting is no longer read"
+
+[[port]]
+python = "backend/tests/test_session_cookie_and_request_checks.py"
+rust = [
+    "flexweek-service::desk_requests::every_private_request_needs_a_session_and_a_made_up_one_is_refused",
+    "flexweek-service::desk_requests::signing_out_ends_the_session_and_its_token_no_longer_works",
+    "flexweek-service::desk_requests::signing_out_with_no_session_is_accepted",
+    "flexweek-service::desk_requests::deleting_the_account_ends_the_session",
+    "flexweek-service::desk_requests::a_missing_or_unreadable_query_value_gets_its_rule",
+    "flexweek-service::desk_requests::a_window_that_names_an_older_account_can_not_read_write_or_sign_out_the_new_one",
+    "flexweek-service::desk_requests::a_number_too_large_for_a_float_is_refused_not_a_server_error",
+    "flexweek-service::session_lifetime::an_unticked_session_left_alone_has_ended_on_day_8",
+]
+red = "reading the week list or the timer presets without a session fails the private-request test (33 private requests, the routine save among them), dropping the account check fails the older-account test, deleting the account keeping the session fails the delete test, and a too-large revision read as 0 fails the 1e309 test (2026-11-23); sign-out keeping the session and the query rules were seen red when written (2026-11-23); the session-lifetime tests were seen red in P1 (an expired session is refused by accounts::signed_in, which every private request calls first). The cookie flags, the cache headers, the request header and origin checks, and bodies in UTF-16 or UTF-32 went with the server (P2: no HTTP; the window sends the JSON text it wrote)"
+
+[[port]]
+python = "backend/tests/test_storage_info.py"
+rust = ["flexweek-service::desk_requests::storage_info_says_this_device_and_the_transfer_limit"]
+red = "the label changed to \"On this computer\" fails the test (2026-11-23); the hosted-server answer went with the hosted server (D4)"
+
+[[port]]
+python = "backend/tests/test_desk_requests_answer_as_the_server.py"
+rust = ["engine/service/tests/desk_requests.rs"]
+red = "it compared the Rust answers with backend/app.py, which is gone; every route it reached has a desk_requests test that gets past the session check to the route's own answer (36 tests); each route's answer replaced by a server error (or, for sign-in, 201 for 200) fails at least one of them (2026-11-23)"
+
+[[port]]
+python = "backend/tests/test_assignment_view_estimate_limit.py"
+gone = "P2 (plan section 7): backend/app.py and its assignment_view helper, the Python call whose 64-bit overflow this pinned, were deleted; requests reach the engine as JSON text now"

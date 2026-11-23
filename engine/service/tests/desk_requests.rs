@@ -26,6 +26,10 @@ struct Window<'a> {
     token: String,
     account: Option<String>,
     entropy: Counting,
+    /// Requests sent, so each names its own restore point, as the app draws a new name for each.
+    sent: u64,
+    /// The recovery codes sign-up gave, for the tests that use one.
+    first_codes: Vec<Value>,
 }
 
 impl<'a> Window<'a> {
@@ -35,6 +39,8 @@ impl<'a> Window<'a> {
             token: String::new(),
             account: None,
             entropy: Counting(0),
+            sent: 0,
+            first_codes: Vec::new(),
         }
     }
 
@@ -46,10 +52,12 @@ impl<'a> Window<'a> {
             token: &self.token,
             account: self.account.as_deref(),
         };
+        self.sent += 1;
+        let restore_token = format!("{:016x}", self.sent);
         let clock = Clock {
             seconds: SECONDS,
             now: NOW,
-            restore_token: "0123456789abcdef",
+            restore_token: &restore_token,
             stopwatch: &no_time,
         };
         let answer = answer(&self.db.path, &request, &clock, &mut self.entropy);
@@ -72,13 +80,23 @@ impl<'a> Window<'a> {
     }
 
     fn signed_up(db: &'a TestDb, name: &str) -> Self {
+        Self::signed_up_drawing(db, name, 0)
+    }
+
+    /// Signed up with its own random draws, so a second account's session and salt differ.
+    fn signed_up_drawing(db: &'a TestDb, name: &str, seed: u64) -> Self {
         let mut window = Self::new(db);
+        window.entropy = Counting(seed);
         let made = window.json(
             "POST",
             "/api/auth/register",
             json!({ "username": name, "password": PASSWORD }),
         );
         assert_eq!(made.status, 201, "{made:?}");
+        window.first_codes = made.body.unwrap()["recovery_codes"]
+            .as_array()
+            .unwrap()
+            .clone();
         window
     }
 }
@@ -446,4 +464,409 @@ fn a_clock_that_is_not_a_date_is_a_server_error_not_a_panic() {
     };
     let answer = answer(&db.path, &request, &clock, &mut ana.entropy);
     refused(&answer, 500, SERVER_ERROR);
+}
+
+#[test]
+fn every_private_request_needs_a_session_and_a_made_up_one_is_refused() {
+    let db = TestDb::new("desk-private");
+    let mut window = Window::new(&db);
+    let week = json!({ "week_start": "2026-11-02", "blocks": [], "revision": 0 });
+    let private: [(&str, &str, Value); 33] = [
+        ("GET", "/api/auth/me", json!(null)),
+        ("GET", "/api/auth/recovery-status", json!(null)),
+        (
+            "POST",
+            "/api/auth/recovery-codes",
+            json!({ "password": PASSWORD }),
+        ),
+        (
+            "POST",
+            "/api/auth/password",
+            json!({ "current_password": PASSWORD, "new_password": PASSWORD }),
+        ),
+        (
+            "DELETE",
+            "/api/auth/account",
+            json!({ "password": PASSWORD }),
+        ),
+        ("GET", "/api/week", json!(null)),
+        ("PUT", "/api/week", week),
+        ("GET", "/api/weeks", json!(null)),
+        ("GET", "/api/day?date=2026-11-05", json!(null)),
+        ("GET", "/api/month?month=2026-11", json!(null)),
+        ("GET", "/api/assignments?week_start=2026-11-02", json!(null)),
+        ("PUT", "/api/assignments/hw", json!({})),
+        ("POST", "/api/assignments/hw/spread", json!({})),
+        ("DELETE", "/api/assignments/hw?revision=1", json!(null)),
+        ("POST", "/api/repeat-edits", json!({ "repeats": [] })),
+        (
+            "POST",
+            "/api/changes",
+            json!({ "weeks": [], "assignments": [] }),
+        ),
+        ("GET", "/api/preferences", json!(null)),
+        ("PUT", "/api/preferences", json!({})),
+        ("GET", "/api/routines", json!(null)),
+        ("DELETE", "/api/routines/r1?revision=1", json!(null)),
+        ("GET", "/api/storage-info", json!(null)),
+        (
+            "POST",
+            "/api/account-export",
+            json!({ "password": PASSWORD }),
+        ),
+        ("GET", "/api/restore-points", json!(null)),
+        (
+            "POST",
+            "/api/restore-points",
+            json!({ "label": "Before", "operation_id": "op-1" }),
+        ),
+        ("POST", "/api/solve", json!({ "blocks": [] })),
+        ("PUT", "/api/routines/r1", json!({})),
+        ("POST", "/api/account-import/preview", json!({})),
+        ("POST", "/api/account-import", json!({})),
+        ("GET", "/api/timer-presets", json!(null)),
+        ("GET", "/api/reminder-limits", json!(null)),
+        ("POST", "/api/timer-split-preview", json!({})),
+        ("GET", "/api/restore-points/p1/preview", json!(null)),
+        ("POST", "/api/restore-points/p1/restore", json!({})),
+    ];
+    for token in ["", "made-up-token"] {
+        window.token = token.to_string();
+        for (method, path, body) in &private {
+            let text = if body.is_null() {
+                String::new()
+            } else {
+                body.to_string()
+            };
+            let answer = window.send(method, path, &text);
+            assert_eq!(
+                answer.status, 401,
+                "{method} {path} with {token:?}: {answer:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn signing_out_with_no_session_is_accepted() {
+    let db = TestDb::new("desk-sign-out-none");
+    let mut window = Window::new(&db);
+    let out = window.send("POST", "/api/auth/logout", "");
+    assert_eq!((out.status, out.session), (204, Session::Ended));
+}
+
+#[test]
+fn a_window_that_names_an_older_account_can_not_read_write_or_sign_out_the_new_one() {
+    let db = TestDb::new("desk-older-account");
+    let first = Window::signed_up(&db, "first");
+    let mut second = Window::signed_up_drawing(&db, "second", 1_000);
+    second.account = first.account.clone();
+    assert_eq!(second.send("GET", "/api/week", "").status, 401);
+    let week = json!({ "week_start": "2026-11-02", "blocks": [], "revision": 0 });
+    assert_eq!(second.json("PUT", "/api/week", week).status, 401);
+    assert_eq!(second.send("POST", "/api/auth/logout", "").status, 401);
+    second.account = None;
+    assert_eq!(
+        second.send("GET", "/api/auth/me", "").body.unwrap()["username"],
+        "second"
+    );
+}
+
+#[test]
+fn a_number_too_large_for_a_float_is_refused_not_a_server_error() {
+    let db = TestDb::new("desk-huge-number");
+    let mut ana = Window::signed_up(&db, "ana");
+    let body = r#"{"week_start": "2026-11-02", "blocks": [], "revision": 1e309}"#;
+    refused(&ana.send("PUT", "/api/week", body), 422, INVALID);
+}
+
+#[test]
+fn a_recovery_code_starts_a_new_session_and_a_wrong_one_is_refused() {
+    let db = TestDb::new("desk-recover");
+    let mut window = Window::new(&db);
+    let made = window.json(
+        "POST",
+        "/api/auth/register",
+        json!({ "username": "ana", "password": PASSWORD }),
+    );
+    let code = made.body.unwrap()["recovery_codes"][0].clone();
+    window.send("POST", "/api/auth/logout", "");
+    let wrong =
+        json!({ "username": "ana", "code": "WRONG-CODE-1234", "password": "replacement-pw-1" });
+    refused(
+        &window.json("POST", "/api/auth/recover", wrong),
+        401,
+        "Incorrect username or recovery code",
+    );
+    let right = json!({ "username": "ANA", "code": code, "password": "replacement-pw-1" });
+    let back = window.json("POST", "/api/auth/recover", right);
+    assert_eq!(back.status, 200, "{back:?}");
+    assert!(matches!(back.session, Session::Started(_)));
+    assert_eq!(back.body.unwrap()["username"], "ana");
+    assert_eq!(window.send("GET", "/api/auth/me", "").status, 200);
+}
+
+#[test]
+fn new_recovery_codes_need_the_password_and_replace_the_old_ones() {
+    let db = TestDb::new("desk-codes");
+    let mut ana = Window::signed_up(&db, "ana");
+    refused(
+        &ana.json(
+            "POST",
+            "/api/auth/recovery-codes",
+            json!({ "password": "wrong-password-1" }),
+        ),
+        401,
+        "Incorrect password",
+    );
+    let renewed = ana.json(
+        "POST",
+        "/api/auth/recovery-codes",
+        json!({ "password": PASSWORD }),
+    );
+    assert_eq!(renewed.status, 200, "{renewed:?}");
+    let body = renewed.body.unwrap();
+    assert_eq!(body["remaining"], 8);
+    assert_eq!(body["recovery_codes"].as_array().unwrap().len(), 8);
+    // A code sign-up gave no longer works.
+    let old = ana.first_codes[0].clone();
+    ana.send("POST", "/api/auth/logout", "");
+    let refused_old = ana.json(
+        "POST",
+        "/api/auth/recover",
+        json!({ "username": "ana", "code": old, "password": "replacement-pw-1" }),
+    );
+    assert_eq!(refused_old.status, 401, "{refused_old:?}");
+}
+
+#[test]
+fn the_timer_presets_reminder_limits_and_a_split_preview_are_answered() {
+    let db = TestDb::new("desk-comfort");
+    let mut ana = Window::signed_up(&db, "ana");
+    let presets = ana.send("GET", "/api/timer-presets", "").body.unwrap();
+    assert_eq!(
+        presets["presets"],
+        json!(flexweek_engine::plan::timer_presets())
+    );
+    let limits = ana.send("GET", "/api/reminder-limits", "").body.unwrap();
+    assert_eq!(limits, json!(flexweek_engine::plan::reminder_limits()));
+    let split = ana.json(
+        "POST",
+        "/api/timer-split-preview",
+        json!({ "duration_min": 120, "timer_work_min": 30, "timer_break_min": 15,
+                "timer_long_break_min": 30, "timer_long_break_every": 4 }),
+    );
+    assert_eq!(split.status, 200, "{split:?}");
+    let segments = split.body.unwrap()["segments"].as_array().unwrap().len();
+    assert!(
+        segments >= 4,
+        "{segments} segments for two hours of 30-minute work"
+    );
+}
+
+#[test]
+fn a_save_through_changes_and_a_plan_are_answered() {
+    let db = TestDb::new("desk-changes");
+    let mut ana = Window::signed_up(&db, "ana");
+    let block = json!({ "id": "soccer", "title": "Soccer", "kind": "locked", "duration_min": 60,
+                        "days": [0], "start": "16:00" });
+    let saved = ana.json(
+        "POST",
+        "/api/changes",
+        json!({ "weeks": [{ "week_start": "2026-11-02", "blocks": [block], "revision": 0 }],
+                "assignments": [], "operation_id": "op-1" }),
+    );
+    assert_eq!(saved.status, 200, "{saved:?}");
+    assert_eq!(saved.body.unwrap()["weeks"][0]["revision"], 1);
+    let homework = json!({ "id": "hw", "title": "Homework", "kind": "flexible", "duration_min": 60,
+                           "days": [0] });
+    let plan = ana.json(
+        "POST",
+        "/api/solve",
+        json!({ "blocks": [homework], "week_start": "2026-11-02", "now_floor": null }),
+    );
+    assert_eq!(plan.status, 200, "{plan:?}");
+    assert_eq!(plan.body.unwrap()["placed"][0]["id"], "hw");
+}
+
+#[test]
+fn homework_is_deleted_at_its_revision() {
+    let db = TestDb::new("desk-delete-homework");
+    let mut ana = Window::signed_up(&db, "ana");
+    let essay = json!({ "id": "essay", "title": "Essay", "due": "2026-11-06T23:59",
+                        "estimate_min": 60, "revision": 0 });
+    let saved = ana.json("PUT", "/api/assignments/essay", essay);
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let stale = ana.send("DELETE", "/api/assignments/essay?revision=5", "");
+    assert_eq!(stale.status, 409, "{stale:?}");
+    let gone = ana.send("DELETE", "/api/assignments/essay?revision=1", "");
+    assert_eq!(gone.status, 200, "{gone:?}");
+}
+
+#[test]
+fn an_account_file_is_previewed_and_imported() {
+    let db = TestDb::new("desk-import");
+    let mut ana = Window::signed_up(&db, "ana");
+    let file = ana
+        .json(
+            "POST",
+            "/api/account-export",
+            json!({ "password": PASSWORD }),
+        )
+        .body
+        .unwrap();
+    let preview = ana.json(
+        "POST",
+        "/api/account-import/preview",
+        json!({ "snapshot": file }),
+    );
+    assert_eq!(preview.status, 200, "{preview:?}");
+    let state = preview.body.unwrap()["state_token"].clone();
+    let imported = ana.json(
+        "POST",
+        "/api/account-import",
+        json!({ "snapshot": file, "state_token": state, "operation_id": "imp-1" }),
+    );
+    assert_eq!(imported.status, 200, "{imported:?}");
+    // The import keeps the account as it was in a restore point first, named by the request's token:
+    // sign-up, export, preview and import make the import this window's fourth request.
+    assert_eq!(imported.body.unwrap()["recovery_id"], "rp-0000000000000004");
+}
+
+#[test]
+fn a_restore_point_is_previewed_and_restored() {
+    let db = TestDb::new("desk-restore");
+    let mut ana = Window::signed_up(&db, "ana");
+    let made = ana.json(
+        "POST",
+        "/api/restore-points",
+        json!({ "label": "Before", "operation_id": "rp-op" }),
+    );
+    assert_eq!(made.status, 200, "{made:?}");
+    let id = made.body.unwrap()["id"].as_str().unwrap().to_string();
+    let preview = ana.send("GET", &format!("/api/restore-points/{id}/preview"), "");
+    assert_eq!(preview.status, 200, "{preview:?}");
+    let state = preview.body.unwrap()["state_token"].clone();
+    let restored = ana.json(
+        "POST",
+        &format!("/api/restore-points/{id}/restore"),
+        json!({ "state_token": state, "operation_id": "re-op" }),
+    );
+    assert_eq!(restored.status, 200, "{restored:?}");
+    refused(
+        &ana.send("GET", "/api/restore-points/missing/preview", ""),
+        404,
+        "Restore point not found",
+    );
+}
+
+fn soccer() -> Value {
+    json!({ "id": "soccer", "title": "Soccer", "kind": "locked", "duration_min": 60, "days": [0],
+            "start": "16:00" })
+}
+
+#[test]
+fn signing_in_again_starts_a_session_with_200() {
+    let db = TestDb::new("desk-sign-in");
+    let mut ana = Window::signed_up(&db, "ana");
+    ana.send("POST", "/api/auth/logout", "");
+    let back = ana.json(
+        "POST",
+        "/api/auth/login",
+        json!({ "username": "Ana", "password": PASSWORD }),
+    );
+    assert_eq!(back.status, 200, "{back:?}");
+    assert!(matches!(back.session, Session::Started(_)));
+    assert_eq!(back.body.unwrap()["username"], "ana");
+}
+
+#[test]
+fn a_new_account_reads_eight_codes_default_preferences_and_empty_lists() {
+    let db = TestDb::new("desk-new-account");
+    let mut ana = Window::signed_up(&db, "ana");
+    assert_eq!(
+        ana.send("GET", "/api/auth/recovery-status", "").body,
+        Some(json!({ "remaining": 8 }))
+    );
+    let preferences = ana.send("GET", "/api/preferences", "").body.unwrap();
+    assert_eq!(preferences["theme"], "system");
+    assert_eq!(
+        ana.send("GET", "/api/routines", "").body,
+        Some(json!({ "routines": [] }))
+    );
+    assert_eq!(
+        ana.send("GET", "/api/restore-points", "").body,
+        Some(json!({ "restore_points": [] }))
+    );
+    assert_eq!(
+        ana.send("GET", "/api/weeks", "").body,
+        Some(json!({ "weeks": [] }))
+    );
+    assert_eq!(
+        ana.json("POST", "/api/repeat-edits", json!({ "repeats": [] }))
+            .body,
+        Some(json!({ "weeks": [], "line": null }))
+    );
+}
+
+#[test]
+fn a_saved_week_shows_on_its_day_its_month_and_the_week_list() {
+    let db = TestDb::new("desk-saved-week");
+    let mut ana = Window::signed_up(&db, "ana");
+    let saved = ana.json(
+        "PUT",
+        "/api/week",
+        json!({ "week_start": "2026-11-02", "blocks": [soccer()], "revision": 0 }),
+    );
+    assert_eq!(saved.status, 200, "{saved:?}");
+    assert_eq!(saved.body.as_ref().unwrap()["revision"], 1);
+    assert_eq!(saved.body.unwrap()["blocks"][0]["title"], "Soccer");
+    assert_eq!(
+        ana.send("GET", "/api/weeks", "").body,
+        Some(json!({ "weeks": ["2026-11-02"] }))
+    );
+    // Monday 2 November holds Soccer; the month of November holds that day.
+    let day = ana
+        .send("GET", "/api/day?date=2026-11-02", "")
+        .body
+        .unwrap();
+    assert_eq!(day["date"], "2026-11-02");
+    assert!(day.to_string().contains("Soccer"), "{day}");
+    let month = ana
+        .send("GET", "/api/month?month=2026-11", "")
+        .body
+        .unwrap();
+    assert_eq!(month["month"], "2026-11");
+    assert!(month.to_string().contains("Soccer"), "{month}");
+}
+
+#[test]
+fn preferences_saved_are_read_back() {
+    let db = TestDb::new("desk-preferences");
+    let mut ana = Window::signed_up(&db, "ana");
+    let mut chosen = ana.send("GET", "/api/preferences", "").body.unwrap();
+    chosen["theme"] = json!("slate");
+    let saved = ana.json("PUT", "/api/preferences", chosen);
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let read = ana.send("GET", "/api/preferences", "").body.unwrap();
+    assert_eq!(read["theme"], "slate");
+}
+
+#[test]
+fn a_homework_is_spread_from_a_day() {
+    let db = TestDb::new("desk-spread");
+    let mut ana = Window::signed_up(&db, "ana");
+    let essay = json!({ "id": "essay", "title": "Essay", "due": "2026-11-06T23:59",
+                        "estimate_min": 120, "revision": 0 });
+    assert_eq!(ana.json("PUT", "/api/assignments/essay", essay).status, 200);
+    let spread = ana.json(
+        "POST",
+        "/api/assignments/essay/spread",
+        json!({ "session_min": 60, "from_date": "2026-11-02" }),
+    );
+    assert_eq!(spread.status, 200, "{spread:?}");
+    let body = spread.body.unwrap();
+    assert_eq!(body["assignment_id"], "essay");
+    // Two hours in one-hour sessions: two sessions.
+    assert_eq!(body["sessions"].as_array().unwrap().len(), 2);
 }

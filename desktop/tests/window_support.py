@@ -1,4 +1,4 @@
-"""A signed-in window on a real local API, for tests that drive the window as a student does."""
+"""A signed-in window on the real service, for tests that drive the window as a student does."""
 
 from __future__ import annotations
 

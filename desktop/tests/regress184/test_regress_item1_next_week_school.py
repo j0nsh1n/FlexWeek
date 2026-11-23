@@ -2,7 +2,7 @@
 and activities set up in Setup, Plan never puts homework in school hours, and "Copy last week's fixed
 times" does not say "nothing" while last week holds Setup's blocks.
 
-Driven through a signed-in NativeSession on a real local API, the layer Setup itself writes through
+Driven through a signed-in NativeSession on the real service, the layer Setup itself writes through
 (`set_setup_blocks`), so the test holds whichever way the fix is built (Coder's plan: a standing week
 applied on the read path). Known failures are xfail(strict=True): when the fix lands they turn XPASS,
 which fails the run, so the marker must then be removed.

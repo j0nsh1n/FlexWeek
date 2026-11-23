@@ -11,11 +11,11 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+import flexweek_engine  # type: ignore[import-untyped]
 from pydantic import ValidationError
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from backend import clock as wall_clock
-from backend.app import Preferences
 from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import TimeBlock, WeekRequest, valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
@@ -121,7 +121,7 @@ from desktop.native.version import CHANNEL, VERSION
 from desktop.native.weekmodel import hhmm_text
 from desktop.native.work_windows import PRESETS as WORK_PRESETS
 
-_FIELDS = frozenset(Preferences.model_fields)
+_FIELDS = frozenset(flexweek_engine.preference_fields())
 SECTIONS = ("look", "planning", "focus", "alerts", "computer")
 CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
 REMINDERS = ("off", "5", "10", "15")
