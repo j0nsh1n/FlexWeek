@@ -485,3 +485,16 @@ rust = [
     "flexweek-service::export_and_import::an_export_is_refused_when_importing_it_would_pass_the_transfer_limit",
 ]
 red = "the preview never reporting changed preferences, and the export not asking the password each fail their test (2026-11-22); the stale-preview, missing-homework and size rules were red-checked in transfer.rs and transfer_parity.rs. Its hosted-server origin goes with the server in P2"
+
+[[port]]
+python = "backend/tests/test_store_writes_and_reads.py"
+rust = [
+    "flexweek-service::store_writes_and_reads::deleting_homework_with_a_far_out_revision_answers_not_found_then_conflict",
+    "flexweek-service::store_writes_and_reads::deleting_a_routine_with_a_far_out_revision_answers_not_found_then_conflict",
+    "flexweek-service::store_writes_and_reads::the_reply_to_deleting_homework_lists_each_changed_week_before_its_revision",
+    "flexweek-service::store_writes_and_reads::the_reply_to_a_batch_of_changes_lists_each_changed_week_before_its_revision",
+    "flexweek-service::store_writes_and_reads::a_write_is_undone_when_a_later_write_in_the_same_connection_fails",
+    "flexweek-service::store_writes_and_reads::a_batch_that_saves_homework_then_hits_a_stale_week_leaves_no_homework",
+    "flexweek-service::store_writes_and_reads::replacing_an_account_that_fails_after_its_deletes_leaves_the_account_as_it_was",
+]
+red = "a changed week listing its revision first, a homework or routine delete not comparing revisions, and a failed write committing instead of rolling back each fail their tests (2026-11-22). Revisions beyond 64 bits are read by the server's query parser and go with the server in P2"
