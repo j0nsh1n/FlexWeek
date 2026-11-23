@@ -354,3 +354,25 @@ rust = [
     "flexweek-service::due_bounds_in_plan::a_due_time_bounds_plan_at_that_minute",
 ]
 red = "no week needed for homework sessions, finished homework keeping its open sessions, and no due bound inside the week each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_solve_endpoint.py"
+rust = [
+    "flexweek-service::plan_api::a_block_of_no_length_is_refused",
+    "flexweek-service::plan_api::a_block_on_the_grid_is_planned_and_the_answer_says_what_was_placed_and_how_long_it_took",
+    "flexweek-service::plan_api::a_replan_after_a_missed_block_moves_the_homework_and_says_from_where_to_where",
+    "flexweek-service::plan_api::a_replan_for_something_that_is_not_a_fixed_block_on_that_day_is_refused",
+    "flexweek-service::plan_api::a_saved_week_keeps_a_missed_day_of_a_fixed_block",
+    "flexweek-service::plan_api::homework_cannot_be_marked_missed",
+    "flexweek-service::plan_api::a_replan_for_a_day_already_marked_missed_is_refused",
+]
+red = "missed days allowed on homework fails its test (2026-11-22); the replan and length rules are the plan request check's, red-checked in solve_parity.rs"
+
+[[port]]
+python = "backend/tests/test_running_late_api.py"
+rust = [
+    "flexweek-service::plan_api::running_late_is_a_preview_that_writes_nothing",
+    "flexweek-service::plan_api::running_late_together_with_a_replan_or_by_45_minutes_is_refused",
+    "flexweek-service::plan_api::a_block_moved_for_running_late_says_so_in_its_own_sentence",
+]
+red = "a 45-minute late allowed and the running-late sentence changed each fail their test (2026-11-22)"
