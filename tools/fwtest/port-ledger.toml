@@ -536,3 +536,16 @@ rust = [
     "flexweek-service::sign_up_and_sign_in::accounts_weeks_and_the_session_survive_a_restart",
 ]
 red = "sign-up making no preferences row, a space allowed in a name, a failed write committing, one try count for every name, and a restart not linking homework each fail their tests (2026-11-22); the accounts.rs twins were seen red in P0. A body with an extra field and a refusal that never echoes the password go with the server in P2"
+
+[[port]]
+python = "backend/tests/test_clock_default.py"
+rust = [
+    "flexweek-service::appearance_preferences::the_clock_is_12_hour_unless_chosen_and_a_value_that_is_not_true_or_false_is_refused",
+    "flexweek-service::clock_default::an_account_that_never_chose_before_the_update_keeps_24_hour",
+    "flexweek-service::clock_default::an_old_account_that_chose_12_hour_keeps_it_and_the_stamp_is_applied_once",
+    "flexweek-service::clock_default::an_export_always_says_the_clock",
+    "flexweek-service::transfer::an_export_says_the_clock_and_reads_back_as_the_same_12_hour_account",
+    "flexweek-store::test_time_step_default::an_older_account_holding_five_reads_fifteen_after_opening_and_keeps_its_other_settings",
+    "flexweek-store::test_time_step_default::five_chosen_after_the_move_is_still_five_after_opening_twice_more",
+]
+red = "no 24-hour stamp, a stored choice stamped over, the stamp run on every start (which turns a new account 24-hour; the twin checks that, the Python original did not), and an export leaving a 12-hour clock off each fail their tests (2026-11-22); the appearance, transfer and time-step twins were seen red when they were written"
