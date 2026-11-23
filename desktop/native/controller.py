@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
@@ -365,9 +366,11 @@ class NativeSession(QObject):
     alerts = Signal(list)
     alarm_due = Signal(object)
 
-    def __init__(self, origin: str, parent: QObject | None = None, kept: KeptSession | None = None) -> None:
+    def __init__(
+        self, database: str | Path, parent: QObject | None = None, kept: KeptSession | None = None
+    ) -> None:
         super().__init__(parent)
-        self.client = NativeClient(origin, self)
+        self.client = NativeClient(database, self)
         self.client.expired.connect(self._on_expired)
         self.account: dict | None = None
         # Keep me signed in: where this database's kept session lives, and the choice on the sign-in

@@ -10,7 +10,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.audit_support import reconnect, refuse_all
 from desktop.tests.logic_support import fixed
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.window_support import database, qapp, signed_out, window  # noqa: F401
 
 # The fixtures are used by name, so each test's argument list redefines them.
 # ruff: noqa: F811

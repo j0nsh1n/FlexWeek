@@ -14,10 +14,9 @@ import json
 import os
 import secrets
 import shutil
+import sqlite3
 import sys
 import tempfile
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 
@@ -65,6 +64,7 @@ try:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     import backend
+    from backend.storage import initialize
     from desktop.native.calendar import sunday_due
     from desktop.native.collector import WindowThreadCollector
     from desktop.native.cpu_drawing import apply_saved as apply_saved_cpu_drawing
@@ -74,8 +74,6 @@ try:
     from desktop.native.updater import collect_stale_downloads
     from desktop.native.version import VERSION
     from desktop.native.window import NativeWindow
-    from desktop.origin import configured_origin
-    from desktop.server import LocalServer
 except ImportError as error:
     report_missing_part(error)
     raise SystemExit(1) from error
@@ -159,21 +157,12 @@ def material_state(window: NativeWindow) -> tuple[str, int]:
     return ("shown" if colors >= PAINTED_MIN_COLORS else "waiting"), colors
 
 
-def origin_reachable(origin: str) -> bool:
-    try:
-        with urllib.request.urlopen(origin + "/api/health", timeout=2) as response:
-            return 200 <= response.status < 300
-    except urllib.error.URLError, TimeoutError, OSError, ValueError:
-        return False
-
-
 class NativeSmoke:
     """Registers a throwaway account, places a week, and writes a startup report."""
 
-    def __init__(self, window: NativeWindow, report: Path, walk_setup: bool) -> None:
+    def __init__(self, window: NativeWindow, report: Path) -> None:
         self._window = window
         self._report = report
-        self._walk = walk_setup
         self._done = False
         self._stage = "first screen"
         self._material_ok = False
@@ -198,10 +187,6 @@ class NativeSmoke:
         page = face.objectName() if face is not None else ""
         bridge = window._account_bridge()
         phase = bridge.phase if bridge is not None else ""
-        if not self._walk:
-            if page == "materialPage" and phase == "sign-in":
-                self._finish(True, "first screen shown")
-            return
         if self._stage == "first screen":
             if page != "materialPage" or phase != "sign-in":
                 return
@@ -293,14 +278,14 @@ class NativeSmoke:
         self._poll.stop()
         window = self._window
         facts = {
-            "ok": ok and (self._material_ok or not self._walk),
+            "ok": ok and self._material_ok,
             "stage": stage,
             "window_visible": window.isVisible(),
             "window_icon_loaded": not window.windowIcon().isNull(),
             "tray_icon_installed": window._tray_icon is not None,
             "block_count": len(window.session.blocks),
             "painted_colors": getattr(self, "_facts_colors", 0),
-            "material_ok": self._material_ok if self._walk else None,
+            "material_ok": self._material_ok,
             "material_painted_colors": self._material_colors,
             "message": window.session.message,
         }
@@ -324,53 +309,34 @@ def main(argv: list[str] | None = None) -> int:
     load_fonts()
     collect_stale_downloads()
 
-    try:
-        origin = configured_origin()
-    except ValueError as error:
-        QMessageBox.critical(None, "FlexWeek configuration", str(error))
-        return 2
-
     root = tempfile.mkdtemp(prefix="flexweek-smoke-") if report is not None else profile_root()
     instance = instance_name(str(database_arg) if database_arg is not None else root)
     if report is None and show_running_instance(instance):
         return 0
 
-    hosted = origin is not None and database_arg is None
-    if hosted and report is not None and not origin_reachable(origin):
-        payload = json.dumps({"ok": False, "stage": "page failed to load", "window_visible": False})
-        report.write_text(payload + "\n")
-        shutil.rmtree(root, ignore_errors=True)
-        return 1
-
-    server: LocalServer | None = None
-    sync = None
-    if not hosted:
-        database = database_arg if database_arg is not None else Path(root) / "flexweek.db"
-        try:
-            database.parent.mkdir(parents=True, exist_ok=True)
-            server = LocalServer(database)
-            origin = server.start()
-        except (OSError, RuntimeError, TimeoutError) as error:
-            if report is not None:
-                # A smoke run is read by CI from its report; a dialog there says nothing to anyone.
-                stage = f"local server did not start: {error}"
-                payload = {"ok": False, "stage": stage, "window_visible": False}
-                report.write_text(json.dumps(payload) + "\n")
-                return 3
-            QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
+    database = database_arg if database_arg is not None else Path(root) / "flexweek.db"
+    try:
+        database.parent.mkdir(parents=True, exist_ok=True)
+        initialize(database)
+    except (OSError, sqlite3.Error, ValueError, RuntimeError) as error:
+        if report is not None:
+            # A smoke run is read by CI from its report; a dialog there says nothing to anyone.
+            stage = f"saved data did not open: {error}"
+            payload = {"ok": False, "stage": stage, "window_visible": False}
+            report.write_text(json.dumps(payload) + "\n")
             return 3
-        app.aboutToQuit.connect(server.stop)
-        sync = SyncHost(database)
-        app.aboutToQuit.connect(sync.stop)
-        sync.start_if_paired()
-    assert origin is not None
+        QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
+        return 3
+    sync = SyncHost(database)
+    app.aboutToQuit.connect(sync.stop)
+    sync.start_if_paired()
 
     # Keep me signed in is per database, like the running-instance check.
     kept = KeptSession(Path(root) / "signed-in" / f"{instance}.json")
-    window = NativeWindow(origin, icon=QIcon(str(app_icon_path())), kept=kept, sync=sync)
+    window = NativeWindow(database, icon=QIcon(str(app_icon_path())), kept=kept, sync=sync)
     if report is None:
         window.listen_for_instances(instance)
-    smoke = NativeSmoke(window, report, walk_setup=not hosted) if report is not None else None
+    smoke = NativeSmoke(window, report) if report is not None else None
     window.show()
     status = app.exec()
     del smoke

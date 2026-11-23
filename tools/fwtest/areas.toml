@@ -358,7 +358,7 @@ paths = [
 areas = ["account", "e2e"]
 
 [[rule]]
-paths = ["desktop/native/devices.py", "desktop/server.py"]
+paths = ["desktop/native/devices.py"]
 areas = ["sync", "account", "e2e"]
 
 # Another program's saves (the assistant's) reaching the open window.
@@ -373,7 +373,7 @@ paths = [
   "desktop/linux/", "desktop/windows/", "desktop/build_linux.sh", "desktop/build_windows.ps1",
   "desktop/check_bundle.py", "desktop/finish_linux_bundle.sh", "desktop/package_linux.sh",
   "desktop/smoke_linux_containers.sh", "desktop/smoke_mcp.py", "desktop/readme.py",
-  "desktop/origin.py", "packaging/", "README.md", "scripts/dev-release.sh",
+  "packaging/", "README.md", "scripts/dev-release.sh",
   ".github/workflows/dev-build.yml", ".github/workflows/release-windows.yml",
 ]
 areas = ["updater"]

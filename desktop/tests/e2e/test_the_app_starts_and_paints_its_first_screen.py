@@ -1,11 +1,10 @@
-"""Native `--smoke-test` against a real local API, with no Chromium."""
+"""Native `--smoke-test` as the app runs, with no server and no Chromium."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -19,7 +18,6 @@ pytestmark = pytest.mark.skipif(
 
 if importlib.util.find_spec("PySide6") is not None:
     from desktop.main import PAINTED_MIN_COLORS
-    from desktop.server import LocalServer
 
 
 def run_smoke(tmp_path: Path, **extra: str) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
@@ -63,21 +61,9 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert list((tmp_path / "tmp").glob("flexweek-smoke-*")) == []
 
 
-def test_smoke_mode_makes_no_account_on_a_hosted_server(tmp_path: Path) -> None:
-    server = LocalServer(tmp_path / "hosted.db")
-    origin = server.start()
-    try:
-        result, report = run_smoke(tmp_path, FLEXWEEK_DESKTOP_ORIGIN=origin)
-    finally:
-        server.stop()
-    assert result.returncode == 0, report
-    assert report["stage"] == "first screen shown"
-    with sqlite3.connect(tmp_path / "hosted.db") as database:
-        assert database.execute("SELECT COUNT(*) FROM users").fetchone() == (0,)
-
-
-def test_smoke_mode_fails_when_the_page_cannot_load(tmp_path: Path) -> None:
+def test_the_old_hosted_server_setting_is_not_read(tmp_path: Path) -> None:
+    """The hosted server is gone (decision D4): an address left in the setting changes nothing, and the
+    app still opens on its own saved data."""
     result, report = run_smoke(tmp_path, FLEXWEEK_DESKTOP_ORIGIN="http://127.0.0.1:9")
-    assert result.returncode == 1
-    assert report["ok"] is False
-    assert report["stage"] == "page failed to load"
+    assert result.returncode == 0, report
+    assert report["stage"] == "week shown after setup Solve"

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.client import ApiError
-from desktop.server import LocalServer
-from desktop.tests.logic_support import PASSWORD, qapp, server, settled, signed_in  # noqa: F401
+from desktop.tests.logic_support import PASSWORD, database, qapp, settled, signed_in  # noqa: F401
 from desktop.tests.waiting import wait_until
 
 # The fixtures are used by name, so each test's argument list redefines them.
@@ -55,10 +55,10 @@ def preference_puts(session: object) -> list[dict]:
     return puts
 
 
-def test_setup_answers_do_not_cross_a_sign_out(qapp: QApplication, server: LocalServer) -> None:
+def test_setup_answers_do_not_cross_a_sign_out(qapp: QApplication, database: Path) -> None:
     """Answers kept while a save is in flight belong to that account. Signing out drops them, and so
     does signing a different account in, so the next flush cannot store them there."""
-    session = signed_in(qapp, server.origin, "alice_cross", create=True)
+    session = signed_in(qapp, database, "alice_cross", create=True)
     hold_the_save(session)
     session.keep_setup({"planning_style": "manual", "clock_24h": True})
     assert session.setup_prefs == {"planning_style": "manual", "clock_24h": True}

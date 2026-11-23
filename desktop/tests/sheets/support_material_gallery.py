@@ -19,6 +19,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtQml import QQmlComponent
     from PySide6.QtQuick import QQuickItem, QQuickView
     from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
     from shiboken6 import delete, isValid
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -61,7 +62,9 @@ def _press(view: QQuickView, item: QQuickItem, key: Qt.Key) -> None:
 
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QGuiApplication]:
-    yield QGuiApplication.instance() or QGuiApplication(["flexweek-material-components"])
+    # A QApplication, not a bare QGuiApplication: a test after this one in the same worker may make a
+    # widget, and without one Qt aborts the worker.
+    yield QGuiApplication.instance() or QApplication(["flexweek-material-components"])
 
 
 @pytest.fixture

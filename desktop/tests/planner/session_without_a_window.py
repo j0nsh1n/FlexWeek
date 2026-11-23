@@ -1,4 +1,4 @@
-"""A signed-in NativeSession on the in-process backend, with no window and no server, for the tests
+"""A signed-in NativeSession answered on the window's thread, with no window, for the tests
 of what the session does when a surface calls it. Replies come on the next turn of the event loop,
 as the light app's do (desktop/tests/light_app.py)."""
 
@@ -12,7 +12,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.controller import NativeSession
-from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for
+from desktop.tests.light_app import InProcessApi, _client_for
 from desktop.tests.logic_support import PASSWORD
 from desktop.tests.waiting import wait_until
 
@@ -31,7 +31,7 @@ def sign_up(qapp: QApplication, tmp_path: Path) -> Iterator[Callable[[str], Nati
 
     def make(username: str) -> NativeSession:
         with _client_for(api):
-            session = NativeSession(ORIGIN, qapp)
+            session = NativeSession(api.database, qapp)
         made.append(session)
         session.register(username, PASSWORD)
         wait_until(qapp, lambda: session.account is not None)

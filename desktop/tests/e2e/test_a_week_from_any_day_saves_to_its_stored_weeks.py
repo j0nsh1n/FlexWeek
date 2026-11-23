@@ -7,13 +7,14 @@ stored weeks of Monday 2 and Monday 9 November; from Sunday it runs Sunday 1 to 
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import SETUP_SCHOOL_ID
 from desktop.native.client import ApiError
 from desktop.native.controller import NativeSession
-from desktop.server import LocalServer
-from desktop.tests.e2e.account_sessions import HASHING_WAIT, HELD, server  # noqa: F401
+from desktop.tests.e2e.account_sessions import HASHING_WAIT, HELD, database  # noqa: F401
 from desktop.tests.e2e.saved_weeks import read_week
 from desktop.tests.logic_support import essay, fixed, settled
 from desktop.tests.waiting import wait_until
@@ -40,22 +41,22 @@ def days_by_id(week: dict) -> dict[str, list[int]]:
 
 
 def test_the_open_week_starts_on_the_chosen_day_and_holds_today(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "wednesday", WEDNESDAY)
+    session = signed_in_from(qapp, database, "wednesday", WEDNESDAY)
     assert session.week_start == "2026-11-04"
     assert session.today_column("2026-11-05") == 1
     assert session.today_column("2026-11-10") == 6
     assert session.today_column("2026-11-11") is None
-    sunday = signed_in_from(qapp, server.origin, "sunday", SUNDAY)
+    sunday = signed_in_from(qapp, database, "sunday", SUNDAY)
     assert sunday.week_start == "2026-11-01"
     assert sunday.today_column("2026-11-05") == 4
 
 
 def test_a_block_on_monday_after_the_seam_is_stored_in_that_mondays_week(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "seam", WEDNESDAY)
+    session = signed_in_from(qapp, database, "seam", WEDNESDAY)
     # Shown day 5 is Monday 9 November; shown day 1 is Thursday 5 November.
     session.add_block(fixed("mon9", "Club", 5, "16:00"))
     session.add_block(fixed("thu5", "Piano", 1, "17:00"))
@@ -68,9 +69,9 @@ def test_a_block_on_monday_after_the_seam_is_stored_in_that_mondays_week(
 
 
 def test_undo_and_redo_across_the_seam_go_back_to_each_stored_week(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "undo", WEDNESDAY)
+    session = signed_in_from(qapp, database, "undo", WEDNESDAY)
     session.add_block(fixed("mon9", "Club", 5, "16:00"))
     session.save()
     wait_until(qapp, lambda: not session.busy and session.pending_save is None)
@@ -88,9 +89,9 @@ def test_undo_and_redo_across_the_seam_go_back_to_each_stored_week(
 
 
 def test_a_failed_save_retried_lands_once_in_each_stored_week(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "retry", WEDNESDAY)
+    session = signed_in_from(qapp, database, "retry", WEDNESDAY)
     held: list = []
     original = session.client.request
 
@@ -125,9 +126,9 @@ def test_a_failed_save_retried_lands_once_in_each_stored_week(
 
 
 def test_next_and_previous_move_by_seven_days_and_a_day_opens_the_week_that_holds_it(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "travel", WEDNESDAY)
+    session = signed_in_from(qapp, database, "travel", WEDNESDAY)
     session.load_week("2026-11-11")
     settled(qapp, session)
     assert session.week_start == "2026-11-11"
@@ -149,9 +150,9 @@ def test_next_and_previous_move_by_seven_days_and_a_day_opens_the_week_that_hold
 
 
 def test_changing_the_first_day_reopens_the_week_holding_the_selected_day(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "follow", 0)
+    session = signed_in_from(qapp, database, "follow", 0)
     assert session.week_start == "2026-11-02"
     session.follow_first_weekday(WEDNESDAY)
     settled(qapp, session)
@@ -170,9 +171,9 @@ def essay_sessions(blocks: list[dict]) -> list[tuple[int, str, int]]:
 
 
 def test_plan_and_replan_all_plan_the_week_on_screen_and_store_each_session_once(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "plan", WEDNESDAY)
+    session = signed_in_from(qapp, database, "plan", WEDNESDAY)
     # Homework added with no date is due at the end of the week on screen: Tuesday 10, 11:59 PM.
     homework = essay(session, 180)
     assert homework["due"] == "2026-11-10T23:59"
@@ -201,9 +202,9 @@ def school_days(week: dict) -> list[int]:
 
 
 def test_school_changed_from_a_wednesday_week_on_keeps_its_weekdays_and_the_days_before(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "school", WEDNESDAY)
+    session = signed_in_from(qapp, database, "school", WEDNESDAY)
     school = {"id": SETUP_SCHOOL_ID, "title": "School", "kind": "locked", "category": "class",
               "start": "08:30", "duration_min": 390, "days": [0, 1, 2, 3, 4]}  # fmt: skip
     session.set_setup_blocks([school])
@@ -225,9 +226,9 @@ def test_school_changed_from_a_wednesday_week_on_keeps_its_weekdays_and_the_days
 
 
 def test_a_routine_saved_in_a_wednesday_week_keeps_its_weekdays(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "routine", WEDNESDAY)
+    session = signed_in_from(qapp, database, "routine", WEDNESDAY)
     # Day 5 of the week from Wednesday 4 is Monday 9.
     session.add_block(fixed("club", "Club", 5, "16:00"))
     session.save()
@@ -244,9 +245,9 @@ def test_a_routine_saved_in_a_wednesday_week_keeps_its_weekdays(
 
 
 def test_plan_does_not_take_this_weeks_own_days_for_an_earlier_week(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "earlier", WEDNESDAY)
+    session = signed_in_from(qapp, database, "earlier", WEDNESDAY)
     session.add_homework(essay(session, 60))
     # Wednesday 4 at 8:00 AM, day 0 of the week on screen and already over, is stored in Monday 2's
     # week, which starts before it. Plan keeps a missed session of this week where it is; only one
@@ -284,9 +285,9 @@ def school_rows(blocks: list[dict]) -> list[tuple[str, list[int]]]:
 
 
 def test_school_changed_twice_from_a_wednesday_week_on_and_then_from_monday_stays_school(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "schooltwice", WEDNESDAY)
+    session = signed_in_from(qapp, database, "schooltwice", WEDNESDAY)
     school = {"id": SETUP_SCHOOL_ID, "title": "School", "kind": "locked", "category": "class",
               "start": "08:30", "duration_min": 390, "days": [0, 1, 2, 3, 4]}  # fmt: skip
     fields = {key: school[key] for key in ("title", "category", "start", "duration_min")}
@@ -331,11 +332,11 @@ def test_school_changed_twice_from_a_wednesday_week_on_and_then_from_monday_stay
 
 
 def test_a_waiting_session_deleted_and_undone_keeps_the_days_the_screen_cannot_see(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
     # From Friday the week holding Thursday 5 November runs Friday 30 October to Thursday 5 November. A
     # session waiting for a time may go on Thursday 29 or Friday 30 October: the screen holds Friday.
-    session = signed_in_from(qapp, server.origin, "waitingundo", 4)
+    session = signed_in_from(qapp, database, "waitingundo", 4)
     waiting = {"id": "hw", "title": "Read", "kind": "flexible", "duration_min": 60, "days": [3, 4]}
     post_changes(qapp, session, {"weeks": [{"week_start": "2026-10-26", "blocks": [waiting], "revision": 0}]})
     session.reload()
@@ -362,9 +363,9 @@ def test_a_waiting_session_deleted_and_undone_keeps_the_days_the_screen_cannot_s
 
 
 def test_undoing_new_homework_planned_after_the_seam_takes_it_out_of_both_stored_weeks(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "undohomework", WEDNESDAY)
+    session = signed_in_from(qapp, database, "undohomework", WEDNESDAY)
     away = {"id": "busy", "title": "Away", "kind": "locked", "start": "00:00", "duration_min": 1440}
     session.add_block({**away, "days": [1, 2, 3, 4]})
     session.save()
@@ -391,9 +392,9 @@ def test_undoing_new_homework_planned_after_the_seam_takes_it_out_of_both_stored
 
 
 def test_three_changes_in_a_wednesday_week_undo_one_by_one_without_a_conflict(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in_from(qapp, server.origin, "undothree", WEDNESDAY)
+    session = signed_in_from(qapp, database, "undothree", WEDNESDAY)
 
     def saved() -> None:
         session.save()

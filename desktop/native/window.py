@@ -136,7 +136,7 @@ class NativeWindow(QObject):
 
     def __init__(
         self,
-        origin: str,
+        database: str | Path,
         icon: QIcon | None = None,
         parent: QObject | None = None,
         kept: KeptSession | None = None,
@@ -162,7 +162,7 @@ class NativeWindow(QObject):
         self._shut_down = False
         # main() has loaded them already; a window made anywhere else, as in the tests, is drawn alike.
         load_fonts()
-        self.session = NativeSession(origin, self, kept)
+        self.session = NativeSession(database, self, kept)
         self.session.use_sync_host(sync)
         # The week's first day is kept on this computer, not on the account; the session is told it.
         self.session.follow_first_weekday(week_start_day())

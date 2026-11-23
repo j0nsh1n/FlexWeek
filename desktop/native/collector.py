@@ -1,7 +1,8 @@
 """Python's garbage collector runs on whichever thread happens to allocate when its count is reached.
-The local server runs on a thread of its own, so that was sometimes the server's thread, which then
-freed Qt objects the window was still drawing with, and the app crashed mid-paint. Automatic
-collection is switched off and the window's own thread collects from a timer instead."""
+Requests are answered on worker threads (and were on the local server's thread before), so that was
+sometimes a worker, which then freed Qt objects the window was still drawing with, and the app crashed
+mid-paint. Automatic collection is switched off and the window's own thread collects from a timer
+instead."""
 
 from __future__ import annotations
 

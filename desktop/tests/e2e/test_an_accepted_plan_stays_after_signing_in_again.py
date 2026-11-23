@@ -5,17 +5,17 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.controller import NativeSession
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import (  # noqa: F401
     HELD,
     PASSWORD,
-    server,
+    database,
     signed_in,
     soccer,
     table_text,
@@ -60,11 +60,11 @@ def work_starts(session: NativeSession) -> dict[str, str | None]:
 
 
 def test_accepted_homework_placements_survive_save_and_a_new_session(
-    qapp: QApplication, server: LocalServer, clock: FakeClock
+    qapp: QApplication, database: Path, clock: FakeClock
 ) -> None:
     # Plan puts nothing before now, so the week is still ahead of the clock.
     clock.set(MONDAY_MORNING)
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     two_assignments(session)
     session.save()
     wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
@@ -77,7 +77,7 @@ def test_accepted_homework_placements_survive_save_and_a_new_session(
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     session.client.reset()
 
-    again = signed_in(qapp, server.origin, "alice", create=False)
+    again = signed_in(qapp, database, "alice", create=False)
     wait_until(qapp, lambda: not again.busy and len(again.assignments) >= 2)
     later = work_starts(again)
     assert later == starts
@@ -85,10 +85,10 @@ def test_accepted_homework_placements_survive_save_and_a_new_session(
 
 
 def test_an_accepted_plan_is_on_the_grid_after_closing_and_signing_in(
-    qapp: QApplication, server: LocalServer, clock: FakeClock
+    qapp: QApplication, database: Path, clock: FakeClock
 ) -> None:
     clock.set(MONDAY_MORNING)
-    first = NativeWindow(server.origin)
+    first = NativeWindow(database)
     HELD.append(first)
     first.show()
     sign_up(qapp, first, "alice", PASSWORD)
@@ -111,7 +111,7 @@ def test_an_accepted_plan_is_on_the_grid_after_closing_and_signing_in(
     first.session.client.reset()
     first.hide()
 
-    second = NativeWindow(server.origin)
+    second = NativeWindow(database)
     HELD.append(second)
     second.show()
     sign_in(qapp, second, "alice", PASSWORD)

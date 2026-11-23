@@ -1,8 +1,9 @@
 # The port ledger (2.0.0, Rust approved 2026-11-21). A Python test file (test_*.py or *_test.py
 # under backend/tests/, desktop/tests/, scripts/rig/ or scripts/pictures/) is deleted only with a row
 # here naming the Rust tests that replace it and how they were seen to fail (the rule broken by hand,
-# or the mutation case that turned them red). `fwtest gate` refuses a deleted Python test file without
-# a row, and a deleted ledger.
+# or the mutation case that turned them red). A file that tested something the app no longer has names
+# the approved decision that removed it instead (`gone`). `fwtest gate` refuses a deleted Python test
+# file without a row, and a deleted ledger.
 #
 # [[port]]
 # python = "desktop/tests/week/test_week_zoom.py"
@@ -603,3 +604,15 @@ rust = [
     "flexweek-engine::planning_real_student_weeks::a_priority_1_item_is_never_dropped_for_a_lower_one_on_a_slower_laptop",
 ]
 red = "weekend days not offered for work due after Sunday fails the week 17 weekend test (2026-11-22); work due after the week offered no day past Thursday fails the week 17 Friday test (0 of 3 placed; 2026-11-23); the three known failures are the Python file's strict expected failures, each shown able to fail by asking for no more than the planner does (no cap, no buffer, no gap); the floor and priority twins were seen red when they were written"
+
+[[port]]
+python = "desktop/tests/e2e/test_the_bundled_server_starts_and_stops.py"
+rust = [
+    "flexweek-service::desk_requests::unknown_paths_and_methods_are_told_apart",
+    "flexweek-service::desk_requests::storage_that_cannot_be_opened_keeps_the_students_changes",
+]
+red = "a known path asked with another method answered 404 instead of 405 fails the paths test, and storage errors no longer answered 503 fails the storage test (2026-11-23); the port, the origin check and the server thread went with the server (P2, D4)"
+
+[[port]]
+python = "desktop/tests/e2e/test_the_configured_server_origin_is_checked.py"
+gone = "D4 (approved 2026-11-21): the hosted server and the FLEXWEEK_ORIGIN / FLEXWEEK_DESKTOP_ORIGIN settings were removed in P2; test_the_app_starts_and_paints_its_first_screen.py::test_the_old_hosted_server_setting_is_not_read checks the setting is no longer read"

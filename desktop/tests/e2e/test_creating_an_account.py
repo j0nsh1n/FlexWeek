@@ -12,7 +12,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, table_text
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import PASSWORD, qapp, server, signed_out  # noqa: F401
+from desktop.tests.window_support import PASSWORD, database, qapp, signed_out  # noqa: F401
 
 
 def test_creating_an_account_shows_eight_codes_then_an_empty_week(

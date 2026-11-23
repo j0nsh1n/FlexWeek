@@ -5,7 +5,7 @@
 The format and an example are in docs/tooling/fwtest.md, "Playing the app". This file has two halves.
 The top parses and checks a play file with no display and no Qt, so a mistake is named before the
 hidden session does any work. The bottom (run_play) runs it with the real pointer and never touches
-anything but the rig's throwaway account and local server. Every play starts on Material 3.
+anything but the rig's throwaway account and its own database. Every play starts on Material 3.
 """
 
 from __future__ import annotations
@@ -413,7 +413,7 @@ class CannotDo(Exception):
     """The step cannot be done now (no such widget, a dialog in the way). Logged, and the play goes on."""
 
 
-def run_play(app, window, session, server, out: Path, play: Play, seed_week, python_errors: list[str]) -> int:
+def run_play(app, window, session, out: Path, play: Play, seed_week, python_errors: list[str]) -> int:
     """Set the account up as the play asks, run its steps, then take a final shot and tree. Exit code."""
     from PySide6.QtCore import QPoint, Qt, QTimer
     from PySide6.QtGui import QAction, QCursor
@@ -446,7 +446,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
 
     held = {"now": datetime.now()}
     session.now_ms = lambda: int(held["now"].timestamp() * 1000)
-    # The server inside the app counts what homework still needs against its own clock: hold it too.
+    # The service counts what homework still needs against the app's clock: hold it too.
     wall_clock.use(lambda: held["now"].timestamp())
     setup = play.setup
 
@@ -947,7 +947,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         python_errors.append(f"setup: {type(broken).__name__}: {broken}")
         log(f"SETUP FAILED: {type(broken).__name__}: {broken}")
         log_file.close()
-        server.stop()
         return 1
     log(
         f"play {play.name}: seed {setup.seed}, {setup.mode} mode, window {whole_window()}, "
@@ -967,7 +966,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         made = recorder.finish()
         said = f"; {made['note']}" if made["note"] else ", clip.mp4"
         log(f"recorded {len(made['frames'])} frames{said}")
-    server.stop()
     if python_errors:
         log(f"STOPPED by a Python error: {python_errors[0]}")
         log_file.close()

@@ -15,14 +15,14 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401
+from desktop.tests.logic_support import database, qapp, settled, signed_in, wait_until  # noqa: F401
 
 WEEKDAYS = {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}
 WEEKEND = {"days": [5, 6], "start": "10:00", "end": "12:00"}
 
 
-def student(qapp, server, name: str, *, weekend: bool = False):
-    session = signed_in(qapp, server.origin, name, create=True)
+def student(qapp, database, name: str, *, weekend: bool = False):
+    session = signed_in(qapp, database, name, create=True)
     wait_until(qapp, lambda: session.preferences is not None)
     assert session.save_availability([], None, [WEEKDAYS, WEEKEND] if weekend else [WEEKDAYS])
     wait_until(qapp, lambda: not session.busy)
@@ -73,8 +73,8 @@ def next_week(qapp, session) -> None:
 FRESH_EYES = [("math", 45, 9), ("history", 120, 10), ("bio", 60, 11)]  # due next Wed, Thu, Fri
 
 
-def test_p1_1_saturday_1345_without_weekend_hours_plan_cuts_nothing(qapp, server) -> None:
-    session = student(qapp, server, "p1_sat_cut")
+def test_p1_1_saturday_1345_without_weekend_hours_plan_cuts_nothing(qapp, database) -> None:
+    session = student(qapp, database, "p1_sat_cut")
     hold(session, 5, 13, 45)
     homework(qapp, session, FRESH_EYES)
     plan(qapp, session)
@@ -82,8 +82,8 @@ def test_p1_1_saturday_1345_without_weekend_hours_plan_cuts_nothing(qapp, server
     assert kept == {ident: estimate for ident, estimate, _d in FRESH_EYES}
 
 
-def test_p1_1_next_weeks_plan_places_all_three_whole_before_their_due_days(qapp, server) -> None:
-    session = student(qapp, server, "p1_sat_next")
+def test_p1_1_next_weeks_plan_places_all_three_whole_before_their_due_days(qapp, database) -> None:
+    session = student(qapp, database, "p1_sat_next")
     hold(session, 5, 13, 45)
     homework(qapp, session, FRESH_EYES)
     plan(qapp, session)
@@ -94,9 +94,9 @@ def test_p1_1_next_weeks_plan_places_all_three_whole_before_their_due_days(qapp,
     assert placed == {ident: estimate for ident, estimate, _d in FRESH_EYES}, placed
 
 
-def test_p1_8_monday_1630_lab_report_180_due_next_wednesday_keeps_180(qapp, server) -> None:
+def test_p1_8_monday_1630_lab_report_180_due_next_wednesday_keeps_180(qapp, database) -> None:
     """Assistant Local's weekday repro: one 2 h 30 block on Friday, the 30 min gone."""
-    session = student(qapp, server, "p1_mon_lab")
+    session = student(qapp, database, "p1_mon_lab")
     hold(session, 0, 16, 30)
     homework(qapp, session, [("lab", 180, 9)])
     plan(qapp, session)
@@ -105,9 +105,9 @@ def test_p1_8_monday_1630_lab_report_180_due_next_wednesday_keeps_180(qapp, serv
     assert minutes(session, "lab") == 180, seen
 
 
-def test_p1_auto_split_off_saturday_45_due_wednesday_stays_one_45_session(qapp, server) -> None:
+def test_p1_auto_split_off_saturday_45_due_wednesday_stays_one_45_session(qapp, database) -> None:
     """Timmy's addition: rule a, work due within the coming week is never split."""
-    session = student(qapp, server, "p1_sat_45")
+    session = student(qapp, database, "p1_sat_45")
     done: list = []
     session.save_preferences({"auto_split": False}, done.append)
     wait_until(qapp, lambda: bool(done) and not session.busy)
@@ -118,9 +118,9 @@ def test_p1_auto_split_off_saturday_45_due_wednesday_stays_one_45_session(qapp, 
     assert sessions == [45], sessions
 
 
-def test_p1_guard_weekday_item_due_within_the_week_is_placed_whole(qapp, server) -> None:
+def test_p1_guard_weekday_item_due_within_the_week_is_placed_whole(qapp, database) -> None:
     """Assistant Local: weekday items due within the week were placed whole. Keep it."""
-    session = student(qapp, server, "p1_mon_whole")
+    session = student(qapp, database, "p1_mon_whole")
     hold(session, 0, 16, 30)
     homework(qapp, session, [("essay", 90, 3)])
     plan(qapp, session)

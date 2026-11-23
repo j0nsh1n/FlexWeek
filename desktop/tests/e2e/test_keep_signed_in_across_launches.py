@@ -1,5 +1,5 @@
-"""Keep me signed in, against a real local backend. Each launch starts the server on a new port, as
-the app does, so a kept session has to work for a server it was not issued by.
+"""Keep me signed in, across launches of the app on one database, each with its own client, as the app
+starts, so a kept session has to work for a launch it was not issued by.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ import pytest
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
+from backend.storage import initialize
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.logic_support import sign_in as signed_in
 from desktop.tests.material_support import page_showing
@@ -37,20 +37,17 @@ def page(window: NativeWindow) -> str:
 
 
 class Launches:
-    """Launches of the app against one database, each with its own server, closed at the end."""
+    """Launches of the app against one database, closed at the end."""
 
     def __init__(self, qapp: QApplication, folder: Path) -> None:
         self.qapp = qapp
         self.database = folder / "flexweek.db"
+        initialize(self.database)
         self.kept = KeptSession(folder / "signed-in" / "flexweek.json")
-        self.servers: list[LocalServer] = []
         self.windows: list[NativeWindow] = []
 
     def launch(self) -> NativeWindow:
-        server = LocalServer(self.database)
-        origin = server.start()
-        self.servers.append(server)
-        window = NativeWindow(origin, kept=self.kept)
+        window = NativeWindow(self.database, kept=self.kept)
         window.show()
         self.windows.append(window)
         return window
@@ -62,10 +59,9 @@ class Launches:
 
     def close(self) -> None:
         for window in self.windows:
+            with contextlib.suppress(RuntimeError):
+                window.session.client.reset()
             window.hide()
-        for server in self.servers:
-            with contextlib.suppress(Exception):
-                server.stop()
 
 
 @pytest.fixture()
@@ -99,7 +95,7 @@ def on_sign_in(window: NativeWindow) -> bool:
 
 
 def opens_on_sign_in(qapp: QApplication, window: NativeWindow) -> bool:
-    # The kept session is tried on the first turn of the event loop and answered by the local server.
+    # The kept session is tried on the first turn of the event loop and answered by a worker.
     wait_until(qapp, lambda: not window.session.busy)
     for _ in range(20):
         qapp.processEvents()

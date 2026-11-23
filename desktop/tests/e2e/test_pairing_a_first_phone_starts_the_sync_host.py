@@ -10,8 +10,7 @@ from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.devices import SyncHost
-from desktop.server import LocalServer
-from desktop.tests.logic_support import qapp, server, signed_in  # noqa: F401
+from desktop.tests.logic_support import database, qapp, signed_in  # noqa: F401
 from desktop.tests.waiting import wait_until
 
 # The fixtures are used by name, so each test's argument list redefines them.
@@ -20,12 +19,12 @@ from desktop.tests.waiting import wait_until
 
 def test_pairing_starts_a_fresh_host(
     qapp: QApplication,
-    server: LocalServer,
+    database: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The first phone has no service running. Pairing starts that host, then asks it for a code."""
-    session = signed_in(qapp, server.origin, "pair_fresh", create=True)
+    session = signed_in(qapp, database, "pair_fresh", create=True)
     account = session.account
     assert account is not None
     database = tmp_path / "flexweek.db"

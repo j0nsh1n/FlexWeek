@@ -9,8 +9,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.client import ApiError
-from desktop.server import LocalServer
-from desktop.tests.logic_support import fixed, qapp, server, settled, signed_in  # noqa: F401
+from desktop.tests.logic_support import database, fixed, qapp, settled, signed_in  # noqa: F401
 from desktop.tests.waiting import wait_until
 
 # The fixtures are used by name, so each test's argument list redefines them.
@@ -18,11 +17,11 @@ from desktop.tests.waiting import wait_until
 
 
 def test_retry_save_after_a_held_failure_posts_the_same_payload_once(
-    qapp: QApplication, server: LocalServer, tmp_path: Path
+    qapp: QApplication, database: Path, tmp_path: Path
 ) -> None:
     """A 503 keeps the first payload. retry_save posts that same body; the next account is empty."""
-    session = signed_in(qapp, server.origin, "retry_held", create=True)
-    other = signed_in(qapp, server.origin, "retry_neighbor", create=True)
+    session = signed_in(qapp, database, "retry_held", create=True)
+    other = signed_in(qapp, database, "retry_neighbor", create=True)
     trace: list[str] = []
     held: list = []
     original = session.client.request

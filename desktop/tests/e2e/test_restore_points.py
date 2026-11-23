@@ -5,16 +5,17 @@ does to undo and to a running focus timer."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
 
-from desktop.server import LocalServer
-from desktop.tests.e2e.account_sessions import server, signed_in, soccer  # noqa: F401
+from desktop.tests.e2e.account_sessions import database, signed_in, soccer  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
-def test_a_restore_point_previews_then_brings_the_week_back(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_a_restore_point_previews_then_brings_the_week_back(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.save()
     wait_until(qapp, lambda: session.revision == 1 and not session.busy)
@@ -38,9 +39,9 @@ def test_a_restore_point_previews_then_brings_the_week_back(qapp: QApplication, 
 
 
 def test_a_restore_preview_made_before_the_week_changed_is_refused(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.save()
     wait_until(qapp, lambda: session.revision == 1 and not session.busy)
@@ -63,9 +64,9 @@ def test_a_restore_preview_made_before_the_week_changed_is_refused(
 
 
 def test_restoring_a_week_clears_the_undo_of_the_week_it_replaced(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.save()
     wait_until(qapp, lambda: session.revision == 1 and not session.busy)
@@ -89,8 +90,8 @@ def test_restoring_a_week_clears_the_undo_of_the_week_it_replaced(
     assert not session.can_undo()
 
 
-def test_restoring_stops_a_focus_timer_whose_session_is_gone(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_restoring_stops_a_focus_timer_whose_session_is_gone(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.create_restore_point("Empty")
     wait_until(qapp, lambda: bool(session.restore_points) and not session.busy)
     point_id = session.restore_points[0]["id"]

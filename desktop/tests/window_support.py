@@ -15,8 +15,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, QStandardPaths
 from PySide6.QtWidgets import QApplication, QWidget
 
+from backend.storage import initialize
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.waiting import wait_until  # noqa: F401
 
@@ -68,11 +68,11 @@ def host(qapp: QApplication) -> Iterator[QWidget]:
 
 
 @pytest.fixture()
-def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
-    running = LocalServer(tmp_path / "flexweek.db")
-    running.start()
-    yield running
-    running.stop()
+def database(qapp: QApplication, tmp_path: Path) -> Path:
+    """The saved data the window opens on, as the app opens it at start."""
+    path = tmp_path / "flexweek.db"
+    initialize(path)
+    return path
 
 
 def look_file() -> Path:
@@ -83,9 +83,9 @@ def look_file() -> Path:
 
 
 @pytest.fixture()
-def signed_out(qapp: QApplication, server: LocalServer) -> Iterator[NativeWindow]:
+def signed_out(qapp: QApplication, database: Path) -> Iterator[NativeWindow]:
     look_file().unlink(missing_ok=True)
-    window = NativeWindow(server.origin)
+    window = NativeWindow(database)
     window.show()
     try:
         yield window

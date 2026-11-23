@@ -19,8 +19,8 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import (
     PASSWORD,
     USERNAME,
+    database,  # noqa: F401
     qapp,  # noqa: F401
-    server,  # noqa: F401
     settled,
     signed_out,  # noqa: F401
 )

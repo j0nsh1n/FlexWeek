@@ -43,7 +43,7 @@ def last_stage_of_the_smoke(
     pump(qapp)
     window._on_week()
     pump(qapp)
-    smoke = NativeSmoke(window, report, True)
+    smoke = NativeSmoke(window, report)
     smoke._poll.stop()
     smoke._facts_colors = 0
     smoke._stage = "material window"

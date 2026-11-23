@@ -30,7 +30,7 @@ def qapp() -> Iterator[QApplication]:
 def quiet(qapp: QApplication, window: NativeWindow) -> None:
     session = window.session
     wait_until(
-        qapp, lambda: not session.busy and not session.dirty and not any(session.client._replies.values())
+        qapp, lambda: not session.busy and not session.dirty and not session.client._waiting
     )
 
 

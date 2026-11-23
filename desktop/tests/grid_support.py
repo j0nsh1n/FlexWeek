@@ -20,8 +20,8 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
 from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
+    database,
     qapp,
-    server,
     settled,
     signed_out,
     wait_until,

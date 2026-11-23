@@ -1,7 +1,7 @@
 """What the tests of reminders and a block's song share: a stand-in tray, bell and Spotify app, the
 clock held on Thursday evening, and a block to be reminded of.
 
-`serve` and `launch` stay for test_spotify_one_link.py, which still opens the app on a local server."""
+`serve` and `launch` open the app on a database of its own, as it runs."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from pathlib import Path
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
+from backend.storage import initialize
 from backend.tests.fake_clock import CLOCK, START
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
 from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
@@ -103,18 +103,17 @@ def with_stand_ins(window: NativeWindow) -> NativeWindow:
     return window
 
 
-def serve(database: Path, opened: list) -> LocalServer:
-    server = LocalServer(database)
-    server.start()
-    opened.append(server)
-    return server
+def serve(database: Path, opened: list) -> Path:
+    """The saved data a launch opens on, as the app opens it at start; `opened` is kept for callers."""
+    initialize(database)
+    return database
 
 
 def launch(
-    qapp: QApplication, server: LocalServer, name: str, opened: list, *, create: bool
+    qapp: QApplication, database: Path, name: str, opened: list, *, create: bool
 ) -> NativeWindow:
-    """The app opened on this server: a new account past setup, or a sign-in to an existing one."""
-    window = NativeWindow(server.origin)
+    """The app opened on this database: a new account past setup, or a sign-in to an existing one."""
+    window = NativeWindow(database)
     opened.append(window)
     window.resize(1280, 860)
     window.show()

@@ -35,7 +35,7 @@ def _add_through_the_sheet(qapp: QApplication, window: NativeWindow) -> dict:
         qapp,
         lambda: not session.busy
         and not session.dirty
-        and not any(session.client._replies.values())
+        and not session.client._waiting
         and not getattr(session.client, "pending", 0),
         what="the add and its plan being answered",
     )

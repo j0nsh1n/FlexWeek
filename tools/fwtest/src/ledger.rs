@@ -1,6 +1,7 @@
 //! The port ledger: while the desktop moves to Rust (2.0.0), a Python test file may be deleted only
 //! with a row in `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it and how they
-//! were seen to fail. The gate compares the base's Python test files with the working tree and
+//! were seen to fail, or, for a test of something the app no longer has, the approved decision that
+//! removed it (`gone`). The gate compares the base's Python test files with the working tree and
 //! refuses any that went without a row.
 
 use std::collections::BTreeSet;
@@ -24,9 +25,15 @@ pub struct Row {
     /// The deleted Python test file, from the repository root.
     pub python: String,
     /// The Rust tests that replace it, as `package::path::test_name` or a test file path.
+    #[serde(default)]
     pub rust: Vec<String>,
     /// How each was seen to fail: the rule broken by hand or the mutation case that turned it red.
+    #[serde(default)]
     pub red: String,
+    /// Instead of `rust` and `red`: the approved decision that removed what the file tested (the
+    /// server, the hosted-server setting), so nothing is left to port.
+    #[serde(default)]
+    pub gone: String,
 }
 
 impl Ledger {
@@ -40,6 +47,15 @@ impl Ledger {
             }
             if !seen.insert(row.python.as_str()) {
                 return Err(format!("{LEDGER_PATH}: {} has two rows", row.python));
+            }
+            if !row.gone.trim().is_empty() {
+                if !row.rust.is_empty() || !row.red.trim().is_empty() {
+                    return Err(format!(
+                        "{LEDGER_PATH}: {} is both gone and ported; a row is one or the other",
+                        row.python
+                    ));
+                }
+                continue;
             }
             if row.rust.is_empty() || row.rust.iter().any(|name| name.trim().is_empty()) {
                 return Err(format!(
@@ -223,6 +239,19 @@ red = "zoom's clamp removed by hand: zoom_keeps_the_top_time failed"
                 .unwrap_err()
                 .contains("how its Rust tests failed")
         );
+    }
+
+    #[test]
+    fn a_test_of_something_removed_names_the_decision_instead() {
+        let gone = "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4: the hosted server was removed\"\n";
+        let ledger = Ledger::parse(gone).unwrap();
+        assert!(unrecorded(["a/test_x.py"], |_| false, &ledger).is_empty());
+        let blank = "[[port]]\npython = \"a/test_x.py\"\ngone = \" \"\n";
+        assert!(Ledger::parse(blank).unwrap_err().contains("names no Rust test"));
+        let both = "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4\"\nrust = [\"t\"]\nred = \"r\"\n";
+        assert!(Ledger::parse(both).unwrap_err().contains("one or the other"));
+        let gone_with_red = "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4\"\nred = \"r\"\n";
+        assert!(Ledger::parse(gone_with_red).is_err());
     }
 
     #[test]
