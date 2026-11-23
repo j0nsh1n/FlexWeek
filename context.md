@@ -1,16 +1,16 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-20)
-- 1.5.0 is being cut from PR #141 (version 1.5.0, phone versionCode 7, the 1.5.0 docs and release notes). Main has
-  #140 (`feat/material-only`, merged 2026-11-20): the desktop offers only Material 3, in its own Qt Quick window
-  (measured 360 frames a second on a 360 Hz screen), with the CPU fallback, the kept features rebuilt in Material and
-  #118 (weekly fixed times with Until, at most 200 standing blocks, Undo through a restore point, reminder cards). Main
-  also has #137 (`fix/phone-1.4.0`, merged 2026-11-20): the phone fixes, layout B restyle, phone edits stamped when
-  made, set-aside sync records retried, and Report a problem (Settings > Computer on the desktop). Done time is the
-  larger of focus minutes and minutes ticked done (`plan::done_time`), taken off in every count.
-- Latest release: v1.4.0, published 2026-11-17 from main 2dd91027 (PR #138), all ten files with checked checksums;
-  the Android 1.4.0 app was built here from main without PR #137, signed with the same key as 1.3.0. The previous
-  release is v1.3.0 (2026-11-10).
+## Current State (2026-11-22)
+- 2.0.0 (the Rust overhaul; plan `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`) is under way on main,
+  developer builds only until 2.0.0. P0 (#142) and P1 are merged: every route the app uses calls `flexweek-service`
+  (Rust); `backend/app.py` keeps HTTP, cookies and request checks and hands the service the raw body. P1 PRs: #143
+  (one block check, Week and homework saves), #144 (routines, spread, repeat edits, Plan), #145 (the multi-week save),
+  #146 (account export and import). Each move was compared with the old Python route over HTTP and against generated
+  corpora (`engine/service/tests/fixtures`).
+- Main had #140 (Material only, its own Qt Quick window, #118's weekly fixed times) and #137 (the phone 1.4.0 fixes)
+  before 1.5.0. Done time is the larger of focus minutes and minutes ticked done (`plan::done_time`).
+- Latest release: v1.5.0, published 2026-11-20 (US time) from main 0effa56f (PR #141). The previous release is
+  v1.4.0 (2026-11-17); its Android app was signed with the same key as 1.3.0.
 - Developer build `1.3.0.202611171825` (main 5788750) is `dev`; older builds stay as `dev-<commit>` pre-releases
   (`dev-18dee2e` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
 - In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
@@ -27,6 +27,12 @@
   (also named there); no Windows package has been tried with Material on a real PC; native AT-SPI delivery is
   unverified; the static audit's F1 and W3 are open; `fwtest flaky` lists the tests still logged flaky; the assistant
   helper's stderr test (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
+- 2.0.0 follow-ups after P1: the assistant's own batch save (`store::changes::apply`) does not take a week shown from
+  another weekday and orders repeats differently from the app's (`service::changes`); the Python store methods
+  `apply_repeat_intents`, `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers;
+  `TOO_MANY_TRIES` in `backend/app.py` is unread; ten corpus generators still count any exception as a refusal
+  (`make_transfer_corpus.py` was fixed); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
+  fail on CI depending on the clock (passed on re-run, 2026-11-22).
 - Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
   slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
   desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
@@ -104,24 +110,9 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-20, branch `feat/material-only` (PR #141): #140 and #137 merged; #141 carries the docs commit (612ec9f1),
-  the version bump and the release notes. Next: merge #141, tag v1.5.0, "Release packages" with the tag (Windows and
-  Linux on GitHub), the Android APK built and signed here (same key, cert 3455c674...), all checksums checked, then
-  Jonathan tries the build before it is published as latest. Older phones (1.4.0) show weekly fixed times past their
-  Until date and drop `until` when they save such a week (in the release notes). Run logs:
-  `~/.flexweek-ui-harness/scratch/material-only/r118/afk-run-2026-11-20.md`, `scratch/release-1.5.0/`.
-- 2026-11-18 AFK run, branch `feat/material-only` (head 79a80b10, local only): steps 1-7 of the Material-only plan,
-  step 8 in part (command bar and Widgets focus screen deleted), Material Settings parity with the High contrast,
-  Paper, Ink and Terminal presets, alarms and a ring screen, keys and week tools, Help/About/Update/Account/Copies of
-  this week as Material sheets, the B2 choice-card dialogs with stacking, the CPU drawing fallback, CHANGELOG.
-  Whole desktop suite at 79a80b10: 5598 passed, 1 skipped. Waiting on Jonathan: who does steps 9-10 (the rest of the
-  Widgets UI in window.py) and #118's rebuild; the setup and Look-controls mockups
-  (`~/.flexweek-ui-harness/scratch/afk-2026-11-18/mockups/`). Phone PR #137: review-1 fixes done and main merged in
-  locally (`fix/phone-1.4.0`, abe76dd2), not pushed; its reviewer is his pick. Run log:
-  `~/.flexweek-ui-harness/scratch/afk-2026-11-18/plan.md`.
-- 2026-11-17, branch `feat/material-only` (worktree `~/.worktrees/flexweek-1.5.0`): 1.5.0 started after the Hack Club
-  steps (README #139 merged, gallery PR hackclub/capitol#82 opened by Jonathan). Next: step 1 of the plan (move the
-  shared non-UI code out of the Widgets files, with a test that fails if `material/**` imports Widgets code). Also in
-  1.5.0: PR #137's review-1 fixes, #118's weekly fixed times and staying reminders rebuilt on main (GitHub keeps the
-  old code as `refs/pull/118/head`), the dialog fix Jonathan picked (B2 cards with stacking,
-  `scratch/visual-bugs/list.md`). Branches besides main: `fix/phone-1.4.0`, `feat/material-only`.
+- 2026-11-22: 2.0.0 P1 finished; main a53767de. Every P1 PR had a Grok 4.7 review (PASS) and green CI before merge;
+  stage branches and worktree leftovers are deleted. Next: P2 (no server), which needs Jonathan's answers to the
+  plan's open decisions (plan.md section 10, D6 before P2's first candidate) and his approval of the spec.md wording
+  (section 11) and the roadmap entry (section 12, not applied yet). Run log:
+  `~/.flexweek-ui-harness/scratch/rust-2.0.0/afk-run-2026-11-22.md`.
+- 2026-11-20, branch `feat/material-only` (PR #141): released as v1.5.0 (see Current State).
