@@ -315,3 +315,14 @@ rust = [
     "flexweek-service::assignment_notes::a_javascript_link_and_two_checklist_items_with_one_id_are_refused",
 ]
 red = "any link scheme allowed, duplicate checklist ids allowed, and empty notes written out each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_spread_assignment_api.py"
+rust = [
+    "flexweek-service::spread_api::the_preview_writes_nothing_and_stays_on_one_homework",
+    "flexweek-service::spread_api::another_accounts_homework_is_not_found",
+    "flexweek-service::spread_api::finished_homework_cannot_be_spread",
+    "flexweek-service::spread_api::the_day_of_a_placed_session_gets_its_share_last",
+    "flexweek-service::spread_api::a_free_day_gets_its_share_before_a_day_with_a_placed_session",
+]
+red = "days that hold a session put back in date order, and finished homework allowed to spread each fail their tests (2026-11-22)"
