@@ -474,3 +474,14 @@ rust = [
     "flexweek-service::homework_saves::another_accounts_homework_does_not_count_toward_the_limit",
 ]
 red = "a homework delete reading every account's weeks, a routine rename reaching every account, and an import clearing every account's homework each fail their test (2026-11-22); the limit twin was seen red in P1"
+
+[[port]]
+python = "backend/tests/test_account_export_and_import.py"
+rust = [
+    "flexweek-service::export_and_import::an_export_needs_the_password_and_can_be_imported_on_another_computer",
+    "flexweek-service::export_and_import::an_import_preview_goes_stale_when_the_account_changes_before_applying",
+    "flexweek-service::export_and_import::a_file_that_links_a_session_to_homework_it_does_not_hold_is_refused",
+    "flexweek-service::export_and_import::an_export_holds_more_than_four_hundred_small_weeks",
+    "flexweek-service::export_and_import::an_export_is_refused_when_importing_it_would_pass_the_transfer_limit",
+]
+red = "the preview never reporting changed preferences, and the export not asking the password each fail their test (2026-11-22); the stale-preview, missing-homework and size rules were red-checked in transfer.rs and transfer_parity.rs. Its hosted-server origin goes with the server in P2"
