@@ -2,17 +2,24 @@
 
 ## Current State (2026-11-22)
 - 2.0.0 (the Rust overhaul; plan `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`) is under way on main,
-  developer builds only until 2.0.0. P0 (#142) and P1 (#143-#151) are merged: every route that serves data calls
-  `flexweek-service` (Rust), checked by `test_routes_only_decode_call_and_encode`; health and storage info (the
-  server's own facts) answer in Python and go with the server in P2.
+  developer builds only until 2.0.0. P0 (#142) and P1's routes and twins (#143-#151) are merged: every route that
+  serves account data calls `flexweek-service`, and the timer presets and reminder notes call the engine
+  (`flexweek_engine.timer_presets`, `reminder_limits`), checked by `test_routes_only_decode_call_and_encode`; health and
+  storage info (the server's address and body limit, with the signed-in name) answer in Python and go with the
+  server in P2.
   `backend/app.py` keeps HTTP, cookies and request checks; JSON saves hand the service the raw body, sign-in, sign-up,
   recovery and password change pass their parsed fields. P1 PRs: #143
   (one block check, Week and homework saves), #144 (routines, spread, repeat edits, Plan), #145 (the multi-week save),
   #146 (account export and import), #148-#150 (the backend tests' Rust twins, ledger `tools/fwtest/port-ledger.toml`),
   #151 (one change function, `flexweek_store::changes`, for the app and the assistant; account check parity). Each
   move was compared with the old Python route over HTTP and against generated corpora
-  (`engine/service/tests/fixtures`). The 11 Python backend test files left check the Python bindings or the server
-  and go with them in P2.
+  (`engine/service/tests/fixtures`). Python backend tests left: two data test files still to twin
+  (`backend/tests/regress184/test_regress_extra_block_keys.py`, `test_regress_item1c_spread.py`); the thread test in
+  `test_database_transactions.py`; and 11 that check the Python bindings, the server or Python's own clock reads,
+  which go in P2 (`test_assignment_view_estimate_limit`, `test_database_matches_sqlite3`,
+  `test_engine_exports_are_guarded`, `test_engine_panics_become_python_errors`, `test_number_parsing_matches_python`,
+  `test_one_wall_clock`, `test_service_calls_release_python`, `test_session_cookie_and_request_checks`,
+  `test_storage_info`, `test_sync_pairing_and_removal`, `test_wrappers_hold_no_engine_logic`).
 - Main had #140 (Material only, its own Qt Quick window, #118's weekly fixed times) and #137 (the phone 1.4.0 fixes)
   before 1.5.0. Done time is the larger of focus minutes and minutes ticked done (`plan::done_time`).
 - Latest release: v1.5.0, published 2026-11-20 (US time) from main 0effa56f (PR #141). The previous release is
@@ -120,7 +127,8 @@ preview. Recorded `operation_id` values make a retried write return the first re
 ## Session Handoff
 - 2026-11-22: 2.0.0 P1's work is merged (main 7cdd8e16, #148-#151). #148, #149 and #151 had a Grok 4.7 PASS; #150's
   route test went four Grok rounds and Jonathan chose to merge it with the last fix unreviewed (all 14 named
-  bypasses caught). Jonathan marked P1 complete; the 11 Python-binding/server test files go in P2.
+  bypasses caught). Jonathan agreed P1 is complete once only Python-only tests are left (they go in P2); two data
+  test files under `backend/tests/regress184/` were missed and still need twins, so P1 stays open until they land.
   Next: P2 (no server), per plan.md section 7; spec.md lines it makes untrue are fixed in its PRs (approved
   2026-11-22). Logs: `~/.flexweek-ui-harness/scratch/rust-2.0.0/p1-twins/plan.md`, `.../p1-finish/plan.md`.
 - 2026-11-20, branch `feat/material-only` (PR #141): released as v1.5.0 (see Current State).
