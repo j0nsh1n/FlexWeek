@@ -442,3 +442,13 @@ rust = [
     "flexweek-service::comfort_and_timer_preferences::open_on_still_refuses_other_screens",
 ]
 red = "an alert volume of 101 allowed, Settings allowed as the screen to open on, and the Long preset at 60 minutes each fail their test (2026-11-22). The reminder notes follow the approved contraction rule ('doesn't play', 'it's handled'), as the engine has them; the Python route still shows the old wording until it moves to Rust in P2. Its 'routes need a session' goes with the server in P2"
+
+[[port]]
+python = "backend/tests/test_time_block_rules.py"
+rust = [
+    "flexweek-engine::test_assignment_models::a_blocks_length_is_any_positive_minute",
+    "flexweek-engine::test_assignment_models::a_blocks_days_are_in_the_week",
+    "flexweek-engine::test_assignment_models::pinned_is_refused_where_it_means_nothing",
+    "flexweek-engine::test_assignment_models::a_done_day_needs_a_finished_placed_flexible_block_on_that_day",
+]
+red = "pinned allowed on a block with two days, and a done day outside the block's days allowed each fail their test (2026-11-22); the length and day-range rules are red-checked in validate_models.rs"

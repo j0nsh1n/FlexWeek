@@ -244,3 +244,51 @@ fn a_flexible_session_and_a_pomodoro_work_chunk_can_be_homework_sessions() {
         "hw-essay"
     );
 }
+
+// The rules a block keeps before the planner sees it (the Rust twins of backend/tests/test_time_block_rules.py).
+// What the solver does with finished and pinned blocks is in test_completed.rs and test_solver.rs.
+
+#[test]
+fn a_blocks_length_is_any_positive_minute() {
+    let short = json!({ "id": "short", "title": "Short", "kind": "locked", "duration_min": 7, "days": [0], "start": "17:37" });
+    assert!(time_block(&short).is_ok());
+    let none =
+        json!({ "id": "bad", "title": "Bad", "kind": "flexible", "duration_min": 0, "days": [0] });
+    assert!(time_block(&none).is_err());
+}
+
+#[test]
+fn a_blocks_days_are_in_the_week() {
+    let block = json!({ "id": "bad", "title": "Bad", "kind": "locked", "duration_min": 15, "days": [7], "start": "08:00" });
+    assert!(time_block(&block).is_err());
+}
+
+#[test]
+fn pinned_is_refused_where_it_means_nothing() {
+    for shape in [
+        json!({ "kind": "locked", "start": "08:00", "days": [0] }),
+        json!({ "kind": "flexible", "start": null, "days": [0] }),
+        json!({ "kind": "flexible", "start": "15:00", "days": [0, 1] }),
+    ] {
+        let mut block = json!({ "id": "x", "title": "X", "duration_min": 60, "pinned": true });
+        merge(&mut block, shape.clone());
+        let why = time_block(&block).expect_err(&shape.to_string());
+        assert!(why.contains("pinned"), "{shape}: {why}");
+    }
+}
+
+#[test]
+fn a_done_day_needs_a_finished_placed_flexible_block_on_that_day() {
+    for change in [
+        json!({ "kind": "locked" }),
+        json!({ "completed": false }),
+        json!({ "start": null }),
+        json!({ "completed_day": 3 }),
+    ] {
+        let mut block = json!({ "id": "done", "title": "Done", "kind": "flexible", "duration_min": 60, "days": [0, 1, 2],
+                                "start": "09:00", "completed": true, "completed_day": 1 });
+        merge(&mut block, change.clone());
+        let why = time_block(&block).expect_err(&change.to_string());
+        assert!(why.contains("completed_day"), "{change}: {why}");
+    }
+}
