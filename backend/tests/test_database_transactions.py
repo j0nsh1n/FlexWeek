@@ -1,5 +1,5 @@
-"""What a failed write leaves behind (nothing), what BEGIN IMMEDIATE does, and that a held write lock
-makes the next request wait without freezing other threads."""
+"""That a held write lock makes the next request wait without freezing other Python threads. (What a failed
+write leaves behind and what BEGIN IMMEDIATE does moved to engine/service/tests/database_transactions.rs.)"""
 
 from __future__ import annotations
 
@@ -11,37 +11,7 @@ from pathlib import Path
 import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 
-from backend.storage import connect, initialize, throttle
-
-
-def test_a_failed_later_write_rolls_the_earlier_ones_back(tmp_path: Path) -> None:
-    path = tmp_path / "reg.db"
-    with connect(path) as db:
-        db.execute("CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
-    with pytest.raises(sqlite3.IntegrityError), connect(path) as db:
-        db.execute("INSERT INTO users(name) VALUES ('a')")
-        db.execute("INSERT INTO users(name) VALUES ('b')")
-        db.execute("INSERT INTO users(name) VALUES ('a')")
-    with connect(path) as db:
-        assert db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0
-
-
-def test_begin_immediate_commits_or_rolls_back(tmp_path: Path) -> None:
-    path = tmp_path / "tx.db"
-    with connect(path) as db:
-        db.execute("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)")
-    with connect(path) as db:
-        db.execute("BEGIN IMMEDIATE")
-        db.execute("INSERT INTO t(name) VALUES ('kept')")
-    with connect(path) as db:
-        assert db.execute("SELECT name FROM t").fetchone()["name"] == "kept"
-    with pytest.raises(sqlite3.IntegrityError), connect(path) as db:
-        db.execute("BEGIN IMMEDIATE")
-        db.execute("INSERT INTO t(id, name) VALUES (1, 'x')")
-        db.execute("INSERT INTO t(id, name) VALUES (1, 'y')")
-    with connect(path) as db:
-        names = [row["name"] for row in db.execute("SELECT name FROM t")]
-    assert names == ["kept"]
+from backend.storage import initialize, throttle
 
 
 def test_a_held_write_lock_makes_throttle_wait(tmp_path: Path) -> None:

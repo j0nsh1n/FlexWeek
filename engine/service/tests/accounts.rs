@@ -112,6 +112,13 @@ fn a_taken_name_is_refused_and_nothing_is_made() {
         refusal(again),
         Refusal::Conflict(USERNAME_TAKEN.to_string())
     );
+    let users: i64 = with_db(&db.path, |conn| {
+        Ok(conn
+            .query_row("SELECT count(*) FROM users", [], |row| row.get(0))
+            .unwrap())
+    })
+    .unwrap();
+    assert_eq!(users, 1, "a second account was made");
 }
 
 #[test]

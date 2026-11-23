@@ -193,10 +193,17 @@ fn a_database_from_before_reminders_gains_them_turned_on() {
                 user_id INTEGER PRIMARY KEY REFERENCES users(id),
                 theme TEXT NOT NULL DEFAULT 'nocturne'
             );
-            CREATE TABLE auth_attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);",
+            CREATE TABLE auth_attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
+            INSERT INTO users (id, username, password_hash) VALUES (1, 'early', 'hash');
+            INSERT INTO preferences (user_id) VALUES (1);",
         )
         .unwrap();
     flexweek_store::initialize(&path, WEEK).unwrap();
+    // The account that was already there gets reminders turned on by the upgrade.
+    assert_eq!(
+        read_preferences(&path, 1).unwrap()["reminders_enabled"],
+        true
+    );
     let user = sign_up(&path, "migrated");
     let prefs = read_preferences(&path, user).unwrap();
     assert_eq!(
