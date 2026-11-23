@@ -190,7 +190,7 @@ pub use assignments::{
 };
 pub use changes::{
     ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, RefusalKind, Revision,
-    WeekInput, apply, apply_within,
+    WeekInput, apply, apply_within, batch_digest,
 };
 pub use ledger::{
     Recall, capture_account, insert_restore_point, list_restore_points, prune_operations,

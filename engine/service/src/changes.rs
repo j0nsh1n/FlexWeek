@@ -239,7 +239,7 @@ pub fn check_changes(given: &Value) -> Checked<ChangesRequest> {
 }
 
 /// The save as the store's one change function takes it.
-fn store_input(request: &ChangesRequest) -> store::ApplyInput {
+pub fn store_input(request: &ChangesRequest) -> store::ApplyInput {
     store::ApplyInput {
         weeks: request
             .weeks

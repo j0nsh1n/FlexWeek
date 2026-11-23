@@ -186,7 +186,7 @@ fn apply_tx(
     let digest = input
         .argument_digest
         .clone()
-        .unwrap_or_else(|| payload_digest(&batch_value(input)));
+        .unwrap_or_else(|| batch_digest(input));
     if let Some(operation_id) = &input.operation_id {
         match recall_operation(conn, user_id, operation_id, &digest)? {
             Recall::Hit(response) => return parse_json(&response),
@@ -488,6 +488,12 @@ fn week_answer(
         fields.insert("repeats".into(), Value::Array(standing));
     }
     Ok(Value::Object(fields))
+}
+
+/// The key a save's operation id is remembered under when the caller gives none of its own: the save as the
+/// app's request wrote it, so a save sent again across an update still finds its first answer.
+pub fn batch_digest(input: &ApplyInput) -> String {
+    payload_digest(&batch_value(input))
 }
 
 fn batch_value(input: &ApplyInput) -> Value {
