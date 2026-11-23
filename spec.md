@@ -160,20 +160,20 @@ Contract for the finished app:
 - Account-owned restore points snapshot weeks and assignments. Clear week,
   routine application, restore and every assistant (MCP) change preserve the
   replaced schedule first; a stale restore preview returns 409 and no failure stores partial state. The UI
-  labels backups as local-device or hosted-server data.
+  labels backups as data on this computer.
 - New accounts receive eight one-time recovery codes, shown once. A forgotten
   password is recovered with a username, an unused code and a new password, not
   email. Signed-in students can replace leftover codes, change the password or
   delete the account; those writes need the current password. Delete removes
   every row for that user. The username may be registered again.
-- `GET /api/storage-info` reports local or hosted `mode`, a student-facing
-  `label`, the signed-in `username`, the public `origin` and
-  `transfer_limit_bytes` (262144). It never returns a filesystem path.
-- Local-to-hosted transfer is a password-gated format-3 export and a previewed
+- `GET /api/storage-info` (a window request, answered in the app's process) reports `mode` "local", a
+  student-facing `label`, the signed-in `username` and `transfer_limit_bytes` (262144). It never returns a
+  filesystem path.
+- Moving an account to another computer is a password-gated format-3 export and a previewed
   import of weeks, assignments, preferences and routines. Import takes a Stage 3
   restore point of the destination weeks and assignments first. Sync between
-  this computer and a paired phone is described under Device sync; the hosted
-  transfer is still a one-time import and export. Export returns 413 when the
+  this computer and a paired phone is described under Device sync; moving an
+  account is still a one-time import and export. Export returns 413 when the
   compact import apply envelope would exceed the 256 KiB write cap.
 - Device sync (1.0.0):
   - A phone pairs with the desktop once. The phone app is package
@@ -359,8 +359,9 @@ Contract for the finished app:
 ## User Experience
 Native desktop app, one Material 3 window, designed at 1280px and usable down
 to 800px. Under 768px the navigation rail becomes a bottom bar. The interface is
-Qt Quick/QML hosted from Python over a FastAPI backend started in-process on a
-loopback port. There is no HTML, CSS, npm or web build step. There is no browser
+Qt Quick/QML hosted from Python; the window's requests are answered by the Rust
+service in the same process, with no server and no network port (2.0.0, P2).
+There is no HTML, CSS, npm or web build step. There is no browser
 client: the web app was retired in September 2026 and `frontend/` deleted.
 
 First paint with no session is Material's Sign in card, with Create account
@@ -368,8 +369,8 @@ offered as a text button that switches the same card over. Its heading is "Sign
 in" on the first launch and every later one. The page follows this computer's
 light or dark setting and keeps this computer's Material contrast, not the last
 account's preset. The card offers "Keep me signed in on this computer", on by
-default. A kept session opens the week at the next launch until the server ends
-it (30 days after its last use) or the student logs out.
+default. A kept session opens the week at the next launch until it ends
+(30 days after its last use) or the student logs out.
 A new account must acknowledge its eight recovery codes, shown in Inter with
 figures of one width, with Copy and Save…, then goes to first-run setup: School
 hours, Study hours, and Look & alerts. Each step has multiple-choice cards and a
@@ -644,12 +645,12 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   and the crates in `engine/Cargo.lock`. The Python modules that held that
   logic are adapters: they turn arguments into JSON text, call the engine and
   turn the answer back. New logic for them is written in Rust, not Python.
-  Code that imports Qt, `backend/app.py` and their tests stay Python until
-  the full rewrite.
-- Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
-  uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
-- Storage: SQLite, in the user data folder for the app (`FLEXWEEK_DATABASE`,
-  default `var/flexweek.db`, only when the API runs on its own), with users,
+  Code that imports Qt and its tests stay Python until the full rewrite. The
+  window's requests reach the Rust service through `flexweek_engine.service_answer`
+  (P2); the local FastAPI server and `backend/app.py` are gone.
+- Frameworks, pinned in `requirements.txt`: pytest 9.1.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
+- Storage: SQLite, in the user data folder for the app (or the file named by
+  `--database`), with users,
   sessions, weeks keyed `(user_id, week_start)`, assignments keyed
   `(user_id, id)`, preferences, routines, restore points, hashed recovery codes,
   bounded idempotency records and short-lived auth-attempt counters. Schema
@@ -666,7 +667,8 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
 - Major components:
   - `backend/models.py`. Pydantic models (`TimeBlock`, `Move`, `SolveTrace`,
     `Explanation`) and slot helpers. **Zero FastAPI imports.**
-  - `backend/app.py`. HTTP endpoints, authentication/ownership, static files, `/api/solve`.
+  - `engine/service` and its `desk_requests`. The window's requests by method and `/api/` path:
+    authentication/ownership, the account rules, saves and `/api/solve`, answered in the app's process.
     No placement logic.
   - `engine/engine`. The pure core: placement, the day's and month's logic,
     explanations, and the desktop's Qt-free logic (`desk/`). No files, clock,
@@ -701,7 +703,7 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
     sheets), `tokens.py` (colour maths), `weekmodel.py`, `pomodoro.py`,
     `tones.py` and `sound.py`. The client owns interaction and explanation
     display and **never reimplements placement**.
-  - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts and assets.
+  - `desktop/`. PySide6 window, packaging scripts and assets.
 - Time model: local `HH:MM` strings and Mon–Sun day indices, plus naive local
   `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
   timezone conversion math anywhere in v1.
@@ -729,17 +731,15 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   download's `.sha256`, its package name, version and signing key, then hands it
   to Android's installer.
 - Deployment: the desktop client is the product; there is no web client. The
-  Windows and Linux builds are Qt Quick/QML hosted from Python and run the
-  FastAPI backend in-process on a loopback port, so they need no separate server
-  and no Python install; the database sits in the user data directory.
-  `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window at a
-  hosted deployment instead, and an invalid value is an error rather than a
-  silent fall back to local. The Windows installers and the Linux download are
+  Windows and Linux builds are Qt Quick/QML hosted from Python and ask the Rust
+  service in their own process, so they need no server, open no network port
+  (phone sync, once a phone is paired, listens for it) and need no Python
+  install; the database sits in the user data directory. There is no hosted
+  deployment (D4, 2026-11-21). The Windows installers and the Linux download are
   built on GitHub Actions (`.github/workflows/release-windows.yml`), which
   installs, opens and uninstalls each Windows installer; a run started by hand
   without a tag builds and tests everything but uploads nothing; running them on
-  a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
-  persistent SQLite storage.
+  a real PC is unverified here.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
   pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
   `rig`, `mutate` and `mutate-python`. `rig` runs once for Material Day and once
@@ -894,7 +894,7 @@ The commands it runs, each of which must exit 0:
 - Tests: `pytest -q`. Run from the repo root so `backend` imports resolve.
   `--backend-only` limits pytest to `backend/tests`.
 - Desktop behavior tests are part of the pytest suite and run offscreen against
-  a real loopback backend. Window layout on a real display needs a separate
+  the real Rust service. Window layout on a real display needs a separate
   manual check.
 - Preserve existing solver fixture coverage; include account isolation, expiry,
   CSRF, atomic saves, revision conflict and import/retry tests.
@@ -946,7 +946,8 @@ Every rule below applies to new tests now and to each product area as it moves (
    - Engine logic (planner, dates, slots, solver, estimates) is tested in Rust in `engine/`; Python tests of logic
      that lives in the engine move there.
    - Screen behaviour tests use the light app: the real windows and QML with seeded data, no server and no sign-in.
-   - A small end-to-end set keeps the local server and sign-in: accounts, sync, and save and undo round trips.
+   - A small end-to-end set keeps the real sign-in and the answers from worker threads, as the app runs:
+     accounts, sync, and save and undo round trips.
 5. Layout. Tests are grouped by product area (week, day, month, my day, focus, settings, sheets, setup, account,
    sync, updater, planner) and named after the behaviour they check, not after the PR or audit that added them.
 6. Visual review. Testing and review are separate: tests are automated pass or fail on behaviour, and review is
