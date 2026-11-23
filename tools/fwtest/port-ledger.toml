@@ -549,3 +549,11 @@ rust = [
     "flexweek-store::test_time_step_default::five_chosen_after_the_move_is_still_five_after_opening_twice_more",
 ]
 red = "no 24-hour stamp, a stored choice stamped over, the stamp run on every start (which turns a new account 24-hour; the twin checks that, the Python original did not), and an export leaving a 12-hour clock off each fail their tests (2026-11-22); the appearance, transfer and time-step twins were seen red when they were written"
+
+[[port]]
+python = "backend/tests/test_database_transactions.py"
+rust = [
+    "flexweek-service::database_transactions::a_failed_later_write_rolls_the_earlier_ones_back",
+    "flexweek-service::database_transactions::a_write_begun_immediately_commits_or_rolls_back_as_a_whole",
+]
+red = "a failed write committed instead of rolled back fails both (2026-11-22). The file stays: its third test, that waiting on a held write lock lets other Python threads run, goes with the Python layer in P2 and is added here when that file is deleted"

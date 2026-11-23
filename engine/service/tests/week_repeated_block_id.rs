@@ -90,10 +90,29 @@ fn a_backup_file_with_a_doubled_id_is_refused_and_the_account_stays_as_it_was() 
     );
 }
 
+/// The whole account as the student could take it away: the export (less the moment it was made) and the
+/// restore points list.
+fn whole_account(db: &TestDb, at: Asker<'_>, ana: &accounts::Account) -> (Value, Value) {
+    let mut exported =
+        export_account(&db.path, at, ana, &json!({ "password": PASSWORD }), NOW).unwrap();
+    exported
+        .as_object_mut()
+        .unwrap()
+        .shift_remove("exported_at");
+    (exported, views::restore_points(&db.path, ana.id).unwrap())
+}
+
 #[test]
 fn a_restore_point_with_a_doubled_id_is_refused_and_changes_nothing() {
     let db = TestDb::new("doubled-restore");
-    let user = db.account("ana");
+    let at = Asker {
+        address: "127.0.0.1",
+        now: 1_795_000_000,
+    };
+    let ana = accounts::register(&db.path, at, &mut Counting(0), "ana", PASSWORD, false, "")
+        .unwrap()
+        .account;
+    let user = ana.id;
     week_saves::save_week(
         &db.path,
         user,
@@ -118,7 +137,7 @@ fn a_restore_point_with_a_doubled_id_is_refused_and_changes_nothing() {
     })
     .unwrap();
     let before = everything(&db);
-    let listed_before = views::restore_points(&db.path, user).unwrap();
+    let whole_before = whole_account(&db, at, &ana);
     let preview = restore_preview(&db.path, user, "planted").unwrap();
     let refused = restore(
         &db.path,
@@ -133,8 +152,5 @@ fn a_restore_point_with_a_doubled_id_is_refused_and_changes_nothing() {
         other => panic!("not refused in words: {other:?}"),
     }
     assert_eq!(everything(&db), before);
-    assert_eq!(
-        views::restore_points(&db.path, user).unwrap(),
-        listed_before
-    );
+    assert_eq!(whole_account(&db, at, &ana), whole_before);
 }
