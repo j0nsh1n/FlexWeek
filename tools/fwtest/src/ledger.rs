@@ -248,13 +248,23 @@ red = "zoom's clamp removed by hand: zoom_keeps_the_top_time failed"
 
     #[test]
     fn a_test_of_something_removed_names_the_decision_instead() {
-        let gone = "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4: the hosted server was removed\"\n";
+        let gone =
+            "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4: the hosted server was removed\"\n";
         let ledger = Ledger::parse(gone).unwrap();
         assert!(unrecorded(["a/test_x.py"], |_| false, &ledger).is_empty());
         let blank = "[[port]]\npython = \"a/test_x.py\"\ngone = \" \"\n";
-        assert!(Ledger::parse(blank).unwrap_err().contains("names no Rust test"));
-        let both = "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4\"\nrust = [\"t\"]\nred = \"r\"\n";
-        assert!(Ledger::parse(both).unwrap_err().contains("one or the other"));
+        assert!(
+            Ledger::parse(blank)
+                .unwrap_err()
+                .contains("names no Rust test")
+        );
+        let both =
+            "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4\"\nrust = [\"t\"]\nred = \"r\"\n";
+        assert!(
+            Ledger::parse(both)
+                .unwrap_err()
+                .contains("one or the other")
+        );
         let gone_with_red = "[[port]]\npython = \"a/test_x.py\"\ngone = \"D4\"\nred = \"r\"\n";
         assert!(Ledger::parse(gone_with_red).is_err());
     }
