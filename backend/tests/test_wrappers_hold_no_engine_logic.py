@@ -275,3 +275,77 @@ def test_app_helpers_keep_no_engine_logic() -> None:
         problems.extend(f"app.{problem}" for problem in logic_in(listed[name], name, set()))
     problems = [problem for problem in problems if problem_key(problem) not in ALLOWED_FOR_NOW]
     assert not problems, "\n".join(problems)
+
+
+ROUTE_VERBS = {"get", "post", "put", "delete", "patch"}
+
+
+def route_handlers() -> list[tuple[str, ast.FunctionDef]]:
+    """Every function `create_app` registers with `@app.<verb>(path)`, with its path."""
+    path = ROOT / "backend" / "app.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    found: list[tuple[str, ast.FunctionDef]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call) or not isinstance(decorator.func, ast.Attribute):
+                continue
+            target = decorator.func
+            if isinstance(target.value, ast.Name) and target.value.id == "app" and target.attr in ROUTE_VERBS:
+                route = decorator.args[0]
+                assert isinstance(route, ast.Constant) and isinstance(route.value, str), node.name
+                found.append((f"{target.attr.upper()} {route.value}", node))
+    return found
+
+
+# Each shape a route may keep while it decodes, with why.
+ROUTE_SHAPES_ALLOWED = {
+    ("get_week", "branch"),  # a week not asked for is this week, read from the one clock
+    ("get_storage_info", "default"),  # the server's own address; goes with the server in P2
+    ("get_storage_info", "comparison"),
+}
+# Routes that answer without calling Rust, with why. Every other route calls flexweek_engine itself or
+# through an app.py helper that does.
+ROUTES_WITHOUT_RUST = {
+    "me",  # the signed-in account is the session check's own answer, and that check is Rust
+    "health",  # says the server is up; goes with the server in P2
+    "get_storage_info",  # the server's address and body limit; goes with the server in P2
+}
+
+
+def calls_rust(node: ast.AST) -> bool:
+    return any(
+        isinstance(item, ast.Attribute)
+        and isinstance(item.value, ast.Name)
+        and item.value.id == "flexweek_engine"
+        for item in ast.walk(node)
+    )
+
+
+def test_routes_only_decode_call_and_encode() -> None:
+    handlers = route_handlers()
+    assert len(handlers) > 30, "the route scan found too few routes"
+    path = ROOT / "backend" / "app.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    rust_helpers = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and calls_rust(node)
+    }
+    problems: list[str] = []
+    for route, node in handlers:
+        for problem in logic_in(node, node.name, set()):
+            if problem_key(problem) not in ROUTE_SHAPES_ALLOWED:
+                problems.append(f"{route} {problem}")
+        if node.name in ROUTES_WITHOUT_RUST:
+            continue
+        body = ast.Module(body=node.body, type_ignores=[])
+        called = {
+            item.func.id
+            for item in ast.walk(body)
+            if isinstance(item, ast.Call) and isinstance(item.func, ast.Name)
+        }
+        if not calls_rust(body) and not called & rust_helpers:
+            problems.append(f"{route} {node.name}: answers without calling the Rust service")
+    assert not problems, "\n".join(problems)

@@ -3,9 +3,9 @@
 //! app opens on. The Rust twins of backend/tests/test_comfort_and_timer_preferences_api.py (its "the routes
 //! need a session" goes with the server in P2).
 //!
-//! The reminder notes follow the copy rule approved 2026-10-13 (the app's own words use contractions), which
-//! the engine has and backend/comfort.py missed: the Spotify note says "doesn't play", where the Python
-//! route still says "does not play" (and "it is handled") until that route moves to Rust.
+//! The reminder notes follow the copy rule approved 2026-10-13 (the app's own words use contractions): the
+//! Spotify note says "doesn't play" and the duplicate note "it's handled". The route serves these words from
+//! the engine since P1; backend/comfort.py had kept its own older copy.
 
 use flexweek_engine::plan::{reminder_limits, timer_presets};
 use flexweek_service::comfort::split_preview;

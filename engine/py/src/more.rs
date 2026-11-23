@@ -228,6 +228,17 @@ fn timer_presets() -> PyResult<String> {
 }
 
 #[pyfunction]
+fn reminder_limits() -> PyResult<String> {
+    guard(|| {
+        let notes = plan::reminder_limits()
+            .into_iter()
+            .map(|(key, words)| (key.to_string(), Value::String(words.to_string())))
+            .collect();
+        Ok(dump(&Value::Object(notes)))
+    })
+}
+
+#[pyfunction]
 fn migrated_assignment_id(week_start: &str, source_id: &str) -> PyResult<String> {
     guard(|| Ok(plan::migrated_assignment_id(week_start, source_id)))
 }
@@ -559,6 +570,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         split_plan,
         preview_split,
         timer_presets,
+        reminder_limits,
         migrated_assignment_id,
         due_from_latest,
         completed_at_for_block,

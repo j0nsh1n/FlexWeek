@@ -122,8 +122,8 @@ Authenticated GET `/api/reminder-limits`:
 {
   "web_open": "Reminders fire in this browser only while FlexWeek is open in a tab.",
   "desktop_background": "The desktop app can still alert from the tray after the window is closed.",
-  "spotify": "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track does not play.",
-  "duplicate": "The same block start fires at most one reminder until it is handled or the day changes."
+  "spotify": "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track doesn't play.",
+  "duplicate": "The same block start fires at most one reminder until it's handled or the day changes."
 }
 ```
 

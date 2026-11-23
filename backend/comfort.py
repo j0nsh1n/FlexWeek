@@ -6,39 +6,7 @@ import json
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-TIMER_PRESETS = (
-    {
-        "id": "short",
-        "label": "Short",
-        "timer_work_min": 15,
-        "timer_break_min": 15,
-        "timer_long_break_min": 30,
-        "timer_long_break_every": 4,
-    },
-    {
-        "id": "standard",
-        "label": "Standard",
-        "timer_work_min": 30,
-        "timer_break_min": 15,
-        "timer_long_break_min": 30,
-        "timer_long_break_every": 4,
-    },
-    {
-        "id": "long",
-        "label": "Long",
-        "timer_work_min": 45,
-        "timer_break_min": 15,
-        "timer_long_break_min": 30,
-        "timer_long_break_every": 4,
-    },
-)
-
-REMINDER_LIMITS = {
-    "web_open": "Reminders fire in this browser only while FlexWeek is open in a tab.",
-    "desktop_background": "The desktop app can still alert from the tray after the window is closed.",
-    "spotify": "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track does not play.",
-    "duplicate": "The same block start fires at most one reminder until it is handled or the day changes.",
-}
+TIMER_PRESETS: tuple[dict, ...] = tuple(json.loads(flexweek_engine.timer_presets()))
 
 
 def snap_minutes(value: int, minimum: int, maximum: int) -> int:

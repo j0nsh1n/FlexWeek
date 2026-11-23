@@ -9,6 +9,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - Settings > Computer has Report a problem. It opens a short form in your browser with your FlexWeek version and computer already filled in.
 - The phone's Settings has Report a problem. It opens an online form with your app version and phone model filled in.
 
+### Fixed
+- Settings > Alerts: the reminder notes now say "if the track doesn't play" and "until it's handled", in the app's usual wording.
+
 ## [1.5.0] - 2026-11-20
 
 ### Added
