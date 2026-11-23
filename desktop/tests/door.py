@@ -1,24 +1,31 @@
 """The test door (2.0.0 plan, P3): the Python app, started for tests, answers a screen test's steps over a
 local socket file, so a screen test written in Rust (flexweek-testkit's Door) can run against the app that is
-known to work. One JSON object per line each way. Test-only; it goes with the Python host.
+known to work. One JSON object per line each way; every line asked gets one line answered, in order.
+Test-only; it goes with the Python host.
 
 Steps (each answers {"ok": true, ...} or {"ok": false, "error": "..."}):
-  click {target}            a left click at the middle of the item, as the pointer does it
+  click {target}            a left click at the middle of a visible item, as the pointer does it
   key {key}                 a key press in the window: a Qt key name without "Key_" ("Return", "Down")
-  type {text}               the text typed into the item that has the keyboard
+  type {text}               the text typed, one key at a time, into the item that has the keyboard
   focus {target}            give the item the keyboard, where a test starts keys from
   read {target}             {found, name, text, enabled, focused, visible}
-  property {target, name}   {value}: one property of the item, as JSON
+  property {target, name}   {value}: one property of the item, as JSON (text for anything else)
   pump {turns}              let the window run that many turns of its event loop
   app                       {week_start, selected_month, screen}: what the session holds (the Python host's
                             stand-in for the view state the Rust core will expose)
 A target is {"name": objectName} or {"words": the text a student reads}, optionally with "within": the
-objectName of the item to look inside (the "20" in the date picker's month, not another "20").
+objectName of the item to look inside (the "20" in the date picker's month, not another "20"). Names are
+looked for among painted items first, so a Repeater's rows are found too.
+
+An error raised inside a Qt slot while a step ran fails that step, as the Python suite fails a test on one.
 """
 
 from __future__ import annotations
 
 import json
+import math
+import sys
+import traceback
 from collections.abc import Callable
 from typing import Any
 
@@ -45,6 +52,13 @@ def _visuals(item: QObject) -> list[QObject]:
     return found
 
 
+def _named(root: QObject, name: str) -> QObject | None:
+    for item in _visuals(root):
+        if str(item.objectName() or "") == name:
+            return item
+    return root.findChild(QObject, name)
+
+
 class Door(QObject):
     """Answers one test at a time on `path`, on the window's thread."""
 
@@ -52,7 +66,10 @@ class Door(QObject):
         super().__init__(window)
         self._window = window
         self._buffer = b""
+        self._busy = False
         self._socket: QLocalSocket | None = None
+        self._slot_errors: list[str] = []
+        sys.excepthook = self._record
         QLocalServer.removeServer(path)
         self._server = QLocalServer(self)
         if not self._server.listen(path):
@@ -69,11 +86,17 @@ class Door(QObject):
             "app": self._app,
         }
 
+    def _record(self, kind: type[BaseException], error: BaseException, trace: object) -> None:
+        self._slot_errors.append("".join(traceback.format_exception(kind, error, trace)))  # type: ignore[arg-type]
+
     def _accept(self) -> None:
         socket = self._server.nextPendingConnection()
         if socket is None:
             return
+        if self._socket is not None:
+            self._socket.disconnectFromServer()
         self._socket = socket
+        self._buffer = b""
         socket.readyRead.connect(self._incoming)
 
     def _incoming(self) -> None:
@@ -81,21 +104,34 @@ class Door(QObject):
         if socket is None:
             return
         self._buffer += bytes(socket.readAll().data())
-        while b"\n" in self._buffer:
-            line, self._buffer = self._buffer.split(b"\n", 1)
-            answer = self._answer(line)
-            socket.write(json.dumps(answer).encode() + b"\n")
-            socket.flush()
+        # A step runs the event loop, which may call this again: the outer call answers every line, in order.
+        if self._busy:
+            return
+        self._busy = True
+        try:
+            while b"\n" in self._buffer:
+                line, self._buffer = self._buffer.split(b"\n", 1)
+                socket.write(json.dumps(self._answer(line)).encode() + b"\n")
+                socket.flush()
+        finally:
+            self._busy = False
 
     def _answer(self, line: bytes) -> dict:
+        self._slot_errors.clear()
         try:
             asked = json.loads(line)
-            step = self._steps.get(asked.get("step", ""))
+            if not isinstance(asked, dict):
+                raise StepRefused("a step is a JSON object")
+            step = self._steps.get(str(asked.get("step", "")))
             if step is None:
                 raise StepRefused(f"no step called {asked.get('step')!r}")
-            return {"ok": True, **step(asked)}
-        except (StepRefused, ValueError, KeyError) as error:
-            return {"ok": False, "error": str(error)}
+            answer = {"ok": True, **step(asked)}
+        except Exception as error:  # every line gets an answer; the test hears what went wrong
+            return {"ok": False, "error": f"{type(error).__name__}: {error}"}
+        if self._slot_errors:
+            raised = "\n".join(self._slot_errors)
+            return {"ok": False, "error": f"an error was raised inside a Qt slot:\n{raised}"}
+        return answer
 
     # The window's parts.
 
@@ -105,17 +141,21 @@ class Door(QObject):
             raise StepRefused("the Material window is not built")
         return page
 
-    def _find(self, target: dict) -> QObject | None:
+    def _find(self, target: object) -> QObject | None:
+        if not isinstance(target, dict):
+            raise StepRefused("a target is a JSON object")
         root = self._quick().rootObject()
         if root is None:
             return None
         if "within" in target:
-            root = root.findChild(QObject, str(target["within"]))
+            root = _named(root, str(target["within"]))
             if root is None:
                 return None
         if "name" in target:
-            return root.findChild(QObject, str(target["name"]))
-        words = str(target.get("words", ""))
+            return _named(root, str(target["name"]))
+        if "words" not in target:
+            raise StepRefused("a target names an item or its words")
+        words = str(target["words"])
         for item in _visuals(root):
             text = item.property("text")
             if isinstance(text, str) and text == words and item.isVisible():
@@ -123,7 +163,7 @@ class Door(QObject):
         return None
 
     def _item(self, asked: dict) -> QObject:
-        item = self._find(asked.get("target") or {})
+        item = self._find(asked.get("target"))
         if item is None:
             raise StepRefused(f"nothing on screen is {asked.get('target')}")
         return item
@@ -137,6 +177,8 @@ class Door(QObject):
 
     def _click(self, asked: dict) -> dict:
         item = self._item(asked)
+        if not item.isVisible():
+            raise StepRefused(f"{asked.get('target')} is not on screen")
         spot = item.mapToScene(item.boundingRect().center())
         QTest.mouseClick(self._quick(), Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y())))
         self._turns(10)
@@ -151,7 +193,9 @@ class Door(QObject):
         return {}
 
     def _type(self, asked: dict) -> dict:
-        QTest.keyClicks(self._quick(), str(asked["text"]))
+        # QTest.keyClicks takes widgets only; Material is a Qt Quick window, so each character is its own key.
+        for character in str(asked["text"]):
+            QTest.keyClick(self._quick(), character)
         self._turns(10)
         return {}
 
@@ -161,7 +205,7 @@ class Door(QObject):
         return {}
 
     def _read(self, asked: dict) -> dict:
-        item = self._find(asked.get("target") or {})
+        item = self._find(asked.get("target"))
         if item is None:
             return {"found": False}
         text = item.property("text")
@@ -176,10 +220,12 @@ class Door(QObject):
 
     def _property(self, asked: dict) -> dict:
         value = self._item(asked).property(str(asked["name"]))
+        if isinstance(value, float) and not math.isfinite(value):
+            return {"value": str(value)}
         return {"value": value if isinstance(value, PLAIN) else str(value)}
 
     def _pump(self, asked: dict) -> dict:
-        self._turns(int(asked.get("turns", 10)))
+        self._turns(int(asked.get("turns") or 10))
         return {}
 
     def _app(self, _asked: dict) -> dict:

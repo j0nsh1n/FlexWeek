@@ -11,6 +11,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use serde_json::{Value, json};
 
@@ -99,52 +101,107 @@ fn repository() -> PathBuf {
         .to_path_buf()
 }
 
-/// The Python app, started for one test and stopped when the test ends.
-pub struct Door {
+/// How long one step may take before the test fails instead of waiting forever.
+const STEP_LIMIT: Duration = Duration::from_secs(60);
+
+/// Doors started by this test binary, so two with the same name never share a folder.
+static STARTED: AtomicUsize = AtomicUsize::new(0);
+
+/// The app's process and its folder: stopped and removed when dropped, on every path, a failed start too.
+struct App {
     child: Child,
-    stream: BufReader<UnixStream>,
     folder: PathBuf,
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.folder);
+    }
+}
+
+/// The Python app, started for one test and stopped when the test ends.
+pub struct Door {
+    stream: BufReader<UnixStream>,
+    // Dropped after the stream, so the app is stopped last.
+    _app: App,
+}
+
 impl Door {
-    /// Starts the app on the test account; `name` keeps tests running at once apart.
+    /// Starts the app on the test account; `name` says which test it is for in the folder's name.
     pub fn start(name: &str) -> Self {
         let root = repository();
         let python = std::env::var_os("FLEXWEEK_DOOR_PYTHON")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join(".venv/bin/python"));
-        let folder =
-            std::env::temp_dir().join(format!("flexweek-door-{name}-{}", std::process::id()));
+        let number = STARTED.fetch_add(1, Ordering::Relaxed);
+        let folder = std::env::temp_dir().join(format!(
+            "flexweek-door-{name}-{}-{number}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&folder);
-        std::fs::create_dir_all(&folder).expect("door folder");
+        let home = folder.join("home");
+        std::fs::create_dir_all(&home).expect("door folder");
         let socket = folder.join("door.sock");
-        let mut child = Command::new(&python)
+        let child = Command::new(&python)
             .args(["-m", "desktop.tests.door_app", "--door"])
             .arg(&socket)
             .arg("--folder")
             .arg(&folder)
             .current_dir(&root)
+            // Its own home, so Qt's test paths (look and week-start files) are this test's alone.
+            .env("HOME", &home)
+            .env_remove("XDG_CONFIG_HOME")
+            .env_remove("XDG_DATA_HOME")
             .env("QT_QPA_PLATFORM", "offscreen")
             .env("FLEXWEEK_SILENT", "1")
             .stdout(Stdio::piped())
             .spawn()
             .unwrap_or_else(|error| panic!("starting {}: {error}", python.display()));
-        let stdout: ChildStdout = child.stdout.take().expect("the app's output");
+        let mut app = App { child, folder };
+        let stdout: ChildStdout = app.child.stdout.take().expect("the app's output");
         let mut output = BufReader::new(stdout);
-        let mut said = String::new();
-        output.read_line(&mut said).expect("the app's first line");
-        assert_eq!(said.trim(), "door ready", "the app did not open its door");
+        let mut said = Vec::new();
+        loop {
+            let mut line = String::new();
+            let read = output.read_line(&mut line).expect("the app's output");
+            if read == 0 {
+                panic!("the app ended before opening its door; it said: {said:?}");
+            }
+            if line.trim() == "door ready" {
+                break;
+            }
+            said.push(line);
+        }
         // Anything the app prints later is read and dropped, so a full pipe never stops it.
         std::thread::spawn(move || std::io::copy(&mut output, &mut std::io::sink()));
         let stream = UnixStream::connect(&socket).expect("connect to the door");
+        stream
+            .set_read_timeout(Some(STEP_LIMIT))
+            .expect("a read limit");
+        stream
+            .set_write_timeout(Some(STEP_LIMIT))
+            .expect("a write limit");
         Self {
-            child,
             stream: BufReader::new(stream),
-            folder,
+            _app: app,
         }
     }
 
     fn step(&mut self, step: Value) -> Value {
+        let answer = self.ask(&step);
+        assert_eq!(answer["ok"], true, "the step {step} was refused: {answer}");
+        answer
+    }
+
+    /// The folder this app keeps its account, socket and home in.
+    pub fn folder(&self) -> &Path {
+        &self._app.folder
+    }
+
+    /// One step as raw JSON, and the door's answer whatever it is (for the door's own tests).
+    pub fn ask(&mut self, step: &Value) -> Value {
         let mut line = step.to_string();
         line.push('\n');
         self.stream
@@ -154,18 +211,8 @@ impl Door {
         let mut answer = String::new();
         self.stream
             .read_line(&mut answer)
-            .expect("the door's answer");
-        let answer: Value = serde_json::from_str(&answer).expect("the door answers JSON");
-        assert_eq!(answer["ok"], true, "the step {step} was refused: {answer}");
-        answer
-    }
-}
-
-impl Drop for Door {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        let _ = std::fs::remove_dir_all(&self.folder);
+            .unwrap_or_else(|error| panic!("no answer to {step} within the limit: {error}"));
+        serde_json::from_str(&answer).expect("the door answers JSON")
     }
 }
 
