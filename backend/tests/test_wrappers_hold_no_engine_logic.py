@@ -277,10 +277,10 @@ def test_app_helpers_keep_no_engine_logic() -> None:
     assert not problems, "\n".join(problems)
 
 
-ROUTE_VERBS = {"get", "post", "put", "delete", "patch"}
+ROUTE_VERBS = {"get", "post", "put", "delete", "patch", "head", "options", "trace"}
 # Ways to register a route other than `@app.<verb>(path)`; app.py uses none of them, so the scan below sees
 # every route.
-OTHER_ROUTE_WAYS = {"api_route", "add_api_route", "include_router", "websocket", "mount"}
+OTHER_ROUTE_WAYS = {"api_route", "add_api_route", "add_route", "include_router", "websocket", "mount"}
 Handler = ast.FunctionDef | ast.AsyncFunctionDef
 
 
@@ -289,10 +289,10 @@ def app_tree() -> ast.Module:
     return ast.parse(path.read_text(), filename=str(path))
 
 
-def route_handlers() -> list[tuple[str, Handler]]:
+def route_handlers(tree: ast.Module) -> list[tuple[str, Handler]]:
     """Every function `create_app` registers with `@app.<verb>(path)`, with its path."""
     found: list[tuple[str, Handler]] = []
-    for node in ast.walk(app_tree()):
+    for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for decorator in node.decorator_list:
@@ -323,8 +323,11 @@ ROUTES_WITHOUT_RUST = {
 ROUTES_ANSWERING_THE_ACCOUNT = {
     "change_password",  # the new password is saved by Rust; the window stays the same account
 }
-# app.py helpers every data route goes through; their bodies are held to the same logic check.
+# app.py helpers every data route goes through; their bodies are held to the same checks.
 SHARED_ROUTE_HELPERS = ("served", "authenticate")
+# A helper handed the Rust function to call, and the parameter that holds it. Every call of it must hand it
+# a Rust function.
+RUST_FUNCTION_TAKERS = {"served": "call"}
 
 
 def is_engine(node: ast.AST) -> bool:
@@ -335,58 +338,140 @@ def is_engine(node: ast.AST) -> bool:
     )
 
 
-def engine_names(node: ast.AST) -> set[str]:
-    """Names a function binds to a Rust function (`listed = flexweek_engine.service_homework`, or one of two by
-    a condition), so a call through the name is a call into Rust."""
-    names: set[str] = set()
-    for item in ast.walk(node):
-        if isinstance(item, ast.Assign) and any(is_engine(part) for part in ast.walk(item.value)):
-            names.update(target.id for target in item.targets if isinstance(target, ast.Name))
-    return names
+def own_body(node: Handler) -> list[ast.AST]:
+    """The function's own statements and expressions, without the bodies of lambdas or nested functions."""
+    found: list[ast.AST] = []
+
+    def walk(item: ast.AST) -> None:
+        found.append(item)
+        for child in ast.iter_child_nodes(item):
+            if not isinstance(child, (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef)):
+                walk(child)
+
+    for statement in node.body:
+        walk(statement)
+    return found
 
 
-def rust_calls_in(
-    node: ast.AST, rust_helpers: set[str], bound: frozenset[str] | set[str] = frozenset()
-) -> bool:
-    """A call into Rust: `flexweek_engine.f(...)` or a name bound to one, a Rust function handed to a call
-    (`served(flexweek_engine.f, ...)`), or a call to an app.py helper that makes one. Naming a Rust function
-    without calling it does not count."""
+def assigned(node: Handler) -> list[tuple[list[ast.expr], ast.expr | None]]:
+    """Each assignment in the function's own body: its targets and its value (None for `x += ...`)."""
+    found: list[tuple[list[ast.expr], ast.expr | None]] = []
+    for item in own_body(node):
+        if isinstance(item, ast.Assign):
+            found.append((list(item.targets), item.value))
+        elif isinstance(item, ast.AnnAssign):
+            found.append(([item.target], item.value))
+        elif isinstance(item, ast.AugAssign):
+            found.append(([item.target], None))
+    return found
 
-    def rust(part: ast.AST) -> bool:
-        return is_engine(part) or (isinstance(part, ast.Name) and part.id in bound)
 
-    for item in ast.walk(node):
-        if not isinstance(item, ast.Call):
-            continue
-        if rust(item.func) or any(rust(arg) for arg in item.args):
+def target_names(target: ast.expr) -> set[str]:
+    if isinstance(target, ast.Subscript):
+        return target_names(target.value)
+    return {part.id for part in ast.walk(target) if isinstance(part, ast.Name)}
+
+
+def is_engine_choice(value: ast.expr) -> bool:
+    if isinstance(value, ast.IfExp):
+        return is_engine_choice(value.body) and is_engine_choice(value.orelse)
+    return is_engine(value)
+
+
+class RustAnswers:
+    """Which calls reach Rust and which values are Rust's answer, inside one function."""
+
+    def __init__(self, node: Handler, rust_helpers: set[str]) -> None:
+        self.rust_helpers = rust_helpers
+        self.engine: set[str] = set()
+        takes = RUST_FUNCTION_TAKERS.get(node.name)
+        if takes is not None:
+            self.engine.add(takes)
+        assignments = assigned(node)
+        # A name bound to a Rust function only counts when nothing else is ever assigned to it.
+        chosen = {
+            name
+            for targets, value in assignments
+            if value is not None and is_engine_choice(value)
+            for target in targets
+            for name in target_names(target)
+        }
+        other = {
+            name
+            for targets, value in assignments
+            if value is None or not is_engine_choice(value)
+            for target in targets
+            for name in target_names(target)
+        }
+        self.engine |= chosen - other
+        # A name holds Rust's answer when every assignment to it (or into it) is from Rust.
+        self.bound: set[str] = set()
+        while True:
+            tainted = {
+                name
+                for targets, value in assignments
+                if value is None or not self.from_rust(value)
+                for target in targets
+                for name in target_names(target)
+            }
+            grown = (
+                {
+                    name
+                    for targets, value in assignments
+                    if value is not None and self.from_rust(value)
+                    for target in targets
+                    for name in target_names(target)
+                }
+                - tainted
+                - self.engine
+            )
+            if grown <= self.bound:
+                break
+            self.bound |= grown
+
+    def is_rust(self, part: ast.AST) -> bool:
+        return is_engine(part) or (isinstance(part, ast.Name) and part.id in self.engine)
+
+    def is_rust_call(self, call: ast.Call) -> bool:
+        if self.is_rust(call.func):
             return True
-        if isinstance(item.func, ast.Name) and item.func.id in rust_helpers:
-            return True
-    return False
+        if isinstance(call.func, ast.Name) and call.func.id in RUST_FUNCTION_TAKERS:
+            return bool(call.args) and self.is_rust(call.args[0])
+        return isinstance(call.func, ast.Name) and call.func.id in self.rust_helpers
+
+    def from_rust(self, value: ast.expr) -> bool:
+        if isinstance(value, ast.Call):
+            decoded = (
+                isinstance(value.func, ast.Attribute)
+                and isinstance(value.func.value, ast.Name)
+                and (value.func.value.id, value.func.attr) == ("json", "loads")
+            )
+            counted = isinstance(value.func, ast.Name) and value.func.id == "len"
+            if decoded or counted:
+                return bool(value.args) and self.from_rust(value.args[0])
+            return self.is_rust_call(value)
+        if isinstance(value, ast.Name):
+            return value.id in self.bound
+        if isinstance(value, ast.Dict):
+            return bool(value.values) and all(self.from_rust(part) for part in value.values)
+        if isinstance(value, ast.Subscript):
+            return self.from_rust(value.value)
+        return False
+
+    def calls_rust(self, node: Handler) -> bool:
+        return any(isinstance(item, ast.Call) and self.is_rust_call(item) for item in own_body(node))
 
 
 def answers_from_rust(node: Handler, rust_helpers: set[str]) -> bool:
-    """Every value the route returns comes from a Rust call, directly or through a name bound to one. A route
-    that returns nothing (204) still has to call Rust."""
-    engine = engine_names(node)
-    bound: set[str] = set()
-    for item in ast.walk(node):
-        if isinstance(item, (ast.Assign, ast.AnnAssign)) and item.value is not None:
-            targets = item.targets if isinstance(item, ast.Assign) else [item.target]
-            if rust_calls_in(item.value, rust_helpers, engine):
-                for target in targets:
-                    bound.update(part.id for part in ast.walk(target) if isinstance(part, ast.Name))
-    calls = rust_calls_in(ast.Module(body=node.body, type_ignores=[]), rust_helpers, engine)
+    """Every value the function returns is Rust's answer. A function that returns nothing (a 204 route), or
+    answers with the signed-in account, still has to call Rust itself."""
+    rust = RustAnswers(node, rust_helpers)
     returned = [
-        item.value for item in ast.walk(node) if isinstance(item, ast.Return) and item.value is not None
+        item.value for item in own_body(node) if isinstance(item, ast.Return) and item.value is not None
     ]
     if not returned or node.name in ROUTES_ANSWERING_THE_ACCOUNT:
-        return calls
-    return all(
-        rust_calls_in(value, rust_helpers, engine)
-        or any(isinstance(part, ast.Name) and part.id in bound for part in ast.walk(value))
-        for value in returned
-    )
+        return rust.calls_rust(node)
+    return all(rust.from_rust(value) for value in returned)
 
 
 def test_routes_only_decode_call_and_encode() -> None:
@@ -402,11 +487,37 @@ def test_routes_only_decode_call_and_encode() -> None:
         }
     )
     assert not other_ways, f"app.py registers routes another way the scan does not read: {other_ways}"
-    handlers = route_handlers()
+    handlers = route_handlers(tree)
     assert len(handlers) > 30, "the route scan found too few routes"
-    helpers = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
-    rust_helpers = {name for name, node in helpers.items() if rust_calls_in(node, set(), engine_names(node))}
+    routes = {node.name for _, node in handlers}
+    helpers = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name not in routes
+    }
     problems: list[str] = []
+    # The helpers whose answer is Rust's, found until no more join (one may answer through another).
+    rust_helpers: set[str] = set()
+    while True:
+        grown = {
+            name
+            for name, node in helpers.items()
+            if name not in RUST_FUNCTION_TAKERS and answers_from_rust(node, rust_helpers)
+        }
+        if grown <= rust_helpers:
+            break
+        rust_helpers |= grown
+    for name in SHARED_ROUTE_HELPERS:
+        if not answers_from_rust(helpers[name], rust_helpers):
+            problems.append(f"helper {name}: answers without the Rust service's answer")
+    for taker in RUST_FUNCTION_TAKERS:
+        for node in [*helpers.values(), *(node for _, node in handlers)]:
+            rust = RustAnswers(node, rust_helpers)
+            for item in own_body(node):
+                if not (isinstance(item, ast.Call) and isinstance(item.func, ast.Name)):
+                    continue
+                if item.func.id == taker and not (item.args and rust.is_rust(item.args[0])):
+                    problems.append(f"{node.name}: {taker} is handed something other than a Rust function")
     checked: list[tuple[str, Handler]] = list(handlers)
     checked += [(f"helper {name}", helpers[name]) for name in SHARED_ROUTE_HELPERS]
     for route, node in checked:
