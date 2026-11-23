@@ -296,3 +296,13 @@ rust = [
     "flexweek-service::saving_a_week::two_devices_signed_in_to_one_account_share_a_week_and_the_stale_one_is_refused",
 ]
 red = "no stale-revision conflict, the done day dropped, the Until date dropped, and a pomodoro parent allowed with its chunks each fail their tests (2026-11-22). Its 256 KiB request limit (413), its removed demo address (404) and its hosted-server origin go with the server in P2"
+
+[[port]]
+python = "backend/tests/test_week_repeated_block_id.py"
+rust = [
+    "flexweek-service::week_repeated_block_id::a_backup_file_with_a_doubled_id_is_refused_and_the_account_stays_as_it_was",
+    "flexweek-service::week_repeated_block_id::a_restore_point_with_a_doubled_id_is_refused_and_changes_nothing",
+    "flexweek-service::week_saves::tests::a_week_that_reaches_the_store_with_a_doubled_id_is_refused_in_words_and_writes_nothing",
+    "flexweek-service::transfer::tests::a_file_whose_week_reaches_the_store_with_a_doubled_id_is_refused_in_words_and_changes_nothing",
+]
+red = "the restore's doubled-id refusal unmapped and the file check's duplicate-id rule removed each fail their test (2026-11-22); the store-level twins were seen red in #145 and #146"
