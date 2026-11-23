@@ -40,7 +40,7 @@
   slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
   desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
   decode.
-- Python: the FastAPI routes (their bodies call the service and hold no SQL), password hashing's
+- Python: the FastAPI routes (no SQL in them; the account-data ones call the service), password hashing's
   salt, the clock, environment and file reads, the pydantic checks, `backend/models.py`'s Spotify and due-date
   copies, `CATEGORIES` in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing and
   `scripts/rig/drive.py`.
@@ -101,8 +101,6 @@ preview. Recorded `operation_id` values make a retried write return the first re
 - The desktop app runs the backend in-process on a pre-bound loopback socket (CSRF origin and TrustedHost pin one
   origin). An invalid FLEXWEEK_*_ORIGIN is an error, never a fall back to local.
 - Nuitka is called directly; `pyside6-deploy` rewrites its spec with machine paths.
-- The accent stays at least CIE76 distance 15 from every category colour. No test checks it since
-  `desktop/tests/test_look.py` went with the Widgets styles in 1.5.0.
 - Windows installers: the Inno `AppId` and MSI `UpgradeCode` never change; Inno 7.1.0 is checksum-checked; WiX is
   pinned to 6.0.2. Linux leads with a tar.gz so the executable bit survives.
 - The Material switch button keeps the label "Material 3" (Jonathan, 2026-11-06), not FIX-SPEC's "Back to Material".
