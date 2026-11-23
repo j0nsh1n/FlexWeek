@@ -404,7 +404,24 @@ class RustAnswers:
             for name in target_names(target)
         }
         self.engine |= chosen - other
-        # A name holds Rust's answer when every assignment to it (or into it) is from Rust.
+        # A name holds Rust's answer when every assignment to it (or into it) is from Rust and no method is
+        # called on it or on a name that holds the same value (`answer.clear()`, or through `alias = answer`).
+        aliases: dict[str, set[str]] = {}
+        for targets, value in assignments:
+            if isinstance(value, ast.Name):
+                for target in targets:
+                    for name in target_names(target):
+                        group = aliases.get(name, {name}) | aliases.get(value.id, {value.id})
+                        for member in group:
+                            aliases[member] = group
+        changed = {
+            member
+            for item in own_body(node)
+            if isinstance(item, ast.Call)
+            and isinstance(item.func, ast.Attribute)
+            and isinstance(item.func.value, ast.Name)
+            for member in aliases.get(item.func.value.id, {item.func.value.id})
+        }
         self.bound: set[str] = set()
         while True:
             tainted = {
@@ -424,6 +441,7 @@ class RustAnswers:
                 }
                 - tainted
                 - self.engine
+                - changed
             )
             if grown <= self.bound:
                 break
@@ -462,6 +480,20 @@ class RustAnswers:
         return any(isinstance(item, ast.Call) and self.is_rust_call(item) for item in own_body(node))
 
 
+def answers_with_the_account(value: ast.expr) -> bool:
+    """`{"id": account["id"], ...}`: every value is a field of the signed-in account the session check gave."""
+    return (
+        isinstance(value, ast.Dict)
+        and bool(value.values)
+        and all(
+            isinstance(part, ast.Subscript)
+            and isinstance(part.value, ast.Name)
+            and part.value.id == "account"
+            for part in value.values
+        )
+    )
+
+
 def answers_from_rust(node: Handler, rust_helpers: set[str]) -> bool:
     """Every value the function returns is Rust's answer. A function that returns nothing (a 204 route), or
     answers with the signed-in account, still has to call Rust itself."""
@@ -469,7 +501,9 @@ def answers_from_rust(node: Handler, rust_helpers: set[str]) -> bool:
     returned = [
         item.value for item in own_body(node) if isinstance(item, ast.Return) and item.value is not None
     ]
-    if not returned or node.name in ROUTES_ANSWERING_THE_ACCOUNT:
+    if node.name in ROUTES_ANSWERING_THE_ACCOUNT:
+        return rust.calls_rust(node) and all(answers_with_the_account(value) for value in returned)
+    if not returned:
         return rust.calls_rust(node)
     return all(rust.from_rust(value) for value in returned)
 
