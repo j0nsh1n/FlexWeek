@@ -278,15 +278,22 @@ def test_app_helpers_keep_no_engine_logic() -> None:
 
 
 ROUTE_VERBS = {"get", "post", "put", "delete", "patch"}
+# Ways to register a route other than `@app.<verb>(path)`; app.py uses none of them, so the scan below sees
+# every route.
+OTHER_ROUTE_WAYS = {"api_route", "add_api_route", "include_router", "websocket", "mount"}
+Handler = ast.FunctionDef | ast.AsyncFunctionDef
 
 
-def route_handlers() -> list[tuple[str, ast.FunctionDef]]:
-    """Every function `create_app` registers with `@app.<verb>(path)`, with its path."""
+def app_tree() -> ast.Module:
     path = ROOT / "backend" / "app.py"
-    tree = ast.parse(path.read_text(), filename=str(path))
-    found: list[tuple[str, ast.FunctionDef]] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
+    return ast.parse(path.read_text(), filename=str(path))
+
+
+def route_handlers() -> list[tuple[str, Handler]]:
+    """Every function `create_app` registers with `@app.<verb>(path)`, with its path."""
+    found: list[tuple[str, Handler]] = []
+    for node in ast.walk(app_tree()):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for decorator in node.decorator_list:
             if not isinstance(decorator, ast.Call) or not isinstance(decorator.func, ast.Attribute):
@@ -299,53 +306,114 @@ def route_handlers() -> list[tuple[str, ast.FunctionDef]]:
     return found
 
 
-# Each shape a route may keep while it decodes, with why.
+# Each shape a route or a shared route helper may keep, with why.
 ROUTE_SHAPES_ALLOWED = {
     ("get_week", "branch"),  # a week not asked for is this week, read from the one clock
     ("get_storage_info", "default"),  # the server's own address; goes with the server in P2
     ("get_storage_info", "comparison"),
+    ("authenticate", "branch"),  # picks the Rust sign-up or sign-in call
 }
-# Routes that answer without calling Rust, with why. Every other route calls flexweek_engine itself or
-# through an app.py helper that does.
+# Routes that answer without calling Rust, with why.
 ROUTES_WITHOUT_RUST = {
     "me",  # the signed-in account is the session check's own answer, and that check is Rust
     "health",  # says the server is up; goes with the server in P2
     "get_storage_info",  # the server's address and body limit; goes with the server in P2
 }
+# Routes that call Rust and then answer with the signed-in account (who the window is), with why.
+ROUTES_ANSWERING_THE_ACCOUNT = {
+    "change_password",  # the new password is saved by Rust; the window stays the same account
+}
+# app.py helpers every data route goes through; their bodies are held to the same logic check.
+SHARED_ROUTE_HELPERS = ("served", "authenticate")
 
 
-def calls_rust(node: ast.AST) -> bool:
-    return any(
-        isinstance(item, ast.Attribute)
-        and isinstance(item.value, ast.Name)
-        and item.value.id == "flexweek_engine"
-        for item in ast.walk(node)
+def is_engine(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "flexweek_engine"
+    )
+
+
+def engine_names(node: ast.AST) -> set[str]:
+    """Names a function binds to a Rust function (`listed = flexweek_engine.service_homework`, or one of two by
+    a condition), so a call through the name is a call into Rust."""
+    names: set[str] = set()
+    for item in ast.walk(node):
+        if isinstance(item, ast.Assign) and any(is_engine(part) for part in ast.walk(item.value)):
+            names.update(target.id for target in item.targets if isinstance(target, ast.Name))
+    return names
+
+
+def rust_calls_in(
+    node: ast.AST, rust_helpers: set[str], bound: frozenset[str] | set[str] = frozenset()
+) -> bool:
+    """A call into Rust: `flexweek_engine.f(...)` or a name bound to one, a Rust function handed to a call
+    (`served(flexweek_engine.f, ...)`), or a call to an app.py helper that makes one. Naming a Rust function
+    without calling it does not count."""
+
+    def rust(part: ast.AST) -> bool:
+        return is_engine(part) or (isinstance(part, ast.Name) and part.id in bound)
+
+    for item in ast.walk(node):
+        if not isinstance(item, ast.Call):
+            continue
+        if rust(item.func) or any(rust(arg) for arg in item.args):
+            return True
+        if isinstance(item.func, ast.Name) and item.func.id in rust_helpers:
+            return True
+    return False
+
+
+def answers_from_rust(node: Handler, rust_helpers: set[str]) -> bool:
+    """Every value the route returns comes from a Rust call, directly or through a name bound to one. A route
+    that returns nothing (204) still has to call Rust."""
+    engine = engine_names(node)
+    bound: set[str] = set()
+    for item in ast.walk(node):
+        if isinstance(item, (ast.Assign, ast.AnnAssign)) and item.value is not None:
+            targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+            if rust_calls_in(item.value, rust_helpers, engine):
+                for target in targets:
+                    bound.update(part.id for part in ast.walk(target) if isinstance(part, ast.Name))
+    calls = rust_calls_in(ast.Module(body=node.body, type_ignores=[]), rust_helpers, engine)
+    returned = [
+        item.value for item in ast.walk(node) if isinstance(item, ast.Return) and item.value is not None
+    ]
+    if not returned or node.name in ROUTES_ANSWERING_THE_ACCOUNT:
+        return calls
+    return all(
+        rust_calls_in(value, rust_helpers, engine)
+        or any(isinstance(part, ast.Name) and part.id in bound for part in ast.walk(value))
+        for value in returned
     )
 
 
 def test_routes_only_decode_call_and_encode() -> None:
+    tree = app_tree()
+    other_ways = sorted(
+        {
+            item.attr
+            for item in ast.walk(tree)
+            if isinstance(item, ast.Attribute)
+            and isinstance(item.value, ast.Name)
+            and item.value.id == "app"
+            and item.attr in OTHER_ROUTE_WAYS
+        }
+    )
+    assert not other_ways, f"app.py registers routes another way the scan does not read: {other_ways}"
     handlers = route_handlers()
     assert len(handlers) > 30, "the route scan found too few routes"
-    path = ROOT / "backend" / "app.py"
-    tree = ast.parse(path.read_text(), filename=str(path))
-    rust_helpers = {
-        node.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and calls_rust(node)
-    }
+    helpers = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+    rust_helpers = {name for name, node in helpers.items() if rust_calls_in(node, set(), engine_names(node))}
     problems: list[str] = []
-    for route, node in handlers:
+    checked: list[tuple[str, Handler]] = list(handlers)
+    checked += [(f"helper {name}", helpers[name]) for name in SHARED_ROUTE_HELPERS]
+    for route, node in checked:
         for problem in logic_in(node, node.name, set()):
             if problem_key(problem) not in ROUTE_SHAPES_ALLOWED:
                 problems.append(f"{route} {problem}")
-        if node.name in ROUTES_WITHOUT_RUST:
-            continue
-        body = ast.Module(body=node.body, type_ignores=[])
-        called = {
-            item.func.id
-            for item in ast.walk(body)
-            if isinstance(item, ast.Call) and isinstance(item.func, ast.Name)
-        }
-        if not calls_rust(body) and not called & rust_helpers:
-            problems.append(f"{route} {node.name}: answers without calling the Rust service")
+    for route, node in handlers:
+        if node.name not in ROUTES_WITHOUT_RUST and not answers_from_rust(node, rust_helpers):
+            problems.append(f"{route} {node.name}: answers without the Rust service's answer")
     assert not problems, "\n".join(problems)
