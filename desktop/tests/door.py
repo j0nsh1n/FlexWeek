@@ -39,6 +39,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import quick_of
 
 # Readable as JSON; anything else is given as its text.
 PLAIN = (str, int, float, bool, type(None))
@@ -163,8 +164,8 @@ class Door(QObject):
 
     # The window's parts.
 
-    def _quick(self) -> Any:
-        page = self._window._material_page
+    def _host(self) -> Any:
+        page = quick_of(self._window)
         if page is None:
             raise StepRefused("the Material window is not built")
         return page
@@ -172,7 +173,7 @@ class Door(QObject):
     def _find(self, target: object) -> QObject | None:
         if not isinstance(target, dict):
             raise StepRefused("a target is a JSON object")
-        root = self._quick().rootObject()
+        root = self._host().rootObject()
         if root is None:
             return None
         if "within" in target:
@@ -208,7 +209,7 @@ class Door(QObject):
         if not (hasattr(item, "isVisible") and item.isVisible()):
             raise StepRefused(f"{asked.get('target')} is not on screen")
         spot = item.mapToScene(item.boundingRect().center())
-        QTest.mouseClick(self._quick(), Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y())))
+        QTest.mouseClick(self._host(), Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y())))
         self._turns(10)
         return {}
 
@@ -223,14 +224,14 @@ class Door(QObject):
         key = getattr(Qt.Key, f"Key_{name}", None)
         if key is None:
             raise StepRefused(f"no key called {name!r}")
-        QTest.keyClick(self._quick(), key, modifiers)
+        QTest.keyClick(self._host(), key, modifiers)
         self._turns(10)
         return {}
 
     def _type(self, asked: dict) -> dict:
         # QTest.keyClicks takes widgets only; Material is a Qt Quick window, so each character is its own key.
         for character in str(asked["text"]):
-            QTest.keyClick(self._quick(), character)
+            QTest.keyClick(self._host(), character)
         self._turns(10)
         return {}
 
@@ -272,7 +273,7 @@ class Door(QObject):
 
     def _app(self, _asked: dict) -> dict:
         session = self._window.session
-        bridge = self._quick().bridge
+        bridge = self._host().bridge
         return {
             "week_start": session.week_start,
             "selected_month": session.selected_month,
