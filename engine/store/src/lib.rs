@@ -184,8 +184,8 @@ pub use assignments::{
     load_assignment_rows, save_assignment,
 };
 pub use changes::{
-    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, WeekInput, apply,
-    apply_within,
+    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, RefusalKind, Revision,
+    WeekInput, apply, apply_within,
 };
 pub use ledger::{
     Recall, capture_account, insert_restore_point, list_restore_points, prune_operations,

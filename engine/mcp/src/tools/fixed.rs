@@ -212,7 +212,7 @@ fn week_input(week_start: &str, blocks: Vec<Value>, revision: i64) -> ApplyInput
         weeks: vec![WeekInput {
             week_start: week_start.to_string(),
             blocks,
-            revision,
+            revision: revision.into(),
         }],
         assignments: Vec::<AssignmentInput>::new(),
         operation_id: None,

@@ -78,7 +78,7 @@ fn batch(
             .map(|(week_start, blocks)| WeekInput {
                 week_start: week_start.into(),
                 blocks,
-                revision: revision(conn, user_id, week_start),
+                revision: (revision(conn, user_id, week_start)).into(),
             })
             .collect(),
         assignments: Vec::new(),

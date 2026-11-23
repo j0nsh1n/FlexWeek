@@ -48,6 +48,7 @@ pub fn from_apply(result: Result<Value, ApplyFailure>) -> Result<Value, String> 
         Err(ApplyFailure::Refused {
             message,
             current_revision: None,
+            ..
         }) => Err(message),
         Err(ApplyFailure::Store(error)) => Err(session::storage_sentence(error)),
     }

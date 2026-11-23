@@ -36,7 +36,31 @@ pub struct ApplyClock {
 pub struct WeekInput {
     pub week_start: String,
     pub blocks: Vec<Value>,
-    pub revision: i64,
+    pub revision: Revision,
+}
+
+/// A Monday week is one stored week with one revision; a week on screen that starts on another day covers
+/// two stored weeks and names both revisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Revision {
+    Stored(i64),
+    Shown(i64, i64),
+}
+
+impl From<i64> for Revision {
+    fn from(revision: i64) -> Self {
+        Self::Stored(revision)
+    }
+}
+
+impl Revision {
+    /// As the save's request writes it: one number, or the two for a week on screen.
+    fn to_value(self) -> Value {
+        match self {
+            Self::Stored(revision) => json!(revision),
+            Self::Shown(first, second) => json!([first, second]),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -61,10 +85,19 @@ pub struct ApplyInput {
     pub argument_digest: Option<String>,
 }
 
+/// What kind of refusal a save got, as the app tells them apart (bad input, not found, changed elsewhere).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefusalKind {
+    Invalid,
+    NotFound,
+    Conflict,
+}
+
 #[derive(Debug)]
 pub enum ApplyFailure {
     Store(StoreError),
     Refused {
+        kind: RefusalKind,
         message: String,
         current_revision: Option<i64>,
     },
@@ -158,7 +191,7 @@ fn apply_tx(
     if let Some(operation_id) = &input.operation_id {
         match recall_operation(conn, user_id, operation_id, &digest)? {
             Recall::Hit(response) => return parse_json(&response),
-            Recall::Conflict => return Err(refuse(OPERATION_CONFLICT)),
+            Recall::Conflict => return Err(conflict(OPERATION_CONFLICT, None)),
             Recall::Missing => {}
         }
     }
@@ -266,7 +299,11 @@ fn apply_delete(
     change: &AssignmentInput,
 ) -> Result<Value, ApplyFailure> {
     match delete_assignment(conn, user_id, &change.id, Some(change.revision))? {
-        AssignmentDelete::Missing => Err(refuse("Assignment not found")),
+        AssignmentDelete::Missing => Err(ApplyFailure::Refused {
+            kind: RefusalKind::NotFound,
+            message: "Assignment not found".to_string(),
+            current_revision: None,
+        }),
         AssignmentDelete::Conflict => Err(conflict(
             ASSIGNMENT_CONFLICT,
             assignment_revision(conn, user_id, &change.id)?,
@@ -337,7 +374,12 @@ fn apply_week(conn: &Connection, user_id: i64, week: &WeekInput) -> Result<WeekO
     }
     week_request(&serde_json::json!({"blocks": dumped})).map_err(|message| refuse(&message))?;
     let encoded = canonical(&Value::Array(dumped.clone()));
-    let revision = match save_week(conn, user_id, &week.week_start, &encoded, week.revision)? {
+    let Revision::Stored(stored) = week.revision else {
+        return Err(refuse(
+            "a week on screen from another day is saved through the app's save",
+        ));
+    };
+    let revision = match save_week(conn, user_id, &week.week_start, &encoded, stored)? {
         WeekSave::Ready(revision) => revision,
         WeekSave::Conflict => {
             return Err(conflict(
@@ -391,7 +433,7 @@ fn batch_value(input: &ApplyInput) -> Value {
         "weeks": input.weeks.iter().map(|week| json!({
             "blocks": week.blocks,
             "week_start": week.week_start,
-            "revision": week.revision,
+            "revision": week.revision.to_value(),
         })).collect::<Vec<_>>(),
         "assignments": input.assignments.iter().map(|change| json!({
             "id": change.id,
@@ -438,12 +480,19 @@ fn parse_json(text: &str) -> Result<Value, ApplyFailure> {
     })
 }
 
+/// Input the save cannot take.
 fn refuse(message: &str) -> ApplyFailure {
-    conflict(message, None)
+    ApplyFailure::Refused {
+        kind: RefusalKind::Invalid,
+        message: message.to_string(),
+        current_revision: None,
+    }
 }
 
+/// Something changed in another window, with the revision now stored when there is one.
 fn conflict(message: &str, current_revision: Option<i64>) -> ApplyFailure {
     ApplyFailure::Refused {
+        kind: RefusalKind::Conflict,
         message: message.to_string(),
         current_revision,
     }

@@ -130,7 +130,7 @@ fn week_input(week_start: String, blocks: Vec<Value>, revision: i64) -> ApplyInp
         weeks: vec![WeekInput {
             week_start,
             blocks,
-            revision,
+            revision: revision.into(),
         }],
         assignments: Vec::<AssignmentInput>::new(),
         operation_id: None,
