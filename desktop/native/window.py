@@ -1995,7 +1995,7 @@ class NativeWindow(QObject):
         return self.session.accept_remote_week(who)
 
     def watch_database(self, database: Path) -> None:
-        """Show changes another program makes to `database`, the one the local server keeps."""
+        """Show changes another program makes to `database`, the one this window saves to."""
         self._outside = OutsideWatch(database)
         self._outside_timer.start()
 

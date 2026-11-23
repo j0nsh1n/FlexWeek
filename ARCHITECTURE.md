@@ -66,8 +66,8 @@ Widgets host's 60 Hz clock.
 
 The QML shell calls `MaterialBridge` and its screen bridges. Those bridges call
 `NativeSession`; QML does not make HTTP requests, open SQLite or call the engine
-directly. The FastAPI backend runs in the same process on a loopback port unless
-`FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) selects a hosted deployment.
+directly. `NativeSession`'s client asks the Rust service in the same process, on
+worker threads, with no server and no network port.
 Windows and Linux are the download targets. There is no browser client,
 `QWebEngineView`, JavaScript bridge or npm build. See DESKTOP.md.
 

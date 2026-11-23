@@ -89,7 +89,7 @@ $NuitkaArgs = @(
     "--include-data-dir=$(Join-Path $Root 'desktop\native\material\qml')=desktop/native/material/qml",
     '--nofollow-import-to=desktop.tests,backend.tests',
     '--nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick',
-    # Type-checking tools and uvicorn extras desktop/server.py never enables;
+    # Type-checking tools and uvicorn extras the app never used (it runs no server);
     # the same list as build_linux.sh.
     '--nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml',
     '--msvc=latest',

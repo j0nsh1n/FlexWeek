@@ -51,11 +51,13 @@ def test_sign_in_says_when_no_answer_comes_in_time(
 ) -> None:
     signed_out_again(qapp, window)
     stuck = threading.Event()
-    real = client_module.ask
+    answered = threading.Event()
 
-    def never_in_time(*arguments: object) -> client_module.Answer:
+    def never_in_time(*_arguments: object) -> client_module.Answer:
+        # Held past the timeout, then a sign-in that would have worked: it must change nothing.
         stuck.wait(30)
-        return real(*arguments)  # type: ignore[arg-type]
+        answered.set()
+        return client_module.Answer(200, b'{"id": 1, "username": "late"}', "started", "late-token")
 
     monkeypatch.setattr(client_module, "ask", never_in_time)
     monkeypatch.setattr(client_module, "REQUEST_TIMEOUT_MS", 200)
@@ -66,3 +68,8 @@ def test_sign_in_says_when_no_answer_comes_in_time(
         assert window.session.account is None
     finally:
         stuck.set()
+    assert answered.wait(5)
+    for _ in range(20):
+        qapp.processEvents()
+    assert window.session.client.session_token() is None
+    assert window.session.account is None

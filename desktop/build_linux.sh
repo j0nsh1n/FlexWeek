@@ -2,7 +2,7 @@
 # Build the FlexWeek Linux desktop shell (onedir standalone).
 #
 # Produces dist/FlexWeek/FlexWeek — runs without a Python install and without a
-# separate server: the FastAPI backend is bundled and started in-process.
+# server: the window asks the Rust service in its own process.
 # The window is native Qt widgets; Chromium is not compiled
 # in. --onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #

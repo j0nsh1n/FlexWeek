@@ -1,7 +1,7 @@
 """Regression for QA's P1 (fix-specs-0190.md): Plan's fair share cuts a homework's stored length and the
 remainder exists nowhere (Fresh Eyes F1/F2/F4, Assistant Local L4, Timmy's rules a-d).
 
-Session level (NativeSession over a LocalServer), with a held clock (`session.now_ms`), as in Coder's
+Session level (NativeSession on its own database), with a held clock (`session.now_ms`), as in Coder's
 probe. The week is the real current week; the clock is put on its Saturday or Monday. Rule: Plan never
 makes a homework's time shorter than its estimate, and what is not placed this week is still there.
 """

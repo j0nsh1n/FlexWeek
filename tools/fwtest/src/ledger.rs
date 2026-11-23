@@ -157,6 +157,11 @@ pub fn check(checkout: &Path, base: &str) -> Result<(), String> {
         |path| tracked.contains(path) && checkout.join(path).is_file(),
         &ledger,
     );
+    for row in ledger.port.iter().filter(|row| !row.gone.trim().is_empty()) {
+        if !tracked.contains(&row.python) {
+            println!("gone, not ported: {} ({})", row.python, row.gone.trim());
+        }
+    }
     if missing.is_empty() {
         return Ok(());
     }

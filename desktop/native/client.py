@@ -10,13 +10,14 @@ import logging
 import re
 import secrets
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
+from shiboken6 import isValid
 
 from backend import clock as wall_clock
 
@@ -24,6 +25,8 @@ REQUEST_TIMEOUT_MS = 30_000
 # Requests answered at once. Each waits on the database or hashes a password without holding Python, so
 # a Plan or a sign-in does not hold up the reads behind it.
 WORKERS = 4
+# How often a gone client's courier looks again for answers still being made before it is freed.
+RELEASE_RETRY_MS = 200
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 PASSWORD_LENGTH_HINT = "At least 12 characters."
 USERNAME_HINT = "3 to 32 letters, numbers or underscores."
@@ -214,11 +217,50 @@ def auth_error(error: ApiError, *, creating: bool) -> ApiError:
 
 
 class _Courier(QObject):
-    """Carries answers from the workers. A child of the client, so a worker that lets go of it last
-    never frees a Qt object on its own thread."""
+    """Carries answers from the workers to one client. It has no parent: freed with its client, it would
+    go while a worker was still sending on it (devices.py met that crash). A gone client's courier is
+    kept in _RETIRED and freed on the window's thread once no answer for it is being made."""
 
     # (request number, Answer); queued, so it lands on the window's thread.
     answered = Signal(int, object)
+
+
+# The workers every client shares, made when the first request is sent.
+_POOL: ThreadPoolExecutor | None = None
+# Couriers whose client is gone, each with the requests still being answered for it.
+_RETIRED: list[tuple[_Courier, set[Future]]] = []
+
+
+def _workers() -> ThreadPoolExecutor:
+    global _POOL
+    if _POOL is None:
+        _POOL = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="flexweek-request")
+    return _POOL
+
+
+def stop_workers() -> None:
+    """At quit: drop requests not started and wait for the ones being answered, so none writes after the
+    app has let go of its files."""
+    global _POOL
+    if _POOL is not None:
+        _POOL.shutdown(wait=True, cancel_futures=True)
+        _POOL = None
+
+
+def _retire(courier: _Courier, running: set[Future]) -> None:
+    """Free a gone client's courier on this (the window's) thread once nothing is answering for it."""
+    kept = (courier, running)
+    _RETIRED.append(kept)
+
+    def release() -> None:
+        if running:
+            QTimer.singleShot(RELEASE_RETRY_MS, release)
+            return
+        _RETIRED.remove(kept)
+        if isValid(courier):
+            courier.deleteLater()
+
+    release()
 
 
 class NativeClient(QObject):
@@ -233,18 +275,20 @@ class NativeClient(QObject):
         self._number = 0
         # Requests sent and not yet answered: what to do with each answer, by number.
         self._waiting: dict[int, Callable[[Answer], None]] = {}
-        workers = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="flexweek-request")
-        self._workers = workers
-        self._courier = _Courier(self)
-        self._courier.answered.connect(self._land, Qt.ConnectionType.QueuedConnection)
-        self.destroyed.connect(lambda *_: workers.shutdown(wait=False, cancel_futures=True))
+        # Requests a worker is answering or will answer; each leaves the set when its answer is made.
+        self._running: set[Future] = set()
+        courier, running = _Courier(), self._running
+        self._courier = courier
+        courier.answered.connect(self._land, Qt.ConnectionType.QueuedConnection)
+        self.destroyed.connect(lambda *_: _retire(courier, running))
 
     def _check_thread(self) -> None:
         if QThread.currentThread() != self.thread():
             raise RuntimeError("The native API client must be used on its Qt thread.")
 
     def _rotate(self) -> None:
-        """A new account epoch: every answer still on its way is dropped when it lands."""
+        """A new account epoch: every answer still on its way is dropped when it lands. Its timer runs
+        out on its own, at most REQUEST_TIMEOUT_MS later."""
         self.epoch += 1
 
     def set_account(self, identity: dict) -> None:
@@ -386,7 +430,9 @@ class NativeClient(QObject):
             with contextlib.suppress(RuntimeError):
                 answered.emit(number, answer)
 
-        self._workers.submit(work)
+        future = _workers().submit(work)
+        self._running.add(future)
+        future.add_done_callback(self._running.discard)
 
     def _land(self, number: int, answer: Answer) -> None:
         landed = self._waiting.pop(number, None)

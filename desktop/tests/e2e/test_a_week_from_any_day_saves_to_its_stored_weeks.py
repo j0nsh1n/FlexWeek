@@ -24,8 +24,8 @@ WEDNESDAY = 2
 SUNDAY = 6
 
 
-def signed_in_from(qapp: QApplication, origin: str, username: str, first_weekday: int) -> NativeSession:
-    session = NativeSession(origin, qapp)
+def signed_in_from(qapp: QApplication, database: Path, username: str, first_weekday: int) -> NativeSession:
+    session = NativeSession(database, qapp)
     HELD.append(session)
     session.follow_first_weekday(first_weekday)
     session.register(username, PASSWORD)

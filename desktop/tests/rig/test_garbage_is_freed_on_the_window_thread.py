@@ -1,4 +1,4 @@
-"""Garbage is collected on the window's thread only, never on the local server's."""
+"""Garbage is collected on the window's thread only, never on a worker's (the local server's before 2.0.0)."""
 
 from __future__ import annotations
 

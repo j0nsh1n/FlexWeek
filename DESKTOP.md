@@ -254,6 +254,9 @@ Python needs glibc 2.42 (`GLIBC_ABI_GNU2_TLS`).
 
 ## 7. Bundled server — scope change 2026-09-07
 
+*Superseded 2026-11-23 (2.0.0, P2): the app runs no server; the window asks the Rust service in its own
+process, and FLEXWEEK_DESKTOP_ORIGIN / FLEXWEEK_ORIGIN are no longer read (D4). The text below is the history.*
+
 **This supersedes section 1's "Do not embed a second FastAPI process in v1" and
 settles the last open question in section 5.** The owner asked for an executable
 that does not depend on a server being up. Section 1's reasoning still holds for

@@ -1,9 +1,8 @@
-"""FlexWeek desktop app: native Qt widgets over the local Python API.
+"""FlexWeek desktop app: native Qt over the Rust service, in this process.
 
-`python -m desktop.main` starts widgets, not Chromium. The backend runs on a
-loopback port in this process unless `--database` already names a file next to
-a running test. Hosted HTML is not loaded. Set FLEXWEEK_DESKTOP_ORIGIN only to
-point the native client at another loopback API.
+`python -m desktop.main` starts the window, not Chromium. Requests are answered
+by the service on worker threads, with no server and no network port;
+`--database` names the saved data to open instead of the profile's own.
 """
 
 from __future__ import annotations
@@ -66,11 +65,13 @@ try:
     import backend
     from backend.storage import initialize
     from desktop.native.calendar import sunday_due
+    from desktop.native.client import stop_workers
     from desktop.native.collector import WindowThreadCollector
     from desktop.native.cpu_drawing import apply_saved as apply_saved_cpu_drawing
     from desktop.native.devices import SyncHost
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
+    from desktop.native.listening import listening_sockets
     from desktop.native.updater import collect_stale_downloads
     from desktop.native.version import VERSION
     from desktop.native.window import NativeWindow
@@ -288,6 +289,8 @@ class NativeSmoke:
             "material_ok": self._material_ok,
             "material_painted_colors": self._material_colors,
             "message": window.session.message,
+            # With no phone paired the app listens on nothing (None: not readable on this system).
+            "listening": listening_sockets(),
         }
         self._report.write_text(json.dumps(facts, indent=2) + "\n")
         window.quit_app()
@@ -324,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
             stage = f"saved data did not open: {error}"
             payload = {"ok": False, "stage": stage, "window_visible": False}
             report.write_text(json.dumps(payload) + "\n")
+            shutil.rmtree(root, ignore_errors=True)
             return 3
         QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
         return 3
@@ -340,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
     window.show()
     status = app.exec()
     del smoke
+    # Answers still being made finish before the smoke run's folder is removed or the process ends.
+    stop_workers()
     if report is not None:
         shutil.rmtree(root, ignore_errors=True)
     return status

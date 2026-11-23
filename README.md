@@ -143,21 +143,16 @@ one of the eight recovery codes shown when the account was made.
 ## Data and configuration
 
 FlexWeek keeps its database in your user data folder (on Linux,
-`~/.local/share/FlexWeek/flexweek.db`) and starts its own backend on a private
-loopback port. Nothing needs configuring to use it.
+`~/.local/share/FlexWeek/flexweek.db`) and reads and saves it itself: it runs no
+server and opens no network port (phone sync, once a phone is paired, listens
+for that phone). Nothing needs configuring to use it.
 
 | Setting | Effect |
 |---|---|
 | `--database FILE` | Use this database file instead of the one in your data folder |
-| `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) | Use a FlexWeek API running elsewhere instead of starting one; an invalid value is an error, never a quiet fall back to local. Accounts there are separate from local ones and do not sync |
 
-The API can also run on its own, for development or as a server other copies
-point at: `uvicorn backend.app:app` reads `FLEXWEEK_DATABASE` (default
-`var/flexweek.db`) and `FLEXWEEK_ORIGIN` (default `http://127.0.0.1:8000`) and
-serves the API only, no pages. Non-local origins require HTTPS, and HTTPS uses
-Secure session cookies. A hosted API needs a persistent database directory and
-backups, and trusted reverse proxies configured explicitly so client-address
-throttling sees the real source.
+Until part 3 of 2.0.0's P2 removes it, `backend/app.py` (the old local API) is
+still in the repository for its tests; the app no longer starts it.
 
 The database and its journals are gitignored. Back up the database with SQLite's
 backup API or with the app stopped; protect backups as private account data.

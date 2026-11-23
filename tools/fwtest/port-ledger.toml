@@ -607,11 +607,8 @@ red = "weekend days not offered for work due after Sunday fails the week 17 week
 
 [[port]]
 python = "desktop/tests/e2e/test_the_bundled_server_starts_and_stops.py"
-rust = [
-    "flexweek-service::desk_requests::unknown_paths_and_methods_are_told_apart",
-    "flexweek-service::desk_requests::storage_that_cannot_be_opened_keeps_the_students_changes",
-]
-red = "a known path asked with another method answered 404 instead of 405 fails the paths test, and storage errors no longer answered 503 fails the storage test (2026-11-23); the port, the origin check and the server thread went with the server (P2, D4)"
+rust = ["flexweek-service::desk_requests::unknown_paths_and_methods_are_told_apart"]
+red = "its seven tests: no page outside /api/ (404) is the Rust paths test, red when a known path asked with another method answered 404 (2026-11-23); the database made where asked and a failed start saying why are now test_a_database_asked_for_in_a_new_folder_is_made_there and test_saved_data_that_cannot_be_opened_is_named_in_the_report (desktop e2e smoke, Python because they start the app); the port, serving /api/health on it, the origin check and stopping the server thread went with the server (P2, D4)"
 
 [[port]]
 python = "desktop/tests/e2e/test_the_configured_server_origin_is_checked.py"
