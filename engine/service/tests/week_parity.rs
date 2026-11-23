@@ -1,5 +1,5 @@
 //! The Rust week reader against `GET /api/week` and `GET /api/weeks`, the routes it replaces: accounts
-//! seeded through the Python app (fixtures/make_week_scenarios.py), the database as SQL text, and the
+//! seeded through the Python app (fixtures/make_week_scenarios.py, removed with backend/app.py in P2), the database as SQL text, and the
 //! answers Python gave for four Mondays, nineteen weeks shown from other weekdays and a refused date.
 
 use std::path::PathBuf;

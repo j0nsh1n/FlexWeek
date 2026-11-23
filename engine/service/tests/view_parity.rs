@@ -1,5 +1,5 @@
 //! Day, Month and the homework list against `GET /api/day`, `/api/month` and `/api/assignments` on the
-//! same Python-seeded database as the week test (fixtures/make_week_scenarios.py): every day of
+//! same Python-seeded database as the week test (fixtures/make_week_scenarios.py, removed with backend/app.py in P2): every day of
 //! November 2026, the month from each of the seven first days, and the homework list for every week
 //! start with and without finished homework, the routines and the restore points, all at the fixtures'
 //! clock (Thursday 5 Nov, 19:00).

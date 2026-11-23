@@ -864,7 +864,7 @@ mod tests {
     use super::*;
 
     /// The columns stored for each accepted preference set in the corpus are the ones Python's
-    /// write_preferences stored (captured by fixtures/make_preferences_corpus.py), text for text.
+    /// write_preferences stored (captured by fixtures/make_preferences_corpus.py, removed with backend/app.py in P2), text for text.
     #[test]
     fn the_stored_columns_are_the_ones_python_stored() {
         let cases: Vec<Value> =

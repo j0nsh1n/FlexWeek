@@ -1,5 +1,5 @@
 //! `check_changes` against pydantic's `ChangesRequest`, the multi-week save as the app's server read it:
-//! 2,500 generated saves (fixtures/changes_parity.json, made by fixtures/make_changes_corpus.py with the
+//! 2,500 generated saves (fixtures/changes_parity.json, made by fixtures/make_changes_corpus.py, removed with backend/app.py in P2 with the
 //! real models) are refused where pydantic refused them, read exactly as `model_dump()` wrote them, and keyed
 //! by the same digest, so a save sent again across the update still finds its first answer.
 

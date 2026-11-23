@@ -1,5 +1,5 @@
 //! `check_preferences` against pydantic's `Preferences`, the rule it replaces: 1,600 generated preference
-//! sets (fixtures/preferences_parity.json, made by fixtures/make_preferences_corpus.py with the real model)
+//! sets (fixtures/preferences_parity.json, made by fixtures/make_preferences_corpus.py, removed with backend/app.py in P2 with the real model)
 //! must be refused where pydantic refuses them and written out exactly as pydantic writes them, field order
 //! included. This test and its generator go when the Python model does.
 

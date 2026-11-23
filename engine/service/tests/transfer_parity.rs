@@ -1,5 +1,5 @@
 //! `check_transfer` against pydantic's `TransferSnapshot`, a backup file as the app's server read it on
-//! Import: 1,000 generated files (fixtures/transfer_parity.json, made by fixtures/make_transfer_corpus.py
+//! Import: 1,000 generated files (fixtures/transfer_parity.json, made by fixtures/make_transfer_corpus.py, removed with backend/app.py in P2
 //! from a real export with the real models) are refused where pydantic refused them and read exactly as
 //! `model_dump()` wrote them.
 

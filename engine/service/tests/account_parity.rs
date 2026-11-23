@@ -1,6 +1,6 @@
 //! The account checks against the server's pydantic models (`Credentials` for sign-up and sign-in,
 //! `RecoverRequest`, `PasswordChange` in backend/app.py), which go with the server in P2: the generated names,
-//! passwords and codes of fixtures/account_parity.json (made by fixtures/make_account_corpus.py with the real
+//! passwords and codes of fixtures/account_parity.json (made by fixtures/make_account_corpus.py, removed with backend/app.py in P2 with the real
 //! models) are refused where pydantic refused them and kept as pydantic kept them.
 
 use flexweek_service::accounts::{checked_code, checked_password, checked_username};

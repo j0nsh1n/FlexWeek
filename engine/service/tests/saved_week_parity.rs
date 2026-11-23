@@ -1,5 +1,5 @@
 //! `check_saved_week` against pydantic's `SavedWeek`, the Week screen's save as the app's server checks it:
-//! 1,500 generated saves (fixtures/saved_week_parity.json, made by fixtures/make_saved_week_corpus.py with
+//! 1,500 generated saves (fixtures/saved_week_parity.json, made by fixtures/make_saved_week_corpus.py, removed with backend/app.py in P2 with
 //! the real model) are refused where pydantic refuses them and written exactly as pydantic writes them.
 
 use flexweek_service::week_saves::check_saved_week;
