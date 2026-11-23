@@ -14,11 +14,13 @@ use std::process::{Child, ChildStdout, Command, Stdio};
 
 use serde_json::{Value, json};
 
-/// What a step names: an item's test id (its objectName), or the words a student reads on it.
+/// What a step names: an item's test id (its objectName), or the words a student reads on it, the latter
+/// optionally looked for only inside the item with a given test id.
 #[derive(Clone, Debug)]
 pub enum Target {
     Name(String),
     Words(String),
+    WordsWithin(String, String),
 }
 
 /// The item whose test id is `id`.
@@ -31,11 +33,17 @@ pub fn reading(words: &str) -> Target {
     Target::Words(words.to_string())
 }
 
+/// The visible item showing exactly `words` inside the item whose test id is `id`.
+pub fn reading_within(words: &str, id: &str) -> Target {
+    Target::WordsWithin(words.to_string(), id.to_string())
+}
+
 impl Target {
     fn to_json(&self) -> Value {
         match self {
             Self::Name(id) => json!({ "name": id }),
             Self::Words(words) => json!({ "words": words }),
+            Self::WordsWithin(words, id) => json!({ "words": words, "within": id }),
         }
     }
 }
@@ -57,6 +65,8 @@ pub trait Driver {
     /// A key by its Qt name without "Key_": "Return", "Escape", "Down", "Tab".
     fn key(&mut self, key: &str);
     fn type_text(&mut self, text: &str);
+    /// Give an item the keyboard, where a test starts keys from (not a student's step).
+    fn focus(&mut self, target: &Target);
     fn read(&mut self, target: &Target) -> Seen;
     /// One property of an item, for what the screen holds but does not print (a picker being open).
     fn property(&mut self, target: &Target, name: &str) -> Value;
@@ -170,6 +180,10 @@ impl Driver for Door {
 
     fn type_text(&mut self, text: &str) {
         self.step(json!({ "step": "type", "text": text }));
+    }
+
+    fn focus(&mut self, target: &Target) {
+        self.step(json!({ "step": "focus", "target": target.to_json() }));
     }
 
     fn read(&mut self, target: &Target) -> Seen {

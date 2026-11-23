@@ -6,12 +6,14 @@ Steps (each answers {"ok": true, ...} or {"ok": false, "error": "..."}):
   click {target}            a left click at the middle of the item, as the pointer does it
   key {key}                 a key press in the window: a Qt key name without "Key_" ("Return", "Down")
   type {text}               the text typed into the item that has the keyboard
+  focus {target}            give the item the keyboard, where a test starts keys from
   read {target}             {found, name, text, enabled, focused, visible}
   property {target, name}   {value}: one property of the item, as JSON
   pump {turns}              let the window run that many turns of its event loop
   app                       {week_start, selected_month, screen}: what the session holds (the Python host's
                             stand-in for the view state the Rust core will expose)
-A target is {"name": objectName} or {"words": the text a student reads}.
+A target is {"name": objectName} or {"words": the text a student reads}, optionally with "within": the
+objectName of the item to look inside (the "20" in the date picker's month, not another "20").
 """
 
 from __future__ import annotations
@@ -60,6 +62,7 @@ class Door(QObject):
             "click": self._click,
             "key": self._key,
             "type": self._type,
+            "focus": self._focus,
             "read": self._read,
             "property": self._property,
             "pump": self._pump,
@@ -106,6 +109,10 @@ class Door(QObject):
         root = self._quick().rootObject()
         if root is None:
             return None
+        if "within" in target:
+            root = root.findChild(QObject, str(target["within"]))
+            if root is None:
+                return None
         if "name" in target:
             return root.findChild(QObject, str(target["name"]))
         words = str(target.get("words", ""))
@@ -146,6 +153,11 @@ class Door(QObject):
     def _type(self, asked: dict) -> dict:
         QTest.keyClicks(self._quick(), str(asked["text"]))
         self._turns(10)
+        return {}
+
+    def _focus(self, asked: dict) -> dict:
+        self._item(asked).forceActiveFocus()
+        self._turns(5)
         return {}
 
     def _read(self, asked: dict) -> dict:
