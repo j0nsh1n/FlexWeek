@@ -6,13 +6,14 @@
 //! deterministic. 0.001 ms per check matches the app's 150 ms on the machine the comparison ran on (the
 //! placed counts equal the comparison report's "Today" column); 0.004 is a laptop four times slower.
 //!
-//! Guards: week 17's three items all get a time this week (with the weekend days offered); no week
-//! places fewer items than the planner did when the comparison was made; a priority 1 item is never
-//! dropped while a lower one is placed. Which days an item is offered, and the fair share of long
-//! work, have their own test files (session days, fair share).
+//! Guards: week 17's three items all get a time this week (with the weekend days offered), some of it on
+//! the weekend, with Friday at most 150 minutes; no week places fewer items than the planner did when the
+//! comparison was made; a priority 1 item is never dropped while a lower one is placed. With the tests
+//! below, the Rust twins of backend/tests/regress184/test_regress_item1c_spread.py. Which days an item is
+//! offered, and the fair share of long work, have their own test files (session days, fair share).
 //!
-//! Not guarded, on purpose: a daily cap, the 30-minute gap after School, and "nothing ends the day before
-//! it is due". The planner has no daily cap.
+//! Not true yet, and pinned below as known failures: a daily cap, the 30-minute gap after School, and
+//! "nothing ends the day before it is due". The planner has no daily cap.
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -237,4 +238,144 @@ fn a_priority_1_item_is_never_dropped_for_a_lower_one() {
 #[test]
 fn a_priority_1_item_is_never_dropped_for_a_lower_one_on_a_slower_laptop() {
     priority_1_is_kept_over_lower(0.004);
+}
+
+/// The most homework per day the app plans by default (fix-specs item 1c.B, "Most homework per day").
+const CAP_MIN: i64 = 150;
+const AFTER_SCHOOL_GAP: i64 = 30;
+const DAYS: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+fn per_day(times: &HashMap<String, (i64, i64, i64)>) -> HashMap<i64, i64> {
+    let mut load = HashMap::new();
+    for (day, start, end) in times.values() {
+        *load.entry(*day).or_insert(0) += end - start;
+    }
+    load
+}
+
+fn week_named(name: &str) -> Value {
+    weeks()
+        .into_iter()
+        .find(|week| short_name(week) == name)
+        .expect("a week")
+}
+
+/// (day, minute) an item is due: its slack deadline, or its "Thursday 21:00".
+fn due_point(week: &Value, block: &Value) -> (i64, i64) {
+    if let Some(slack) = week["slack"].get(block["id"].as_str().expect("an id")) {
+        return (
+            slack[0].as_i64().expect("a day"),
+            slack[1].as_i64().expect("a minute"),
+        );
+    }
+    let latest = block["latest"].as_str().expect("a due time");
+    let (day, at) = latest.split_once(' ').expect("day and time");
+    let day = DAYS.iter().position(|name| *name == day).expect("a day") as i64;
+    (day, hhmm_to_minutes(at).expect("a time"))
+}
+
+#[test]
+fn week_17_uses_the_weekend_and_friday_stays_under_the_cap() {
+    let week = week17_as_the_app_asks();
+    let times = placed(&week, &solve_week(&week, 0.001));
+    let load = per_day(&times);
+    let weekend = load.get(&5).copied().unwrap_or(0) + load.get(&6).copied().unwrap_or(0);
+    assert!(weekend > 0, "nothing on Sat/Sun: {times:?}");
+    let friday = load.get(&4).copied().unwrap_or(0);
+    assert!(friday <= CAP_MIN, "Friday has {friday} min");
+}
+
+// Known failures (fix-specs item 1c.B), kept as backend/tests/regress184/test_regress_item1c_spread.py kept
+// them, as strict expected failures: each asserts the failure still happens, so the day the planner learns
+// the rule the test fails and is turned into the guard it names.
+
+/// Week 2: a day goes over the cap while a lighter day before the item's due date had room.
+#[test]
+fn known_failure_week_2_puts_a_day_over_the_cap_while_a_lighter_day_has_room() {
+    let week = week_named("2");
+    let items = homework(&week);
+    let times = placed(&week, &solve_week(&week, 0.001));
+    let load = per_day(&times);
+    let crammed: Vec<&String> = times
+        .iter()
+        .filter(|(id, (day, start, end))| {
+            if load[day] <= CAP_MIN {
+                return false;
+            }
+            let item = items[id.as_str()];
+            let (due_day, _) = due_point(&week, item);
+            item["days"].as_array().expect("days").iter().any(|other| {
+                let other = other.as_i64().expect("a day");
+                other < due_day
+                    && other != *day
+                    && load.get(&other).copied().unwrap_or(0) + end - start <= CAP_MIN
+            })
+        })
+        .map(|(id, _)| id)
+        .collect();
+    assert!(
+        !crammed.is_empty(),
+        "the cap now holds in week 2: turn this into its guard"
+    );
+}
+
+/// Week 2: something ends less than a day before its due date though it was due two or more days out.
+#[test]
+fn known_failure_week_2_ends_work_less_than_a_day_before_its_due_date() {
+    let week = week_named("2");
+    let items = homework(&week);
+    let now_day = week["now"][0].as_i64().expect("a day");
+    let now_min = hhmm_to_minutes(week["now"][1].as_str().expect("a time")).expect("a time");
+    // The rule is not empty: an item is due Thursday or later.
+    assert!(items.values().any(|item| due_point(&week, item).0 >= 3));
+    let late = placed(&week, &solve_week(&week, 0.001))
+        .into_iter()
+        .filter(|(id, (day, _, end))| {
+            let (due_day, due_min) = due_point(&week, items[id.as_str()]);
+            let lead = (due_day - now_day) * 1440 + due_min - now_min;
+            lead >= 2 * 1440 && (due_day - day) * 1440 + due_min - end < 1440
+        })
+        .count();
+    assert!(
+        late > 0,
+        "a day's buffer now holds in week 2: turn this into its guard"
+    );
+}
+
+/// Week 2: homework starts within 30 minutes of School's end.
+#[test]
+fn known_failure_homework_starts_right_when_school_ends() {
+    let week = week_named("2");
+    let school = week["blocks"]
+        .as_array()
+        .expect("blocks")
+        .iter()
+        .find(|block| block["id"] == "school")
+        .expect("school");
+    let ends = hhmm_to_minutes(school["start"].as_str().expect("a start")).expect("a time")
+        + school["duration_min"].as_i64().expect("a length");
+    let school_days: Vec<i64> = school["days"]
+        .as_array()
+        .expect("days")
+        .iter()
+        .map(|day| day.as_i64().expect("a day"))
+        .collect();
+    let too_soon = placed(&week, &solve_week(&week, 0.001))
+        .values()
+        .filter(|(day, start, _)| {
+            school_days.contains(day) && ends <= *start && *start < ends + AFTER_SCHOOL_GAP
+        })
+        .count();
+    assert!(
+        too_soon > 0,
+        "the gap after School now holds: turn this into its guard"
+    );
 }
