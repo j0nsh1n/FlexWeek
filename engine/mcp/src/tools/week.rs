@@ -330,14 +330,14 @@ pub(crate) fn split_shown_inputs(
         inputs.push(WeekInput {
             week_start: first_start.to_string(),
             blocks: first_new,
-            revision: first_rev,
+            revision: (first_rev).into(),
         });
     }
     if second_new != second_seen {
         inputs.push(WeekInput {
             week_start: second_start.to_string(),
             blocks: second_new,
-            revision: second_rev,
+            revision: (second_rev).into(),
         });
     }
     Ok(inputs)

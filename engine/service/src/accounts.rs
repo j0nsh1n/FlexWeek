@@ -47,7 +47,8 @@ pub fn checked_password(raw: &str) -> ServiceResult<&str> {
     }
 }
 
-fn checked_code(raw: &str) -> ServiceResult<&str> {
+/// A recovery code as typed: 8 to 64 characters (the code's own shape is checked against the stored ones).
+pub fn checked_code(raw: &str) -> ServiceResult<&str> {
     if (8..=64).contains(&raw.chars().count()) {
         Ok(raw)
     } else {

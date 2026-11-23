@@ -120,6 +120,8 @@ pub enum StoreError {
     Date(String),
     /// A week whose block list uses one id twice: a block is keyed by (user, week, id).
     RepeatedBlockId(String),
+    /// Stored data the rules no longer accept (the app answers these with a server error).
+    Broken(String),
 }
 
 impl std::fmt::Display for StoreError {
@@ -130,6 +132,7 @@ impl std::fmt::Display for StoreError {
             Self::Json { error, .. } => write!(f, "{error}"),
             Self::Io(e) => write!(f, "{e}"),
             Self::Date(msg) => write!(f, "{msg}"),
+            Self::Broken(why) => write!(f, "{why}"),
             Self::RepeatedBlockId(id) => {
                 write!(
                     f,
@@ -170,9 +173,11 @@ mod prefs;
 mod repeats;
 mod routines;
 mod rules;
+pub mod shown_weeks;
 mod standing;
 mod views;
 mod weeks;
+pub mod writes;
 
 pub use accounts::{
     count_recovery_codes, delete_session, find_user, insert_user, password_hash_of,
@@ -184,8 +189,8 @@ pub use assignments::{
     load_assignment_rows, save_assignment,
 };
 pub use changes::{
-    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, WeekInput, apply,
-    apply_within,
+    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, RefusalKind, Revision,
+    WeekInput, apply, apply_within, batch_digest,
 };
 pub use ledger::{
     Recall, capture_account, insert_restore_point, list_restore_points, prune_operations,

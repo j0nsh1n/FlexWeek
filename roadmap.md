@@ -73,8 +73,8 @@ list, all shipped).
 - Status (2026-11-22): P0 [ ] groundwork merged (#142), the upgrade test's real-data step to do. S [ ] Jonathan
   picked "Slint first, Qt only if Slint fails" (2026-11-22). P1 [ ] every route the app's data goes through
   calls Rust (#143-#146, checked by a test since #150); the backend tests' Rust twins: every data test file
-  ported (#148, #149, #150); the Python-binding and server tests go with P2; left: the one change function
-  and the request-check parity test. P2-P8 [ ] planned.
+  ported (#148, #149, #150); the Python-binding and server tests go with P2; one change function for the app and the
+  assistant, and every request check compared with its pydantic model (#151). P2-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)

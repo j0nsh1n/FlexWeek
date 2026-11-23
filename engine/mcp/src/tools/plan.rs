@@ -791,7 +791,7 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
         Some(PlanBasis::Monday { revision }) => vec![WeekInput {
             week_start: args.week_start.clone(),
             blocks: week,
-            revision: *revision,
+            revision: (*revision).into(),
         }],
         Some(PlanBasis::Shown {
             first,
@@ -810,14 +810,14 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
                 inputs.push(WeekInput {
                     week_start: first.clone(),
                     blocks: first_new,
-                    revision: *first_rev,
+                    revision: (*first_rev).into(),
                 });
             }
             if second_new != *second_seen {
                 inputs.push(WeekInput {
                     week_start: second.clone(),
                     blocks: second_new,
-                    revision: *second_rev,
+                    revision: (*second_rev).into(),
                 });
             }
             inputs
@@ -831,7 +831,7 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
         weeks.push(WeekInput {
             week_start: start.to_string(),
             blocks: update["after"].as_array().cloned().unwrap_or_default(),
-            revision: update["revision"].as_i64().unwrap_or(0),
+            revision: (update["revision"].as_i64().unwrap_or(0)).into(),
         });
     }
     let input = ApplyInput {

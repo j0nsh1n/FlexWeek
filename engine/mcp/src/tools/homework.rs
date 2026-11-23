@@ -492,7 +492,7 @@ fn homework_input(edited: Edited, revision: i64) -> Result<ApplyInput, String> {
             .map(|(week_start, blocks, revision)| WeekInput {
                 week_start,
                 blocks,
-                revision,
+                revision: revision.into(),
             })
             .collect(),
         assignments: vec![AssignmentInput {
@@ -900,7 +900,7 @@ impl crate::App {
                     .weeks
                     .into_iter()
                     .map(|week| WeekInput {
-                        revision: revisions.get(&week.week_start).copied().unwrap_or(0),
+                        revision: (revisions.get(&week.week_start).copied().unwrap_or(0)).into(),
                         week_start: week.week_start,
                         blocks: week.blocks,
                     })
@@ -967,7 +967,7 @@ impl crate::App {
                         weeks: vec![WeekInput {
                             week_start: args.week_start.clone(),
                             blocks,
-                            revision: expected,
+                            revision: (expected).into(),
                         }],
                         assignments: Vec::new(),
                         operation_id: None,

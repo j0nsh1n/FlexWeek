@@ -3,8 +3,8 @@
 //! real models) are refused where pydantic refused them, read exactly as `model_dump()` wrote them, and keyed
 //! by the same digest, so a save sent again across the update still finds its first answer.
 
-use flexweek_service::changes::check_changes;
-use flexweek_store::payload_digest;
+use flexweek_service::changes::{check_changes, store_input};
+use flexweek_store::{batch_digest, payload_digest};
 use serde_json::Value;
 
 #[test]
@@ -21,12 +21,16 @@ fn every_generated_save_is_read_and_keyed_as_the_app_read_it() {
     for case in &cases {
         let input = &case["input"];
         let expected = &case["written"];
-        let got = check_changes(input).map(|request| request.to_value());
+        let checked = check_changes(input);
+        let got = checked.as_ref().map(|request| request.to_value());
         let same = match (&got, expected) {
             (Err(_), Value::Null) => true,
             (Ok(read), expected) if !expected.is_null() => {
+                // The key the one change function remembers the save under is the one the app used.
+                let saved_under = batch_digest(&store_input(checked.as_ref().unwrap()));
                 serde_json::to_string(read).unwrap() == serde_json::to_string(expected).unwrap()
                     && case["digest"] == payload_digest(read).as_str()
+                    && case["digest"] == saved_under.as_str()
             }
             _ => false,
         };

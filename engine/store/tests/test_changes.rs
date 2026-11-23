@@ -83,7 +83,7 @@ fn invalid_week_rules_refuse_the_week_without_advancing_its_revision() {
             json!({"id":"same", "title":"A", "kind":"flexible", "duration_min":30, "days":[0]}),
             json!({"id":"same", "title":"B", "kind":"locked", "duration_min":30, "days":[0]}),
         ],
-        revision: 0,
+        revision: (0).into(),
     });
     let result = apply_shown(&conn, user_id, &input);
     assert_eq!(result, Err("block ids must be unique".into()));
@@ -123,6 +123,7 @@ fn shown(result: Result<Value, ApplyFailure>) -> Result<Value, String> {
         Err(ApplyFailure::Refused {
             message,
             current_revision,
+            ..
         }) => Err(match current_revision {
             Some(revision) => format!("{message} @ {revision}"),
             None => message,
@@ -297,7 +298,7 @@ fn the_same_operation_returns_the_first_answer_and_writes_nothing() {
     input.weeks.push(WeekInput {
         week_start: WEEK.into(),
         blocks: vec![math_block()],
-        revision: 0,
+        revision: (0).into(),
     });
     let first = apply_shown(&conn, user_id, &input);
     assert_eq!(
@@ -409,7 +410,7 @@ fn a_later_failure_rolls_the_batch_back() {
     input.weeks.push(WeekInput {
         week_start: WEEK.into(),
         blocks: vec![math_block()],
-        revision: 1,
+        revision: (1).into(),
     });
     assert_eq!(
         apply_shown(&conn, user_id, &input),
@@ -537,7 +538,7 @@ fn a_new_repeat_is_merged_into_the_week_response() {
     input.weeks.push(WeekInput {
         week_start: WEEK.into(),
         blocks: vec![math_block()],
-        revision: 0,
+        revision: (0).into(),
     });
     input.repeats = Some(vec![json!({
         "id": "school", "scope": "from", "from_date": WEEK,
@@ -593,16 +594,16 @@ fn an_assignment_id_must_match_and_must_belong_to_the_account() {
                 let mut input = empty_input();
                 input.weeks.push(WeekInput {
                     week_start: WEEK.into(),
+                    // A study session, which may name homework, so only the ownership rule refuses it.
                     blocks: vec![json!({
                         "id": "s1",
                         "title": "Essay",
-                        "kind": "locked",
+                        "kind": "flexible",
                         "duration_min": 90,
                         "days": [0],
-                        "start": "16:00",
                         "assignment_id": "missing"
                     })],
-                    revision: 0,
+                    revision: (0).into(),
                 });
                 input
             },
