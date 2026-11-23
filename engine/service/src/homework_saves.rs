@@ -6,18 +6,15 @@
 use std::path::Path;
 
 use flexweek_engine::plan;
-use flexweek_engine::snapshot::canonical;
 use flexweek_engine::validate::{assignment_content, whole_number};
-use flexweek_store::{self as store, AssignmentSave};
+use flexweek_store::{self as store};
 use serde_json::{Map, Value};
 
 use crate::accounts::INVALID_INPUT;
 use crate::blocks::{BlockRefused, Checked, refuse};
-use crate::week_saves::ASSIGNMENT_LIMIT;
 use crate::{Refusal, ServiceResult, with_db};
 
-pub const ASSIGNMENT_CONFLICT: &str =
-    "This assignment changed in another window. Reload before saving.";
+pub use flexweek_store::writes::ASSIGNMENT_CONFLICT;
 pub const ID_MISMATCH: &str = "assignment id in the path and body must match";
 const MAX_ASSIGNMENTS: i64 = 1000;
 const REVISION_MAX: i128 = (1 << 53) - 1;
@@ -78,11 +75,9 @@ pub(crate) fn write_homework(
     revision: i64,
     limit: i64,
 ) -> ServiceResult<i64> {
-    match store::save_assignment(conn, user_id, id, &canonical(content), revision, limit)? {
-        AssignmentSave::Conflict => Err(Refusal::Conflict(ASSIGNMENT_CONFLICT.to_string()).into()),
-        AssignmentSave::OverLimit => Err(Refusal::Invalid(ASSIGNMENT_LIMIT.to_string()).into()),
-        AssignmentSave::Ready(stored) => Ok(stored),
-    }
+    Ok(store::writes::write_homework(
+        conn, user_id, id, content, revision, limit,
+    )?)
 }
 
 pub const SPREAD_DONE: &str = "completed assignments cannot be spread";

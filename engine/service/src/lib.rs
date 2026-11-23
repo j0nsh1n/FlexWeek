@@ -72,6 +72,20 @@ impl From<StoreError> for ServiceError {
     }
 }
 
+impl From<flexweek_store::ApplyFailure> for ServiceError {
+    fn from(failure: flexweek_store::ApplyFailure) -> Self {
+        use flexweek_store::{ApplyFailure, RefusalKind};
+        match failure {
+            ApplyFailure::Store(error) => error.into(),
+            ApplyFailure::Refused { kind, message, .. } => Self::Refused(match kind {
+                RefusalKind::Invalid => Refusal::Invalid(message),
+                RefusalKind::NotFound => Refusal::NotFound(message),
+                RefusalKind::Conflict => Refusal::Conflict(message),
+            }),
+        }
+    }
+}
+
 impl From<flexweek_engine::EngineError> for ServiceError {
     fn from(error: flexweek_engine::EngineError) -> Self {
         Self::Store(StoreError::Engine(error))

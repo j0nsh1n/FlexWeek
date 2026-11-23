@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use flexweek_engine::snapshot::{canonical, diff_snapshots, state_token};
-use flexweek_store::{self as store, AssignmentDelete, Connection, Recall, RoutineDelete};
+use flexweek_store::{self as store, Connection, Recall, RoutineDelete};
 use serde_json::{Value, json};
 
 use crate::accounts::INVALID_INPUT;
@@ -14,9 +14,8 @@ use crate::{Refusal, ServiceError, ServiceResult, with_db};
 pub const OPERATION_CONFLICT: &str = "This operation was already used with different data.";
 pub const ROUTINE_UNKNOWN: &str = "Routine not found";
 pub const ROUTINE_CONFLICT: &str = "This routine changed in another window. Reload before saving.";
-pub const HOMEWORK_UNKNOWN: &str = "Assignment not found";
-pub const HOMEWORK_CONFLICT: &str =
-    "This assignment changed in another window. Reload before saving.";
+pub const HOMEWORK_UNKNOWN: &str = store::writes::ASSIGNMENT_MISSING;
+pub const HOMEWORK_CONFLICT: &str = store::writes::ASSIGNMENT_CONFLICT;
 pub const RESTORE_UNKNOWN: &str = "Restore point not found";
 pub const RESTORE_STALE: &str = "This preview is out of date. Refresh it before restoring.";
 const MAX_OPERATIONS: i64 = 100;
@@ -166,18 +165,7 @@ pub(crate) fn remove_homework(
     id: &str,
     revision: Option<i64>,
 ) -> ServiceResult<Value> {
-    match store::delete_assignment(conn, user_id, id, revision)? {
-        AssignmentDelete::Missing => Err(Refusal::NotFound(HOMEWORK_UNKNOWN.to_string()).into()),
-        AssignmentDelete::Conflict => Err(Refusal::Conflict(HOMEWORK_CONFLICT.to_string()).into()),
-        AssignmentDelete::Deleted(text) => {
-            Ok(
-                serde_json::from_str(&text).map_err(|error| store::StoreError::Json {
-                    text: text.clone(),
-                    error,
-                })?,
-            )
-        }
-    }
+    Ok(store::writes::remove_homework(conn, user_id, id, revision)?)
 }
 
 fn parsed(text: &str) -> ServiceResult<Value> {

@@ -177,6 +177,7 @@ pub mod shown_weeks;
 mod standing;
 mod views;
 mod weeks;
+pub mod writes;
 
 pub use accounts::{
     count_recovery_codes, delete_session, find_user, insert_user, password_hash_of,
