@@ -27,8 +27,9 @@
 - Known gaps: Ctrl+wheel zoom in Material fails on Jonathan's Wayland desktop (parked probe in `scratch/ctrl-wheel`;
   named under Known limits in the 1.4.0 notes); Material memory growth (1.9 GB after 49 min, 2026-11-05) is unmeasured
   (also named there); Jonathan ran 1.5.0 (Material only) on a real Windows PC on 2026-11-21, and the rewrite's
-  Windows pieces are not tried yet; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open; `fwtest flaky` lists the tests still logged flaky; the assistant
-  helper's stderr test (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
+  Windows pieces are not tried yet; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open;
+  `fwtest flaky` lists the tests still logged flaky; the assistant helper's stderr test
+  (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
 - 2.0.0 follow-ups after P1: the assistant's own batch save (`store::changes::apply`) does not take a week shown from
   another weekday and orders repeats differently from the app's (`service::changes`); the Python store methods
   `apply_repeat_intents`, `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers;
