@@ -65,7 +65,10 @@ impl From<Refusal> for ServiceError {
 
 impl From<StoreError> for ServiceError {
     fn from(error: StoreError) -> Self {
-        Self::Store(error)
+        match error {
+            StoreError::Broken(why) => Self::Broken(why),
+            other => Self::Store(other),
+        }
     }
 }
 
