@@ -2,13 +2,17 @@
 
 ## Current State (2026-11-22)
 - 2.0.0 (the Rust overhaul; plan `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`) is under way on main,
-  developer builds only until 2.0.0. P0 (#142) and P1 are merged: every route that reads or changes account data calls
-  `flexweek-service` (Rust); health, timer presets, reminder limits and storage info still answer in Python.
+  developer builds only until 2.0.0. P0 (#142) and P1 (#143-#151) are merged: every route that serves data calls
+  `flexweek-service` (Rust), checked by `test_routes_only_decode_call_and_encode`; health and storage info (the
+  server's own facts) answer in Python and go with the server in P2.
   `backend/app.py` keeps HTTP, cookies and request checks; JSON saves hand the service the raw body, sign-in, sign-up,
   recovery and password change pass their parsed fields. P1 PRs: #143
   (one block check, Week and homework saves), #144 (routines, spread, repeat edits, Plan), #145 (the multi-week save),
-  #146 (account export and import). Each move was compared with the old Python route over HTTP and against generated
-  corpora (`engine/service/tests/fixtures`).
+  #146 (account export and import), #148-#150 (the backend tests' Rust twins, ledger `tools/fwtest/port-ledger.toml`),
+  #151 (one change function, `flexweek_store::changes`, for the app and the assistant; account check parity). Each
+  move was compared with the old Python route over HTTP and against generated corpora
+  (`engine/service/tests/fixtures`). The 11 Python backend test files left check the Python bindings or the server
+  and go with them in P2.
 - Main had #140 (Material only, its own Qt Quick window, #118's weekly fixed times) and #137 (the phone 1.4.0 fixes)
   before 1.5.0. Done time is the larger of focus minutes and minutes ticked done (`plan::done_time`).
 - Latest release: v1.5.0, published 2026-11-20 (US time) from main 0effa56f (PR #141). The previous release is
@@ -30,8 +34,7 @@
   Windows pieces are not tried yet; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open;
   `fwtest flaky` lists the tests still logged flaky; the assistant helper's stderr test
   (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
-- 2.0.0 follow-ups after P1: the assistant's own batch save (`store::changes::apply`) does not take a week shown from
-  another weekday and orders repeats differently from the app's (`service::changes`); the Python store methods
+- 2.0.0 follow-ups after P1: `hypothesis` is installed and unused (remove in P2); the Python store methods
   `apply_repeat_intents`, `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers;
   nine corpus generators still count any exception as a refusal
   (`make_transfer_corpus.py` was fixed); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
@@ -115,9 +118,9 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-22: 2.0.0 P1 finished; main a53767de. Every P1 PR had a Grok 4.7 review (PASS) and green CI before merge;
-  stage branches and worktree leftovers are deleted. Next: P2 (no server), which needs Jonathan's answers to the
-  plan's open decisions (plan.md section 10, D6 before P2's first candidate) and his approval of the spec.md wording
-  (section 11) and the roadmap entry (section 12, not applied yet). Run log:
-  `~/.flexweek-ui-harness/scratch/rust-2.0.0/afk-run-2026-11-22.md`.
+- 2026-11-22: 2.0.0 P1's work is merged (main 7cdd8e16, #148-#151). #148, #149 and #151 had a Grok 4.7 PASS; #150's
+  route test went four Grok rounds and Jonathan chose to merge it with the last fix unreviewed (all 14 named
+  bypasses caught). Jonathan marked P1 complete; the 11 Python-binding/server test files go in P2.
+  Next: P2 (no server), per plan.md section 7; spec.md lines it makes untrue are fixed in its PRs (approved
+  2026-11-22). Logs: `~/.flexweek-ui-harness/scratch/rust-2.0.0/p1-twins/plan.md`, `.../p1-finish/plan.md`.
 - 2026-11-20, branch `feat/material-only` (PR #141): released as v1.5.0 (see Current State).
