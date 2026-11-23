@@ -1,30 +1,36 @@
-//! The assistant's batch save, as the app's `POST /api/changes` (`flexweek_service::changes`) saves one. The
-//! batch commits in one `BEGIN IMMEDIATE` or not at all.
+//! The one save for an action that touches several things at once, for the app (`POST /api/changes`,
+//! through `flexweek_service::changes`) and the assistant alike: homework saved and deleted, weeks written
+//! (a Monday is one stored week; a week on screen from another day covers two), School and Setup's
+//! activities changed from a week on, and a restore point made first when the save asks for one. All of it
+//! commits together or not at all, and a save sent again with its operation id gets the first answer back.
+
+use std::collections::BTreeMap;
 
 use flexweek_engine::repeats::parse_intents;
+use flexweek_engine::shown::{
+    compose_shown_week_due, repeat_changes_from_shown_week, shown_parts, split_shown_week,
+};
 use flexweek_engine::snapshot::canonical;
+use flexweek_engine::time::{is_calendar_date, is_week_start};
 use flexweek_engine::validate::{time_block, week_request};
 pub use rusqlite::Connection;
-use rusqlite::{OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
+use crate::shown_weeks::{homework_of, seen_week, shown_week};
+use crate::writes::{
+    MAX_ASSIGNMENTS, WEEK_CONFLICT, conflict, refuse, remove_homework, write_homework, write_week,
+};
 use crate::{
-    Adopted, AssignmentDelete, AssignmentSave, Recall, Relay, RepeatsFailure, StoreError, WeekSave,
-    adopt_legacy_deadlines, apply_repeat_intents, begin_immediate, create_restore_point,
-    delete_assignment, own_assignment_rows, payload_digest, read_week, recall_operation,
-    remember_operation, rewrite_blocks, save_assignment, save_week, standing_blocks,
-    week_with_standing,
+    Recall, RepeatsFailure, StoreError, apply_repeat_intents, begin_immediate,
+    create_restore_point, payload_digest, read_week, recall_operation, remember_operation,
+    standing_blocks, week_with_standing,
 };
 
-const MAX_ASSIGNMENTS: i64 = 1000;
 const MAX_OPERATIONS: i64 = 100;
 const MAX_RESTORE_POINTS: i64 = 20;
-const ASSIGNMENT_CONFLICT: &str =
-    "This assignment changed in another window. Reload before saving.";
-const ASSIGNMENT_LIMIT: &str = "An account holds at most 1000 assignments";
-const ASSIGNMENT_UNKNOWN: &str = "assignment_id must name an assignment of this account";
-const WEEK_CONFLICT: &str = "This week changed in another window. Reload before saving.";
 const OPERATION_CONFLICT: &str = "This operation was already used with different data.";
+const ID_MISMATCH: &str = "assignment id in the path and body must match";
+const SHOWN_WEEK_RULE: &str = "a Monday week has one revision";
 
 #[derive(Debug)]
 pub struct ApplyClock {
@@ -124,13 +130,6 @@ impl From<flexweek_engine::EngineError> for ApplyFailure {
     }
 }
 
-struct WeekOut {
-    week_start: String,
-    blocks: Value,
-    revision: i64,
-    repeats: Value,
-}
-
 pub fn apply(
     conn: &Connection,
     user_id: i64,
@@ -195,8 +194,8 @@ fn apply_tx(
             Recall::Missing => {}
         }
     }
-    let point = if let Some(label) = &input.snapshot_label {
-        Some(create_restore_point(
+    let point = match &input.snapshot_label {
+        Some(label) => Some(create_restore_point(
             conn,
             user_id,
             &clock.restore_token,
@@ -204,39 +203,100 @@ fn apply_tx(
             &clock.now,
             &[],
             MAX_RESTORE_POINTS,
-        )?)
-    } else {
-        None
-    };
-    let assignments = apply_assignments(conn, user_id, &input.assignments)?;
-    let mut weeks = apply_weeks(conn, user_id, &input.weeks)?;
-    let repeats = match &input.repeats {
-        Some(intents) => {
-            let parsed = parse_intents(&Value::Array(intents.clone())).map_err(|m| refuse(&m))?;
-            Some(apply_repeat_intents(conn, user_id, &parsed)?)
-        }
+        )?),
         None => None,
     };
-    for week in &mut weeks {
-        let merged = week_with_standing(conn, user_id, &week.week_start, &canonical(&week.blocks))?;
-        week.blocks = parse_json(&merged)?;
-        week.repeats = Value::Array(standing_blocks(conn, user_id, &week.week_start)?);
+    // A week on screen is checked against its stored weeks as they were before this save began, so homework
+    // deleted in the same save does not count as someone else's change.
+    let mut before = BTreeMap::new();
+    for week in &input.weeks {
+        if let Some((first, second)) = shown_parts_of(&week.week_start)? {
+            for stored_start in [first, second] {
+                if let std::collections::btree_map::Entry::Vacant(slot) = before.entry(stored_start)
+                {
+                    let revision = stored_revision(conn, user_id, slot.key())?;
+                    slot.insert(revision);
+                }
+            }
+        }
     }
-    let mut result = json!({
-        "weeks": weeks.iter().map(week_value).collect::<Vec<_>>(),
-        "assignments": assignments,
-    });
-    if let Some(outcome) = repeats
-        && let Some(object) = result.as_object_mut()
+    let assignments = apply_assignments(conn, user_id, &input.assignments)?;
+    let mut changes = input.repeats.clone();
+    for week in &input.weeks {
+        if let Some(trimmed) = &changes
+            && shown_parts_of(&week.week_start)?.is_some()
+        {
+            // From this week on, on screen: the stored week the shown one starts in keeps the change on its
+            // shown days only, saved below; the repeat changes from the next Monday.
+            changes = Some(repeat_changes_from_shown_week(trimmed, &week.week_start)?);
+        }
+    }
+    // Stored (Monday) weeks first: an Undo that puts back a stored week a week on screen also shows sends
+    // both, and the week on screen then finds them as it means them.
+    let mut ordered = Vec::with_capacity(input.weeks.len());
+    for week in &input.weeks {
+        ordered.push((week, shown_parts_of(&week.week_start)?));
+    }
+    ordered.sort_by_key(|(_, shown)| shown.is_some());
+    let mut repeats: Option<Value> = None;
+    let mut answers = Vec::with_capacity(ordered.len());
+    for (week, shown) in ordered {
+        if let Some((first, second)) = shown {
+            if let Some(changes) = &changes
+                && repeats.is_none()
+            {
+                // A repeat changed from the next Monday stands there before the week on screen is split:
+                // that week's days then match it and keep no copy of their own.
+                repeats = Some(apply_repeats(conn, user_id, changes)?);
+            }
+            save_shown_week(conn, user_id, week, (&first, &second), &before)?;
+            answers.push(WeekAnswer {
+                week_start: week.week_start.clone(),
+                shown: Some((first, second)),
+                blocks: Vec::new(),
+                revision: 0,
+            });
+            continue;
+        }
+        let Revision::Stored(revision) = week.revision else {
+            return Err(refuse(SHOWN_WEEK_RULE));
+        };
+        let (blocks, revision) = write_week(
+            conn,
+            user_id,
+            &week.week_start,
+            checked_input(&week.blocks)?,
+            revision,
+        )?;
+        answers.push(WeekAnswer {
+            week_start: week.week_start.clone(),
+            shown: None,
+            blocks,
+            revision,
+        });
+    }
+    if let Some(changes) = &changes
+        && repeats.is_none()
     {
-        object.insert("repeats".into(), outcome.to_value());
+        // Saved weeks from the change's week on take it here; the open week is in `weeks`, already changed
+        // by the client, so Undo takes back its part only.
+        repeats = Some(apply_repeats(conn, user_id, changes)?);
     }
-    // The point made before this save, so its notice's Undo can put it back (as backend/app.py answers).
-    if let Some(point) = point
-        && let Some(object) = result.as_object_mut()
-    {
-        object.insert("restore_point".into(), point);
+    let mut weeks = Vec::with_capacity(answers.len());
+    for answer in answers {
+        weeks.push(week_answer(conn, user_id, answer, repeats.is_some())?);
     }
+    let mut result = Map::new();
+    result.insert("weeks".into(), Value::Array(weeks));
+    result.insert("assignments".into(), Value::Array(assignments));
+    if let Some(repeats) = repeats {
+        result.insert("repeats".into(), repeats);
+    }
+    if let Some(point) = point {
+        // The point made before this save, so its notice's Undo can put it back.
+        result.insert("restore_point".into(), point);
+    }
+    let result = Value::Object(result);
     if let Some(operation_id) = &input.operation_id {
         remember_operation(
             conn,
@@ -250,12 +310,28 @@ fn apply_tx(
     Ok(result)
 }
 
+/// The blocks a caller sends, checked before anything is written: each reads as a block and the week as a
+/// week, refused with the rule's own words. The app has checked them already, so for it this never refuses.
+fn checked_input(blocks: &[Value]) -> Result<Vec<Value>, ApplyFailure> {
+    let mut checked = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        checked.push(
+            time_block(block)
+                .map(|block| block.to_value())
+                .map_err(|why| refuse(&why))?,
+        );
+    }
+    week_request(&json!({ "blocks": checked })).map_err(|why| refuse(&why))?;
+    Ok(checked)
+}
+
+/// Homework saves first, then deletes, each answered as the app answers it.
 fn apply_assignments(
     conn: &Connection,
     user_id: i64,
     changes: &[AssignmentInput],
 ) -> Result<Vec<Value>, ApplyFailure> {
-    let mut results = Vec::new();
+    let mut results = Vec::with_capacity(changes.len());
     let mut deletes = Vec::new();
     for change in changes {
         let Some(body) = &change.assignment else {
@@ -263,169 +339,155 @@ fn apply_assignments(
             continue;
         };
         if body.get("id").and_then(Value::as_str) != Some(change.id.as_str()) {
-            return Err(refuse("assignment id in the path and body must match"));
+            return Err(refuse(ID_MISMATCH));
         }
-        match save_assignment(
+        let revision = write_homework(
             conn,
             user_id,
             &change.id,
-            &canonical(body),
+            body,
             change.revision,
             MAX_ASSIGNMENTS,
-        )? {
-            AssignmentSave::Ready(revision) => results.push(json!({
-                "id": change.id,
-                "revision": revision,
-                "assignment": body,
-            })),
-            AssignmentSave::Conflict => {
-                return Err(conflict(
-                    ASSIGNMENT_CONFLICT,
-                    assignment_revision(conn, user_id, &change.id)?,
-                ));
-            }
-            AssignmentSave::OverLimit => return Err(refuse(ASSIGNMENT_LIMIT)),
-        }
+        )?;
+        results.push(json!({ "id": change.id, "revision": revision, "assignment": body }));
     }
     for change in deletes {
-        results.push(apply_delete(conn, user_id, change)?);
+        let deleted = remove_homework(conn, user_id, &change.id, Some(change.revision))?;
+        results.push(json!({
+            "id": change.id,
+            "revision": change.revision,
+            "assignment": Value::Null,
+            "changed_weeks": deleted["changed_weeks"],
+            "removed_sessions": deleted["removed_sessions"],
+        }));
     }
     Ok(results)
 }
 
-fn apply_delete(
+/// The stored weeks a week on screen covers when it does not start on a Monday.
+fn shown_parts_of(week_start: &str) -> Result<Option<(String, String)>, ApplyFailure> {
+    if is_week_start(week_start) || !is_calendar_date(week_start) {
+        return Ok(None);
+    }
+    Ok(shown_parts(week_start)?.map(|(first, second, _)| (first, second)))
+}
+
+fn stored_revision(conn: &Connection, user_id: i64, week_start: &str) -> Result<i64, ApplyFailure> {
+    Ok(read_week(conn, user_id, week_start)?.map_or(0, |(_, revision)| revision))
+}
+
+/// Changes the repeats as `changes` say, in every saved week from each change's week on.
+fn apply_repeats(
     conn: &Connection,
     user_id: i64,
-    change: &AssignmentInput,
+    changes: &[Value],
 ) -> Result<Value, ApplyFailure> {
-    match delete_assignment(conn, user_id, &change.id, Some(change.revision))? {
-        AssignmentDelete::Missing => Err(ApplyFailure::Refused {
-            kind: RefusalKind::NotFound,
-            message: "Assignment not found".to_string(),
-            current_revision: None,
-        }),
-        AssignmentDelete::Conflict => Err(conflict(
-            ASSIGNMENT_CONFLICT,
-            assignment_revision(conn, user_id, &change.id)?,
-        )),
-        AssignmentDelete::Deleted(payload) => {
-            let deleted = parse_json(&payload)?;
-            Ok(json!({
-                "id": change.id,
-                "revision": change.revision,
-                "assignment": Value::Null,
-                "changed_weeks": deleted.get("changed_weeks").cloned().unwrap_or(Value::Null),
-                "removed_sessions": deleted.get("removed_sessions").cloned().unwrap_or(Value::Null),
-            }))
+    let intents = parse_intents(&Value::Array(changes.to_vec())).map_err(|why| refuse(&why))?;
+    let outcome = apply_repeat_intents(conn, user_id, &intents)?;
+    // The app read this part back from canonical text, so its keys come out sorted.
+    parse_json(&canonical(&outcome.to_value()))
+}
+
+/// Splits a saved week on screen back into the stored weeks it covers and writes the ones it changed, each
+/// at the revision it had before this save began.
+fn save_shown_week(
+    conn: &Connection,
+    user_id: i64,
+    week: &WeekInput,
+    (first, second): (&str, &str),
+    before: &BTreeMap<String, i64>,
+) -> Result<(), ApplyFailure> {
+    let (first_blocks, first_revision) = seen_week(conn, user_id, first)?;
+    let (second_blocks, second_revision) = seen_week(conn, user_id, second)?;
+    let both: Vec<Value> = first_blocks.iter().chain(&second_blocks).cloned().collect();
+    let homework = homework_of(conn, user_id, &both)?;
+    let now = compose_shown_week_due(&week.week_start, &first_blocks, &second_blocks, &homework)?;
+    if canonical(&Value::Array(week.blocks.clone())) == canonical(&Value::Array(now)) {
+        return Ok(());
+    }
+    if week.revision != Revision::Shown(before[first], before[second]) {
+        return Err(conflict(WEEK_CONFLICT, None));
+    }
+    let (first_new, second_new) = split_shown_week(
+        &week.week_start,
+        &week.blocks,
+        &first_blocks,
+        &second_blocks,
+    )?;
+    for (stored_start, new, seen, revision) in [
+        (first, first_new, first_blocks, first_revision),
+        (second, second_new, second_blocks, second_revision),
+    ] {
+        if new == seen {
+            continue;
+        }
+        write_week(conn, user_id, stored_start, written(new)?, revision)?;
+    }
+    Ok(())
+}
+
+/// Every block written out again; the split came from blocks already checked, so one that no longer reads
+/// came from stored data.
+fn written(blocks: Vec<Value>) -> Result<Vec<Value>, ApplyFailure> {
+    blocks
+        .iter()
+        .map(|block| {
+            time_block(block)
+                .map(|checked| checked.to_value())
+                .map_err(|why| {
+                    StoreError::Broken(format!("a saved block no longer reads: {why}")).into()
+                })
+        })
+        .collect()
+}
+
+/// One week of the answer: the week as `GET /api/week` gives it.
+struct WeekAnswer {
+    week_start: String,
+    shown: Option<(String, String)>,
+    blocks: Vec<Value>,
+    revision: i64,
+}
+
+fn week_answer(
+    conn: &Connection,
+    user_id: i64,
+    answer: WeekAnswer,
+    repeats_changed: bool,
+) -> Result<Value, ApplyFailure> {
+    if let Some((first, second)) = &answer.shown {
+        return Ok(shown_week(
+            conn,
+            user_id,
+            &answer.week_start,
+            (first, second),
+            || {},
+        )?);
+    }
+    let mut stored = Value::Array(answer.blocks).to_string();
+    let mut revision = answer.revision;
+    if repeats_changed {
+        // All weeks rewrites the open week's row too: the answer gives it as now stored.
+        if let Some((text, now)) = read_week(conn, user_id, &answer.week_start)? {
+            stored = text;
+            revision = now;
         }
     }
-}
-
-fn apply_weeks(
-    conn: &Connection,
-    user_id: i64,
-    weeks: &[WeekInput],
-) -> Result<Vec<WeekOut>, ApplyFailure> {
-    let mut saved = Vec::with_capacity(weeks.len());
-    for week in weeks {
-        saved.push(apply_week(conn, user_id, week)?);
-    }
-    Ok(saved)
-}
-
-fn apply_week(conn: &Connection, user_id: i64, week: &WeekInput) -> Result<WeekOut, ApplyFailure> {
-    let mut ids = std::collections::HashSet::new();
-    // Legacy adoption has a different duplicate-id error; keep the validator's sentence.
-    if week.blocks.iter().any(|block| {
-        block
-            .get("id")
-            .and_then(Value::as_str)
-            .is_some_and(|id| !ids.insert(id))
-    }) {
-        week_request(&serde_json::json!({"blocks": week.blocks}))
-            .map_err(|message| refuse(&message))?;
-    }
-    let adopted = match adopt_legacy_deadlines(
+    let blocks = parse_json(&week_with_standing(
         conn,
         user_id,
-        &week.week_start,
-        &Value::Array(week.blocks.clone()),
-        MAX_ASSIGNMENTS,
-        |body| Ok::<_, StoreError>(canonical(body)),
-    ) {
-        Ok(Adopted::OverLimit) => return Err(refuse(ASSIGNMENT_LIMIT)),
-        Ok(Adopted::Blocks(blocks)) => blocks,
-        Err(Relay::Store(error) | Relay::Caller(error)) => return Err(error.into()),
-    };
-    let ids = assignment_ids(&adopted);
-    let (owned, rows) = own_assignment_rows(conn, user_id, &ids)?;
-    if !owned {
-        return Err(refuse(ASSIGNMENT_UNKNOWN));
+        &answer.week_start,
+        &stored,
+    )?)?;
+    let mut fields = Map::new();
+    fields.insert("week_start".into(), Value::from(answer.week_start.as_str()));
+    fields.insert("blocks".into(), blocks);
+    fields.insert("revision".into(), Value::from(revision));
+    let standing = standing_blocks(conn, user_id, &answer.week_start)?;
+    if !standing.is_empty() {
+        fields.insert("repeats".into(), Value::Array(standing));
     }
-    let mut assignments = Map::new();
-    for (id, body, _) in rows {
-        assignments.insert(id, parse_json(&body)?);
-    }
-    let rewritten = rewrite_blocks(&Value::Array(adopted), &Value::Object(assignments))?;
-    let mut dumped = Vec::with_capacity(rewritten.len());
-    for block in rewritten {
-        let parsed = time_block(&block).map_err(|message| refuse(&message))?;
-        dumped.push(parsed.to_value());
-    }
-    week_request(&serde_json::json!({"blocks": dumped})).map_err(|message| refuse(&message))?;
-    let encoded = canonical(&Value::Array(dumped.clone()));
-    let Revision::Stored(stored) = week.revision else {
-        return Err(refuse(
-            "a week on screen from another day is saved through the app's save",
-        ));
-    };
-    let revision = match save_week(conn, user_id, &week.week_start, &encoded, stored)? {
-        WeekSave::Ready(revision) => revision,
-        WeekSave::Conflict => {
-            return Err(conflict(
-                WEEK_CONFLICT,
-                Some(stored_week_revision(conn, user_id, &week.week_start)?),
-            ));
-        }
-    };
-    Ok(WeekOut {
-        week_start: week.week_start.clone(),
-        blocks: Value::Array(dumped),
-        revision,
-        repeats: Value::Array(Vec::new()),
-    })
-}
-
-fn week_value(week: &WeekOut) -> Value {
-    let mut value = json!({
-        "week_start": week.week_start,
-        "blocks": week.blocks,
-        "revision": week.revision,
-    });
-    // As `GET /api/week`: the repeats standing that week, absent when nothing repeats.
-    if week
-        .repeats
-        .as_array()
-        .is_some_and(|repeats| !repeats.is_empty())
-        && let Some(fields) = value.as_object_mut()
-    {
-        fields.insert("repeats".into(), week.repeats.clone());
-    }
-    value
-}
-
-fn assignment_ids(blocks: &[Value]) -> Vec<String> {
-    let mut ids = Vec::new();
-    for block in blocks {
-        let Some(id) = block.get("assignment_id").and_then(Value::as_str) else {
-            continue;
-        };
-        if id.is_empty() || ids.iter().any(|have| have == id) {
-            continue;
-        }
-        ids.push(id.to_string());
-    }
-    ids
+    Ok(Value::Object(fields))
 }
 
 fn batch_value(input: &ApplyInput) -> Value {
@@ -446,31 +508,6 @@ fn batch_value(input: &ApplyInput) -> Value {
     })
 }
 
-fn assignment_revision(
-    conn: &Connection,
-    user_id: i64,
-    id: &str,
-) -> Result<Option<i64>, ApplyFailure> {
-    Ok(conn
-        .query_row(
-            "SELECT revision FROM assignments WHERE user_id = ?1 AND id = ?2",
-            params![user_id, id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(StoreError::from)?)
-}
-
-fn stored_week_revision(
-    conn: &Connection,
-    user_id: i64,
-    week_start: &str,
-) -> Result<i64, ApplyFailure> {
-    Ok(read_week(conn, user_id, week_start)?
-        .map(|(_, revision)| revision)
-        .unwrap_or(0))
-}
-
 fn parse_json(text: &str) -> Result<Value, ApplyFailure> {
     serde_json::from_str(text).map_err(|error| {
         ApplyFailure::Store(StoreError::Json {
@@ -478,22 +515,4 @@ fn parse_json(text: &str) -> Result<Value, ApplyFailure> {
             error,
         })
     })
-}
-
-/// Input the save cannot take.
-fn refuse(message: &str) -> ApplyFailure {
-    ApplyFailure::Refused {
-        kind: RefusalKind::Invalid,
-        message: message.to_string(),
-        current_revision: None,
-    }
-}
-
-/// Something changed in another window, with the revision now stored when there is one.
-fn conflict(message: &str, current_revision: Option<i64>) -> ApplyFailure {
-    ApplyFailure::Refused {
-        kind: RefusalKind::Conflict,
-        message: message.to_string(),
-        current_revision,
-    }
 }

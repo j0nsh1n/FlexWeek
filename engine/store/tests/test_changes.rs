@@ -594,13 +594,13 @@ fn an_assignment_id_must_match_and_must_belong_to_the_account() {
                 let mut input = empty_input();
                 input.weeks.push(WeekInput {
                     week_start: WEEK.into(),
+                    // A study session, which may name homework, so only the ownership rule refuses it.
                     blocks: vec![json!({
                         "id": "s1",
                         "title": "Essay",
-                        "kind": "locked",
+                        "kind": "flexible",
                         "duration_min": 90,
                         "days": [0],
-                        "start": "16:00",
                         "assignment_id": "missing"
                     })],
                     revision: (0).into(),

@@ -35,15 +35,6 @@ pub(crate) fn rewritten(
     Ok(shown_weeks::rewritten(blocks, owned)?)
 }
 
-/// A stored week as the week answer gives it, every block written out in full, and its revision.
-pub(crate) fn seen_week(
-    conn: &Connection,
-    user_id: i64,
-    week_start: &str,
-) -> ServiceResult<(Vec<Value>, i64)> {
-    Ok(shown_weeks::seen_week(conn, user_id, week_start)?)
-}
-
 fn monday_week(conn: &Connection, user_id: i64, week_start: &str) -> ServiceResult<Value> {
     Ok(shown_weeks::monday_week(conn, user_id, week_start)?)
 }

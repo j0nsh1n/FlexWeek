@@ -8,7 +8,7 @@ use std::path::Path;
 
 use flexweek_engine::snapshot::canonical;
 use flexweek_engine::time::is_week_start;
-use flexweek_engine::validate::{time_block, week_request, whole_number};
+use flexweek_engine::validate::{week_request, whole_number};
 use flexweek_store::{self as store, StoreError};
 use serde_json::{Value, json};
 
@@ -54,20 +54,6 @@ pub fn check_saved_week(given: &Value) -> Checked<(String, Vec<Value>, i64)> {
 
 fn invalid() -> ServiceError {
     Refusal::Invalid(INVALID_INPUT.to_string()).into()
-}
-
-/// Every block written out again, as the route's `TimeBlock.model_validate` does after each step.
-pub(crate) fn written(blocks: Vec<Value>) -> ServiceResult<Vec<Value>> {
-    blocks
-        .iter()
-        .map(|block| {
-            time_block(block)
-                .map(|checked| checked.to_value())
-                .map_err(|why| {
-                    ServiceError::Broken(format!("a saved block no longer reads: {why}"))
-                })
-        })
-        .collect()
 }
 
 /// Saves the week from `{"week_start", "blocks", "revision"}` and answers it as `PUT /api/week` does.
@@ -136,6 +122,7 @@ pub fn preview_repeat_edits(path: &Path, user_id: i64, given: &Value) -> Service
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flexweek_engine::validate::time_block;
     use flexweek_testkit::TestDb;
 
     fn school(title: &str) -> Value {
@@ -151,7 +138,10 @@ mod tests {
     fn a_week_that_reaches_the_store_with_a_doubled_id_is_refused_in_words_and_writes_nothing() {
         let db = TestDb::new("doubled-id");
         let user = db.account("alice");
-        let blocks = written(vec![school("School"), school("School again")]).unwrap();
+        let blocks: Vec<Value> = [school("School"), school("School again")]
+            .iter()
+            .map(|block| time_block(block).unwrap().to_value())
+            .collect();
         // Counted inside the save's own transaction, before anything is rolled back: a row written and
         // then refused would show here.
         let (refused, rows) = with_db(&db.path, |conn| {
