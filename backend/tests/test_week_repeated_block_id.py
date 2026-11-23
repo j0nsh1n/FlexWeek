@@ -11,7 +11,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import backend.app as backend_app
 from backend.app import create_app
 from backend.storage import connect
 
@@ -102,41 +101,6 @@ def whole_account(client: TestClient) -> dict:
     exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
     exported.pop("exported_at")
     return {"export": exported, "restore_points": client.get("/api/restore-points").json()}
-
-
-def test_an_import_that_reaches_the_store_with_a_doubled_id_is_refused_and_changes_nothing(
-    client: TestClient, database: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    saved = client.put(
-        "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
-    )
-    assert saved.status_code == 200, saved.text
-    snapshot = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
-    snapshot["preferences"]["theme"] = (
-        "nocturne" if snapshot["preferences"]["theme"] != "nocturne" else "slate"
-    )
-    preview = client.post("/api/account-import/preview", json={"snapshot": snapshot}, headers=WRITE)
-    assert preview.status_code == 200, preview.text
-    before = whole_account(client)
-    weeks_before = stored_weeks(database)
-
-    # The request model is bypassed: the doubled id appears only after it has accepted the file.
-    real_dump = backend_app.dump_blocks
-    monkeypatch.setattr(backend_app, "dump_blocks", lambda blocks: [*real_dump(blocks), *real_dump(blocks)])
-    refused = client.post(
-        "/api/account-import",
-        json={
-            "snapshot": snapshot,
-            "state_token": preview.json()["state_token"],
-            "operation_id": "op-bypass",
-        },
-        headers=WRITE,
-    )
-
-    assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"] == DOUBLED
-    assert stored_weeks(database) == weeks_before
-    assert whole_account(client) == before
 
 
 def test_a_restore_point_with_a_doubled_id_is_refused_and_changes_nothing(

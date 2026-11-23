@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from backend.app import TransferSnapshot, create_app
+from backend.app import create_app
 from backend.storage import initialize
 
 PASSWORD = "a-long-test-password"
@@ -109,28 +109,11 @@ def test_an_old_account_that_chose_12_hour_keeps_it_and_the_stamp_is_applied_onc
         assert clock_of(client) is False
 
 
-def test_a_snapshot_exported_before_the_update_without_a_clock_reads_24_hour() -> None:
-    """The old build left a 24-hour clock out of its export file, as it did off the wire."""
-    snapshot = {
-        "format": 3,
-        "exported_at": "2026-10-01T09:00",
-        "username": "veteran",
-        "weeks": [],
-        "assignments": [],
-        "preferences": {"theme": "system"},
-        "routines": [],
-    }
-    assert TransferSnapshot.model_validate(snapshot).preferences.clock_24h is True
-    twelve = {**snapshot, "preferences": {"theme": "system", "clock_24h": False}}
-    assert TransferSnapshot.model_validate(twelve).preferences.clock_24h is False
-
-
 def test_an_export_always_says_the_clock_so_a_12_hour_file_is_not_read_as_old(tmp_path: Path) -> None:
     with client_for(tmp_path / "export.db") as client:
         register(client, "exporter")
         exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
         assert exported["preferences"]["clock_24h"] is False
-        assert TransferSnapshot.model_validate(exported).preferences.clock_24h is False
         save_clock(client, True)
         exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
         assert exported["preferences"]["clock_24h"] is True

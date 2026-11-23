@@ -790,8 +790,16 @@ fn stored_columns(written: &Value) -> Value {
 
 /// The account's preferences as `GET /api/preferences` answers them.
 pub fn read_preferences(path: &std::path::Path, user_id: i64) -> crate::ServiceResult<Value> {
+    crate::with_db(path, |conn| preferences_on(conn, user_id))
+}
+
+/// `read_preferences` inside the caller's connection.
+pub(crate) fn preferences_on(
+    conn: &flexweek_store::Connection,
+    user_id: i64,
+) -> crate::ServiceResult<Value> {
     use flexweek_store as store;
-    let row = crate::with_db(path, |conn| Ok(store::preference_row(conn, user_id)?))?
+    let row = store::preference_row(conn, user_id)?
         .ok_or_else(|| crate::ServiceError::Broken("the account has no preferences row".into()))?;
     let row: Value = serde_json::from_str(&row).map_err(|error| store::StoreError::Json {
         text: row.clone(),
@@ -837,11 +845,18 @@ pub fn write_preferences(
             crate::accounts::INVALID_INPUT.to_string(),
         ))
     })?;
-    let columns = stored_columns(&written).to_string();
-    crate::with_db(path, |conn| {
-        Ok(flexweek_store::write_preferences(conn, user_id, &columns)?)
-    })?;
+    crate::with_db(path, |conn| store_preferences(conn, user_id, &written))?;
     Ok(written)
+}
+
+/// Checked preferences (as `check_preferences` writes them) stored inside the caller's transaction.
+pub(crate) fn store_preferences(
+    conn: &flexweek_store::Connection,
+    user_id: i64,
+    written: &Value,
+) -> crate::ServiceResult<()> {
+    let columns = stored_columns(written).to_string();
+    Ok(flexweek_store::write_preferences(conn, user_id, &columns)?)
 }
 
 #[cfg(test)]

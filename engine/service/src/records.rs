@@ -191,7 +191,7 @@ fn parsed(text: &str) -> ServiceResult<Value> {
 }
 
 /// The account's weeks and homework as a restore point holds them, as `capture_account` gives them.
-fn captured(conn: &Connection, user_id: i64) -> ServiceResult<Value> {
+pub(crate) fn captured(conn: &Connection, user_id: i64) -> ServiceResult<Value> {
     let raw = parsed(&store::capture_account(conn, user_id)?)?;
     let rows = |name: &str| raw[name].as_array().cloned().unwrap_or_default();
     let mut weeks = Vec::new();

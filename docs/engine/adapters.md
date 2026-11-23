@@ -155,9 +155,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | app | rewrite_stored_blocks | ADAPTER | One engine call; the engine picks which stored blocks are rewritten. |
 | app | assignment_view | ADAPTER | One engine call; the engine adds `planned_min` and `unplanned_min`. |
 | app | require_own_assignments | ADAPTER | One connection call; the engine says whether the account holds every id. Python maps "no" to the 422. |
-| app | payload_digest | ADAPTER | One engine call; the engine hashes the canonical text. |
-| app | insert_restore_point | ADAPTER | One connection call. Python reads `secrets` and the clock and passes both in; the engine names the point, counts, snapshots, protects and prunes. |
-| app | preferences_from_row | ADAPTER | One engine call fills every default; `Preferences` is the pydantic check. |
 | app | naive_now | STAYS | Reads the clock. |
 
 The helpers that saved and deleted homework and wrote a week's row for the routes left `backend/app.py` when those routes moved to the Rust service; the revision check, the cap, and the identical-body shortcut were always in the store.

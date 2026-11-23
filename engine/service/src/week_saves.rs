@@ -211,10 +211,17 @@ mod tests {
         let db = TestDb::new("doubled-id");
         let user = db.account("alice");
         let blocks = written(vec![school("School"), school("School again")]).unwrap();
-        let refused = with_db(&db.path, |conn| {
+        // Counted inside the save's own transaction, before anything is rolled back: a row written and
+        // then refused would show here.
+        let (refused, rows) = with_db(&db.path, |conn| {
             store::begin_immediate(conn)?;
-            write_week(conn, user, "2026-09-14", blocks, 0)
-        });
+            let refused = write_week(conn, user, "2026-09-14", blocks, 0);
+            let rows: i64 = conn
+                .query_row("SELECT count(*) FROM weeks", [], |row| row.get(0))
+                .unwrap();
+            Ok((refused, rows))
+        })
+        .unwrap();
         match refused {
             Err(ServiceError::Refused(Refusal::Invalid(words))) => assert_eq!(
                 words,
@@ -222,12 +229,6 @@ mod tests {
             ),
             other => panic!("not refused in words: {other:?}"),
         }
-        let rows: i64 = with_db(&db.path, |conn| {
-            Ok(conn
-                .query_row("SELECT count(*) FROM weeks", [], |row| row.get(0))
-                .unwrap())
-        })
-        .unwrap();
         assert_eq!(rows, 0);
     }
 }

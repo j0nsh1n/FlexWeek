@@ -7,7 +7,7 @@ use std::path::Path;
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
 use flexweek_service::{
     Refusal, ServiceError, ServiceResult, changes, comfort, homework_saves, plans, preferences,
-    records, views, week_saves, weeks,
+    records, transfer, views, week_saves, weeks,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
@@ -28,6 +28,7 @@ fn service_py(py: Python<'_>, error: ServiceError) -> PyErr {
                 Refusal::NotFound(_) => "not_found",
                 Refusal::Conflict(_) => "conflict",
                 Refusal::TooMany(_) => "too_many",
+                Refusal::TooLarge(_) => "too_large",
             };
             ServiceRefusal::new_err((kind, refusal.words().to_string()))
         }
@@ -613,6 +614,67 @@ fn service_changes(
     })
 }
 
+/// `given` is the request body as JSON text (`{"password"}`); `stamp` is when the file is written.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn service_export_account(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    user_id: i64,
+    username: &str,
+    given: &str,
+    stamp: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given = sent_body(given)?;
+        served_json(py, || {
+            transfer::export_account(
+                Path::new(path),
+                Asker { address, now },
+                &account(user_id, username),
+                &given,
+                stamp,
+            )
+        })
+    })
+}
+
+/// `given` is the request body as JSON text (`{"snapshot"}`).
+#[pyfunction]
+fn service_import_preview(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    given: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given = sent_body(given)?;
+        served_json(py, || {
+            transfer::import_preview(Path::new(path), user_id, &given)
+        })
+    })
+}
+
+/// `given` is the request body as JSON text; `token` names the restore point made first, at `now`.
+#[pyfunction]
+fn service_import_account(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    given: &str,
+    token: &str,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given = sent_body(given)?;
+        served_json(py, || {
+            transfer::import_account(Path::new(path), user_id, &given, token, now)
+        })
+    })
+}
+
 /// A revision as the store reads it: one past 64 bits can match no stored revision.
 fn in_range(revision: &Bound<'_, PyInt>) -> Option<i64> {
     revision.extract::<i64>().ok()
@@ -684,6 +746,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_restore_preview,
         service_restore,
         service_changes,
+        service_export_account,
+        service_import_preview,
+        service_import_account,
         service_create_restore_point,
         service_delete_routine,
         service_delete_homework,

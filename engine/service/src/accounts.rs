@@ -88,7 +88,7 @@ pub struct SignedIn {
     pub recovery_codes: Option<Vec<String>>,
 }
 
-fn throttled(path: &Path, asker: Asker<'_>, username: &str) -> ServiceResult<()> {
+pub(crate) fn throttled(path: &Path, asker: Asker<'_>, username: &str) -> ServiceResult<()> {
     if store::throttle(path, asker.address, username, asker.now)? {
         Ok(())
     } else {
@@ -287,7 +287,11 @@ pub fn logout(path: &Path, token: &str, now: i64, expected_id: Option<&str>) -> 
 
 /// Inside the caller's transaction, so a password changed by another session between the check and
 /// the write cannot still allow the write.
-fn require_password(conn: &Connection, user_id: i64, password: &str) -> ServiceResult<()> {
+pub(crate) fn require_password(
+    conn: &Connection,
+    user_id: i64,
+    password: &str,
+) -> ServiceResult<()> {
     let stored = store::password_hash_of(conn, user_id)?;
     match stored {
         Some(stored) if store::password_matches_index(password, &stored)? => Ok(()),

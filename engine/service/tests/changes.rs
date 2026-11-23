@@ -183,3 +183,74 @@ fn a_save_sent_again_gets_its_first_answer_and_other_data_under_its_name_is_refu
         Refusal::Conflict(OPERATION_CONFLICT.to_string())
     );
 }
+
+/// Each Soccer session in a stored week as (weekday, start).
+fn soccer(week: &Value) -> Vec<(i64, String)> {
+    let mut found = Vec::new();
+    for block in week["blocks"].as_array().unwrap() {
+        if block["title"] != "Soccer" {
+            continue;
+        }
+        for day in block["days"].as_array().unwrap() {
+            found.push((
+                day.as_i64().unwrap(),
+                block["start"].as_str().unwrap().to_string(),
+            ));
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Soccer (Tuesdays and Thursdays at 16:00) moved to 17:00 "from this week on" on the week shown from
+/// Thursday 19 November: from that Thursday on it is at 17:00; the Tuesday before keeps 16:00.
+#[test]
+fn a_repeat_changed_on_the_week_from_thursday_changes_from_that_thursday_on() {
+    let db = TestDb::new("repeat-shown");
+    let user = db.account("alice");
+    let cases: Value =
+        serde_json::from_str(include_str!("../../store/tests/fixtures/repeat_cases.json")).unwrap();
+    save(&db, user, json!({ "weeks": [], "repeats": cases["setup"] })).unwrap();
+    let seen = read(&db, user, "2026-11-19");
+    let moved: Vec<Value> = seen["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|block| {
+            let mut block = block.clone();
+            if block["title"] == "Soccer" {
+                block["start"] = json!("17:00");
+            }
+            block
+        })
+        .collect();
+    let answer = save(
+        &db,
+        user,
+        json!({
+            "weeks": [{ "week_start": "2026-11-19", "blocks": moved, "revision": seen["revision"] }],
+            "repeats": [{ "id": "activity-1", "scope": "from", "from_date": "2026-11-19",
+                          "set": { "start": "17:00" } }],
+        }),
+    )
+    .unwrap();
+    assert!(answer["repeats"].is_object(), "no repeats answer: {answer}");
+    let at = |time: &str, days: &[i64]| -> Vec<(i64, String)> {
+        days.iter().map(|day| (*day, time.to_string())).collect()
+    };
+    let mut first = at("16:00", &[1]);
+    first.extend(at("17:00", &[3]));
+    assert_eq!(soccer(&read(&db, user, "2026-11-16")), first);
+    for later in ["2026-11-23", "2026-11-30"] {
+        assert_eq!(
+            soccer(&read(&db, user, later)),
+            at("17:00", &[1, 3]),
+            "{later}"
+        );
+    }
+    // The change stood from Monday 23rd before the week on screen was split, so that week's days already
+    // matched it: the week keeps no copy of its own, and a later change to Soccer still reaches it.
+    let next = read(&db, user, "2026-11-23");
+    assert_eq!(next["revision"], 0, "the week of 23 November was written");
+    assert_eq!(ids(&next), ["school", "activity-1"]);
+}
