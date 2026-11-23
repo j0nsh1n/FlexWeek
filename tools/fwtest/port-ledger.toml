@@ -376,3 +376,14 @@ rust = [
     "flexweek-service::plan_api::a_block_moved_for_running_late_says_so_in_its_own_sentence",
 ]
 red = "a 45-minute late allowed and the running-late sentence changed each fail their test (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_work_windows.py"
+rust = [
+    "flexweek-service::work_windows::the_day_runs_midnight_to_midnight",
+    "flexweek-service::work_windows::a_week_saves_a_block_at_midnight_and_one_that_ends_at_24_00",
+    "flexweek-service::work_windows::study_hours_may_end_at_midnight_but_not_where_they_start",
+    "flexweek-service::work_windows::plan_without_stored_hours_still_plans_and_says_it_used_the_whole_day",
+    "flexweek-service::work_windows::stored_study_hours_are_kept_and_bind_plan",
+]
+red = "study hours ending where they start allowed, the day ending at 23:45, and the whole-day flag flipped each fail their tests (2026-11-22)"
