@@ -417,13 +417,7 @@ fn an_import_with_more_than_two_hundred_repeats_at_once_is_refused() {
         row
     };
     let rows: Vec<Value> = (0..200)
-        .map(|n| {
-            row(
-                n,
-                &school_row["from_week"].as_str().unwrap().to_string(),
-                true,
-            )
-        })
+        .map(|n| row(n, school_row["from_week"].as_str().unwrap(), true))
         .collect();
     let preview = |standing: Vec<Value>| {
         let mut file = snapshot.clone();
