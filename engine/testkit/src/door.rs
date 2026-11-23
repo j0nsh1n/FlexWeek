@@ -23,6 +23,7 @@ pub enum Target {
     Name(String),
     Words(String),
     WordsWithin(String, String),
+    NameWithin(String, String),
 }
 
 /// The item whose test id is `id`.
@@ -33,6 +34,11 @@ pub fn named(id: &str) -> Target {
 /// The visible item showing exactly `words`.
 pub fn reading(words: &str) -> Target {
     Target::Words(words.to_string())
+}
+
+/// The item whose test id is `id` inside the item whose test id is `within` (a field's input in a sheet).
+pub fn named_within(id: &str, within: &str) -> Target {
+    Target::NameWithin(id.to_string(), within.to_string())
 }
 
 /// The visible item showing exactly `words` inside the item whose test id is `id`.
@@ -46,6 +52,7 @@ impl Target {
             Self::Name(id) => json!({ "name": id }),
             Self::Words(words) => json!({ "words": words }),
             Self::WordsWithin(words, id) => json!({ "words": words, "within": id }),
+            Self::NameWithin(id, within) => json!({ "name": id, "within": within }),
         }
     }
 }
@@ -144,7 +151,15 @@ impl Door {
         let home = folder.join("home");
         std::fs::create_dir_all(&home).expect("door folder");
         let socket = folder.join("door.sock");
-        let child = Command::new(&python)
+        // The real font and QML caches, so each door does not build them again in its own home.
+        let cache = std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")));
+        let mut command = Command::new(&python);
+        if let Some(cache) = cache {
+            command.env("XDG_CACHE_HOME", cache);
+        }
+        let child = command
             .args(["-m", "desktop.tests.door_app", "--door"])
             .arg(&socket)
             .arg("--folder")
@@ -161,21 +176,31 @@ impl Door {
             .unwrap_or_else(|error| panic!("starting {}: {error}", python.display()));
         let mut app = App { child, folder };
         let stdout: ChildStdout = app.child.stdout.take().expect("the app's output");
-        let mut output = BufReader::new(stdout);
-        let mut said = Vec::new();
-        loop {
-            let mut line = String::new();
-            let read = output.read_line(&mut line).expect("the app's output");
-            if read == 0 {
-                panic!("the app ended before opening its door; it said: {said:?}");
+        // Its output is read on a thread: the first "door ready" is passed back, and anything later is read
+        // and dropped, so a full pipe never stops the app. A start that takes too long fails the test.
+        let (ready, started) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut output = BufReader::new(stdout);
+            let mut said = Vec::new();
+            loop {
+                let mut line = String::new();
+                match output.read_line(&mut line) {
+                    Ok(0) | Err(_) => {
+                        let _ = ready.send(Err(said));
+                        return;
+                    }
+                    Ok(_) if line.trim() == "door ready" => break,
+                    Ok(_) => said.push(line),
+                }
             }
-            if line.trim() == "door ready" {
-                break;
-            }
-            said.push(line);
+            let _ = ready.send(Ok(()));
+            let _ = std::io::copy(&mut output, &mut std::io::sink());
+        });
+        match started.recv_timeout(STEP_LIMIT) {
+            Ok(Ok(())) => {}
+            Ok(Err(said)) => panic!("the app ended before opening its door; it said: {said:?}"),
+            Err(_) => panic!("the app did not open its door within {STEP_LIMIT:?}"),
         }
-        // Anything the app prints later is read and dropped, so a full pipe never stops it.
-        std::thread::spawn(move || std::io::copy(&mut output, &mut std::io::sink()));
         let stream = UnixStream::connect(&socket).expect("connect to the door");
         stream
             .set_read_timeout(Some(STEP_LIMIT))

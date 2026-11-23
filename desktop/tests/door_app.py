@@ -30,6 +30,11 @@ def main(argv: list[str]) -> int:
     from PySide6.QtCore import QStandardPaths
     from PySide6.QtWidgets import QApplication
 
+    from desktop.tests.door import SlotErrors
+
+    # Recorded from the start, so an error raised while the window is made is reported too.
+    slot_errors = SlotErrors()
+
     from backend import clock as app_clock
     from backend.tests.fake_clock import CLOCK
 
@@ -54,7 +59,7 @@ def main(argv: list[str]) -> int:
     windows = LightWindows(app, folder / "account", folder / "windows")
     window = windows.open((1280, 800))
     show_material(app, window)
-    door = Door(window, arguments.door)
+    door = Door(window, arguments.door, slot_errors)
     print("door ready", flush=True)
     try:
         return app.exec()

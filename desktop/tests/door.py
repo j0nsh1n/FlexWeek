@@ -5,7 +5,8 @@ Test-only; it goes with the Python host.
 
 Steps (each answers {"ok": true, ...} or {"ok": false, "error": "..."}):
   click {target}            a left click at the middle of a visible item, as the pointer does it
-  key {key}                 a key press in the window: a Qt key name without "Key_" ("Return", "Down")
+  key {key}                 a key press in the window: a Qt key name without "Key_" ("Return", "Down"),
+                            after "ctrl+", "shift+" or "alt+" for a key held with them ("ctrl+N")
   type {text}               the text typed, one key at a time, into the item that has the keyboard
   focus {target}            give the item the keyboard, where a test starts keys from
   read {target}             {found, name, text, enabled, focused, visible}
@@ -13,11 +14,14 @@ Steps (each answers {"ok": true, ...} or {"ok": false, "error": "..."}):
   pump {turns}              let the window run that many turns of its event loop
   app                       {week_start, selected_month, screen}: what the session holds (the Python host's
                             stand-in for the view state the Rust core will expose)
+  slot_error                a slot that raises on the next turn of the event loop (the door's own test of
+                            the report below)
 A target is {"name": objectName} or {"words": the text a student reads}, optionally with "within": the
 objectName of the item to look inside (the "20" in the date picker's month, not another "20"). Names are
 looked for among painted items first, so a Repeater's rows are found too.
 
-An error raised inside a Qt slot while a step ran fails that step, as the Python suite fails a test on one.
+An error raised inside a Qt slot, at start or while the app ran between steps or during one, fails the next
+step's answer, as the Python suite fails a test on one; it is also printed, so it is never lost.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QObject, QPoint, Qt
+from PySide6.QtCore import QObject, QPoint, Qt, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -52,7 +56,29 @@ def _visuals(item: QObject) -> list[QObject]:
     return found
 
 
+MODIFIERS = {
+    "ctrl": Qt.KeyboardModifier.ControlModifier,
+    "shift": Qt.KeyboardModifier.ShiftModifier,
+    "alt": Qt.KeyboardModifier.AltModifier,
+}
+
+
+class SlotErrors:
+    """Errors raised inside Qt slots, kept from before the door opens until a step's answer reports them."""
+
+    def __init__(self) -> None:
+        self.raised: list[str] = []
+        sys.excepthook = self.record
+
+    def record(self, kind: type[BaseException], error: BaseException, trace: object) -> None:
+        told = "".join(traceback.format_exception(kind, error, trace))  # type: ignore[arg-type]
+        print(told, file=sys.stderr, flush=True)
+        self.raised.append(told)
+
+
 def _named(root: QObject, name: str) -> QObject | None:
+    if not name:
+        return None
     for item in _visuals(root):
         if str(item.objectName() or "") == name:
             return item
@@ -62,14 +88,13 @@ def _named(root: QObject, name: str) -> QObject | None:
 class Door(QObject):
     """Answers one test at a time on `path`, on the window's thread."""
 
-    def __init__(self, window: NativeWindow, path: str) -> None:
+    def __init__(self, window: NativeWindow, path: str, slot_errors: SlotErrors) -> None:
         super().__init__(window)
         self._window = window
         self._buffer = b""
         self._busy = False
         self._socket: QLocalSocket | None = None
-        self._slot_errors: list[str] = []
-        sys.excepthook = self._record
+        self._slot_errors = slot_errors
         QLocalServer.removeServer(path)
         self._server = QLocalServer(self)
         if not self._server.listen(path):
@@ -84,16 +109,15 @@ class Door(QObject):
             "property": self._property,
             "pump": self._pump,
             "app": self._app,
+            "slot_error": self._slot_error,
         }
-
-    def _record(self, kind: type[BaseException], error: BaseException, trace: object) -> None:
-        self._slot_errors.append("".join(traceback.format_exception(kind, error, trace)))  # type: ignore[arg-type]
 
     def _accept(self) -> None:
         socket = self._server.nextPendingConnection()
         if socket is None:
             return
         if self._socket is not None:
+            self._socket.readyRead.disconnect(self._incoming)
             self._socket.disconnectFromServer()
         self._socket = socket
         self._buffer = b""
@@ -111,13 +135,16 @@ class Door(QObject):
         try:
             while b"\n" in self._buffer:
                 line, self._buffer = self._buffer.split(b"\n", 1)
-                socket.write(json.dumps(self._answer(line)).encode() + b"\n")
+                answer = json.dumps(self._answer(line)).encode() + b"\n"
+                # A new connection while the step ran takes over: this answer belonged to the old one.
+                if socket is not self._socket:
+                    return
+                socket.write(answer)
                 socket.flush()
         finally:
             self._busy = False
 
     def _answer(self, line: bytes) -> dict:
-        self._slot_errors.clear()
         try:
             asked = json.loads(line)
             if not isinstance(asked, dict):
@@ -128,8 +155,9 @@ class Door(QObject):
             answer = {"ok": True, **step(asked)}
         except Exception as error:  # every line gets an answer; the test hears what went wrong
             return {"ok": False, "error": f"{type(error).__name__}: {error}"}
-        if self._slot_errors:
-            raised = "\n".join(self._slot_errors)
+        if self._slot_errors.raised:
+            raised = "\n".join(self._slot_errors.raised)
+            self._slot_errors.raised.clear()
             return {"ok": False, "error": f"an error was raised inside a Qt slot:\n{raised}"}
         return answer
 
@@ -177,7 +205,7 @@ class Door(QObject):
 
     def _click(self, asked: dict) -> dict:
         item = self._item(asked)
-        if not item.isVisible():
+        if not (hasattr(item, "isVisible") and item.isVisible()):
             raise StepRefused(f"{asked.get('target')} is not on screen")
         spot = item.mapToScene(item.boundingRect().center())
         QTest.mouseClick(self._quick(), Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y())))
@@ -185,10 +213,17 @@ class Door(QObject):
         return {}
 
     def _key(self, asked: dict) -> dict:
-        key = getattr(Qt.Key, f"Key_{asked['key']}", None)
+        *held, name = str(asked["key"]).split("+")
+        modifiers = Qt.KeyboardModifier.NoModifier
+        for part in held:
+            modifier = MODIFIERS.get(part.lower())
+            if modifier is None:
+                raise StepRefused(f"no modifier called {part!r}")
+            modifiers |= modifier
+        key = getattr(Qt.Key, f"Key_{name}", None)
         if key is None:
-            raise StepRefused(f"no key called {asked['key']!r}")
-        QTest.keyClick(self._quick(), key)
+            raise StepRefused(f"no key called {name!r}")
+        QTest.keyClick(self._quick(), key, modifiers)
         self._turns(10)
         return {}
 
@@ -213,9 +248,9 @@ class Door(QObject):
             "found": True,
             "name": str(item.objectName() or ""),
             "text": text if isinstance(text, str) else "",
-            "enabled": bool(item.isEnabled()),
+            "enabled": bool(item.isEnabled()) if hasattr(item, "isEnabled") else True,
             "focused": bool(item.property("activeFocus")),
-            "visible": bool(item.isVisible()),
+            "visible": bool(item.isVisible()) if hasattr(item, "isVisible") else False,
         }
 
     def _property(self, asked: dict) -> dict:
@@ -226,6 +261,13 @@ class Door(QObject):
 
     def _pump(self, asked: dict) -> dict:
         self._turns(int(asked.get("turns") or 10))
+        return {}
+
+    def _slot_error(self, _asked: dict) -> dict:
+        def raises() -> None:
+            raise RuntimeError("raised on purpose by the door's slot_error step")
+
+        QTimer.singleShot(0, raises)
         return {}
 
     def _app(self, _asked: dict) -> dict:
