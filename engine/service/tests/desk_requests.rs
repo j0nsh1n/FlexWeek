@@ -5,7 +5,7 @@
 
 use flexweek_service::desk_requests::{
     Answer, Clock, DATE_RULE, MONTH_RULE, NOT_ALLOWED, NOT_FOUND, REVISION_REQUIRED, Request,
-    STORAGE_UNAVAILABLE, Session, TOO_LARGE, WEEK_START_RULE, answer,
+    SERVER_ERROR, STORAGE_UNAVAILABLE, Session, TOO_LARGE, WEEK_START_RULE, answer,
 };
 use flexweek_service::plans;
 use flexweek_testkit::{Counting, TestDb};
@@ -366,4 +366,84 @@ fn storage_info_says_this_device_and_the_transfer_limit() {
         json!({ "mode": "local", "label": "On this device", "username": "ana",
                 "transfer_limit_bytes": 262_144 })
     );
+}
+
+#[test]
+fn a_percent_sign_without_two_hex_digits_stays_as_written() {
+    let db = TestDb::new("desk-percent");
+    let mut ana = Window::signed_up(&db, "ana");
+    let routine = json!({ "id": "r%+1", "name": "Morning", "blocks": [], "revision": 0 });
+    let saved = ana.json("PUT", "/api/routines/r%+1", routine);
+    assert_eq!(saved.status, 200, "{saved:?}");
+}
+
+#[test]
+fn bytes_that_are_not_text_are_read_as_a_replacement_character_not_refused() {
+    let db = TestDb::new("desk-bytes");
+    let mut window = Window::new(&db);
+    assert_eq!(window.send("GET", "/api/health?x=%FF", "").status, 200);
+    refused(
+        &window.send("GET", "/api/week?week_start=%FF", ""),
+        401,
+        "Please sign in",
+    );
+    refused(&window.send("GET", "/api/nothing%FF", ""), 404, NOT_FOUND);
+    let mut ana = Window::signed_up(&db, "ana");
+    let routine = json!({ "id": "r\u{fffd}", "name": "Morning", "blocks": [], "revision": 0 });
+    let saved = ana.json("PUT", "/api/routines/r%FF", routine);
+    assert_eq!(saved.status, 200, "{saved:?}");
+}
+
+#[test]
+fn an_empty_path_segment_names_no_route() {
+    let db = TestDb::new("desk-empty-segment");
+    let mut ana = Window::signed_up(&db, "ana");
+    refused(
+        &ana.send("GET", "/api/restore-points//preview", ""),
+        404,
+        NOT_FOUND,
+    );
+    refused(
+        &ana.send("POST", "/api/assignments//spread", "{}"),
+        404,
+        NOT_FOUND,
+    );
+    refused(
+        &ana.send("DELETE", "/api/routines/?revision=1", ""),
+        404,
+        NOT_FOUND,
+    );
+}
+
+#[test]
+fn the_first_day_is_checked_before_the_month_is_asked_for() {
+    let db = TestDb::new("desk-first-day");
+    let mut ana = Window::signed_up(&db, "ana");
+    refused(&ana.send("GET", "/api/month?first_day=7", ""), 422, INVALID);
+    refused(
+        &ana.send("GET", "/api/month?first_day=6", ""),
+        422,
+        MONTH_RULE,
+    );
+}
+
+#[test]
+fn a_clock_that_is_not_a_date_is_a_server_error_not_a_panic() {
+    let db = TestDb::new("desk-odd-clock");
+    let mut ana = Window::signed_up(&db, "ana");
+    let request = Request {
+        method: "GET",
+        path: "/api/week",
+        body: "",
+        token: &ana.token,
+        account: None,
+    };
+    let clock = Clock {
+        seconds: SECONDS,
+        now: "2026-11-0\u{e9}T19:00",
+        restore_token: "0123456789abcdef",
+        stopwatch: &no_time,
+    };
+    let answer = answer(&db.path, &request, &clock, &mut ana.entropy);
+    refused(&answer, 500, SERVER_ERROR);
 }

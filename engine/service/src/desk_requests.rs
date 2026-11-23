@@ -3,6 +3,11 @@
 //! module reads the path and the body, checks the session, calls the service, and answers with the status
 //! and body the local server gave. The session token travels beside the request instead of in a cookie,
 //! and an answer that starts or ends a session says so.
+//!
+//! Two differences from the server, on purpose: a path segment is decoded on its own, so an id holding
+//! an escaped `/` is one id (the server decoded the whole path first and found no route), and the session
+//! is checked before the body is read, so a malformed body from someone signed out hears "Please sign in"
+//! (the window only sends JSON it wrote).
 
 use std::path::Path;
 
@@ -140,8 +145,9 @@ fn invalid(words: &str) -> ServiceError {
     Refusal::Invalid(words.to_string()).into()
 }
 
-/// `%XX` decoded; `+` is a space only in a query.
-fn decoded(raw: &str, query: bool) -> ServiceResult<String> {
+/// `%XX` decoded (two hex digits, or the `%` stays as written), `+` a space only in a query, and bytes
+/// that are not UTF-8 read as U+FFFD: as Python's `unquote` and `unquote_plus` read them.
+fn decoded(raw: &str, query: bool) -> String {
     let bytes = raw.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;
@@ -150,6 +156,7 @@ fn decoded(raw: &str, query: bool) -> ServiceResult<String> {
             b'%' => {
                 let pair = bytes
                     .get(at + 1..at + 3)
+                    .filter(|hex| hex.iter().all(u8::is_ascii_hexdigit))
                     .and_then(|hex| std::str::from_utf8(hex).ok())
                     .and_then(|hex| u8::from_str_radix(hex, 16).ok());
                 match pair {
@@ -173,19 +180,22 @@ fn decoded(raw: &str, query: bool) -> ServiceResult<String> {
             }
         }
     }
-    String::from_utf8(out).map_err(|_| invalid(INVALID_INPUT))
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 struct Query(Vec<(String, String)>);
 
 impl Query {
-    fn parse(raw: &str) -> ServiceResult<Self> {
-        let mut pairs = Vec::new();
-        for part in raw.split('&').filter(|part| !part.is_empty()) {
-            let (name, value) = part.split_once('=').unwrap_or((part, ""));
-            pairs.push((decoded(name, true)?, decoded(value, true)?));
-        }
-        Ok(Self(pairs))
+    fn parse(raw: &str) -> Self {
+        let pairs = raw
+            .split('&')
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                let (name, value) = part.split_once('=').unwrap_or((part, ""));
+                (decoded(name, true), decoded(value, true))
+            })
+            .collect();
+        Self(pairs)
     }
 
     /// The last value given for `name`, as the server read a repeated name.
@@ -302,12 +312,14 @@ fn routed(
     let Some(rest) = path.strip_prefix("/api/") else {
         return Ok(Answer::refused(404, NOT_FOUND));
     };
-    let parts = rest
-        .split('/')
-        .map(|part| decoded(part, false))
-        .collect::<ServiceResult<Vec<_>>>()?;
+    // Each segment is decoded on its own, so an id holding an escaped `/` stays one id. An empty segment
+    // names no route, as a path parameter is never empty.
+    let parts: Vec<String> = rest.split('/').map(|part| decoded(part, false)).collect();
+    if parts.iter().any(String::is_empty) {
+        return Ok(Answer::refused(404, NOT_FOUND));
+    }
     let parts: Vec<&str> = parts.iter().map(String::as_str).collect();
-    let query = Query::parse(query)?;
+    let query = Query::parse(query);
     let asker = Asker {
         address: LOCAL_ADDRESS,
         now: clock.seconds,
@@ -396,7 +408,7 @@ fn routed(
             let account = user()?;
             let start = match query.get("week_start") {
                 Some(start) => start.to_string(),
-                None => flexweek_engine::time::monday_of(&clock.now[..10.min(clock.now.len())])
+                None => flexweek_engine::time::monday_of(clock.now.get(..10).unwrap_or(clock.now))
                     .map_err(|error| ServiceError::Broken(error.message))?,
             };
             Answer::ok(weeks::read_week(store, account.id, &start)?)
@@ -415,10 +427,9 @@ fn routed(
             let account = user()?;
             let first_day = match query.whole("first_day")? {
                 None => 0,
-                // The month view holds the 0 to 6 rule.
-                Some(day) => day
-                    .and_then(|day| u32::try_from(day).ok())
-                    .ok_or_else(|| invalid(INVALID_INPUT))?,
+                // Checked before the month, as the server checked its query values first.
+                Some(Some(day @ 0..=6)) => day as u32,
+                Some(_) => return Err(invalid(INVALID_INPUT)),
             };
             let month = query.get("month").ok_or_else(|| invalid(MONTH_RULE))?;
             Answer::ok(views::month(
