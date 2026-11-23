@@ -45,7 +45,6 @@ DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 MONTH_RULE = "month must be YYYY-MM between 2000-01 and 2099-12"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
-TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
 MAX_ASSIGNMENTS = 1000
 # The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
 REFUSAL_STATUS = {
