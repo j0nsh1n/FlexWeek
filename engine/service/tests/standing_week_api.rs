@@ -151,6 +151,10 @@ fn export(db: &TestDb, who: &SignedIn) -> Value {
     .unwrap()
 }
 
+fn invalid(result: Result<Value, ServiceError>) -> bool {
+    matches!(result, Err(ServiceError::Refused(Refusal::Invalid(_))))
+}
+
 fn import(db: &TestDb, user: i64, snapshot: &Value) -> Result<Value, ServiceError> {
     let preview = import_preview(&db.path, user, &json!({ "snapshot": snapshot })).unwrap();
     import_account(
@@ -432,22 +436,26 @@ fn an_import_with_more_than_two_hundred_repeats_at_once_is_refused() {
     );
     let mut over = vec![school_row.clone()];
     over.extend(rows.iter().cloned());
-    assert!(preview(over).is_err());
+    assert!(invalid(preview(over)));
     // One that stops makes room for one that starts the same week.
     let mut stopped = rows[0].clone();
     stopped["from_week"] = json!(NEXT_WEEK);
     stopped["body"] = Value::Null;
-    let starts = row(200, NEXT_WEEK, true);
+    // As the original: row 1 (place 1) copied, starting next week under a new id.
+    let mut starts = rows[1].clone();
+    starts["id"] = json!("weekly-0200");
+    starts["from_week"] = json!(NEXT_WEEK);
+    starts["body"] = with(school_row["body"].clone(), json!({ "id": "weekly-0200" }));
     let mut swapped = rows.clone();
     swapped.extend([stopped, starts.clone()]);
     assert!(preview(swapped).is_ok());
     let mut added = rows.clone();
     added.push(starts);
-    assert!(preview(added).is_err());
+    assert!(invalid(preview(added)));
     // The 200th repeat takes place 199; a 201st place is refused.
     let mut place_200 = school_row.clone();
     place_200["position"] = json!(200);
-    assert!(preview(vec![place_200]).is_err());
+    assert!(invalid(preview(vec![place_200])));
 }
 
 #[test]

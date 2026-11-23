@@ -118,7 +118,10 @@ fn a_homework_due_at_any_minute_is_kept_and_written_with_every_field() {
 
 #[test]
 fn a_homework_with_a_field_the_app_does_not_know_is_refused() {
-    refused_homework(json!({ "planned_min": 30 }));
+    assert_eq!(
+        refused_homework(json!({ "planned_min": 30 })),
+        "Extra inputs are not permitted"
+    );
 }
 
 #[test]
@@ -230,11 +233,7 @@ fn a_break_chunk_or_a_fixed_block_cannot_be_a_homework_session() {
 fn a_flexible_session_and_a_pomodoro_work_chunk_can_be_homework_sessions() {
     let flexible = time_block(&session(json!({}))).unwrap().to_value();
     assert_eq!(flexible["assignment_id"], "hw-essay");
-    assert!(
-        flexible
-            .get("focus_minutes")
-            .is_none_or(|minutes| minutes == 0)
-    );
+    assert_eq!(time_block(&session(json!({}))).unwrap().focus_minutes, 0);
     assert!(flexible["latest"].is_null());
     let work = json!({
         "kind": "locked", "start": "16:00", "duration_min": 30, "pomodoro_parent_id": "essay",

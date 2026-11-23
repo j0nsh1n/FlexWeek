@@ -5,7 +5,7 @@ history and in `CHANGELOG.md` (pruned 2026-11-06: Phase 8, 1.1.1, the 0.18.x ser
 list, all shipped).
 
 ## Where things stand (2026-11-22)
-- v1.4.0 is the latest release (2026-11-17, PR #138): the week can start on any day, Plan and Replan move a session
+- v1.4.0 (2026-11-17, PR #138), the release before 1.5.0: the week can start on any day, Plan and Replan move a session
   whose time passed unfinished, School and activity changes across weeks, Material drag, menus and the Dragging step,
   the assistant helper's live clock and Spread over days. Its Android app was built from main, without PR #137.
 - Hack Club certificate: README (#139) merged and the gallery PR (hackclub/capitol#82) open; Jonathan submits the
@@ -47,10 +47,9 @@ list, all shipped).
   can work slowly." 2.0.0 ships with no Python inside. Screens: the Week screen is built two ways and measured
   before choosing (today's QML driven from Rust, or redrawn in a Rust-native toolkit). The desktop tests move
   to Rust; a Python test goes only once its Rust twin passes. Plan:
-  `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`.
+  `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`. Starts after 1.5.1.
 - P0 Groundwork. Complete when: a dummy package shaped like 2.0.0 passes the upgrade test from 1.5.0 on all
-  four package kinds, and the new crates build in CI. The real-data check updates a copy of Jonathan's own 1.5.0
-  account on this computer (his pick, 2026-11-22), as a local release step.
+  four package kinds, and the new crates build in CI.
 - S Comparison spike. Complete when: its report has download size, start time, memory over an hour, frame
   rate at 360 Hz, the look comparison and the code size for both ways and for 1.5.0, and Jonathan has picked.
 - P1 Service layer. Complete when: every route in `backend/app.py` only calls Rust, and each backend test has
@@ -67,11 +66,13 @@ list, all shipped).
   holds the screen's rate at 360 Hz, and Jonathan has used a developer build.
 - P8 Switch and release. Complete when: v2.0.0 is the latest release with all ten files and checked
   checksums, the packages hold no Python, and a 1.5.0 install updated itself with its account, schedule,
-  looks, alarms and phones kept. Jonathan tries each milestone's Windows build on a real PC (after P2, P5, P7
-  and the release).
+  looks, alarms and phones kept.
+- Decisions (2026-11-22): the upgrade test's real-data check updates a copy of Jonathan's own 1.5.0 account
+  on this computer, as a local release step; Jonathan tries each milestone's Windows build on a real PC
+  (after P2, P5, P7 and the release).
 - Status (2026-11-22): P0 [ ] groundwork merged (#142), the upgrade test's real-data step to do. S [ ] Jonathan
   picked "Slint first, Qt only if Slint fails" (2026-11-22). P1 [ ] every route the app's data goes through
-  calls Rust (#143-#147); the backend tests' Rust twins in progress. P2-P8 [ ] planned.
+  calls Rust (#143-#146); the backend tests' Rust twins in progress. P2-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
