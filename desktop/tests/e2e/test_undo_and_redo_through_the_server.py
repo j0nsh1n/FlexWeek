@@ -1,4 +1,4 @@
-"""Undo and Redo against the real local server. Expected values follow frontend/history.js."""
+"""Undo and Redo against the real service and saved data. Expected values follow frontend/history.js."""
 
 from __future__ import annotations
 

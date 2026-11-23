@@ -1,4 +1,4 @@
-"""Moving a block to another date, against the real local server. Saved weeks are read back from it."""
+"""Moving a block to another date, against the real service. Saved weeks are read back from it."""
 
 from __future__ import annotations
 

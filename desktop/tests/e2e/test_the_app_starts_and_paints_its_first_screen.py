@@ -61,9 +61,12 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert cast(int, report["material_painted_colors"]) >= PAINTED_MIN_COLORS
     assert not (tmp_path / "data").exists() or not any((tmp_path / "data").rglob("flexweek.db"))
     assert list((tmp_path / "tmp").glob("flexweek-smoke-*")) == []
-    # Started as the app starts, phone sync set up and no phone paired: no network port (None where
-    # the system's socket tables cannot be read).
-    assert report["listening"] in ([], None), report["listening"]
+    # Started as the app starts, phone sync set up and no phone paired: no network port. Linux must
+    # report it; elsewhere the socket tables cannot be read (None).
+    if sys.platform.startswith("linux"):
+        assert report["listening"] == [], report["listening"]
+    else:
+        assert report["listening"] in ([], None), report["listening"]
 
 
 def test_the_old_hosted_server_setting_is_not_read(tmp_path: Path) -> None:

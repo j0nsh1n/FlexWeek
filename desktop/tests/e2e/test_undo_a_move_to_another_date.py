@@ -1,4 +1,4 @@
-"""Undoing a move between weeks, against the real local server. Saved weeks are read back from it."""
+"""Undoing a move between weeks, against the real service. Saved weeks are read back from it."""
 
 from __future__ import annotations
 

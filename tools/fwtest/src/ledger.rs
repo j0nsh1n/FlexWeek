@@ -157,8 +157,10 @@ pub fn check(checkout: &Path, base: &str) -> Result<(), String> {
         |path| tracked.contains(path) && checkout.join(path).is_file(),
         &ledger,
     );
+    let present = |path: &str| tracked.contains(path) && checkout.join(path).is_file();
     for row in ledger.port.iter().filter(|row| !row.gone.trim().is_empty()) {
-        if !tracked.contains(&row.python) {
+        // Only the files this branch deleted, not every gone row the base already accepted.
+        if base_files.contains(&row.python) && !present(&row.python) {
             println!("gone, not ported: {} ({})", row.python, row.gone.trim());
         }
     }

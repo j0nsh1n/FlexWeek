@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 # Build the FlexWeek Windows desktop shell (onedir standalone).
 #
-# Mirror of desktop/build_linux.sh: the FastAPI backend is compiled into the
-# desktop process, so dist\FlexWeek-Windows
-# runs with no Python install and no separate server. The window is native Qt
+# Mirror of desktop/build_linux.sh: the window asks the Rust service in its own
+# process, so dist\FlexWeek-Windows
+# runs with no Python install and no server. The window is native Qt
 # widgets. Onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #
 # This script never deletes or overwrites existing artifacts. Nuitka compiles

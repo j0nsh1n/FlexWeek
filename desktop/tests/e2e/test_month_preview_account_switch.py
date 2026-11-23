@@ -1,6 +1,6 @@
 # ruff: noqa: F811
 """The Settings month preview never shows one account's homework to the next account signed in on the
-same computer. Signing out and creating a second account needs the real local server, so this one
+same computer. Signing out and creating a second account needs the real service and saved data, so this one
 stays end to end."""
 
 from __future__ import annotations

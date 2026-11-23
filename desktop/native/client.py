@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import secrets
+import weakref
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -422,13 +423,21 @@ class NativeClient(QObject):
         timer.start(REQUEST_TIMEOUT_MS)
         seconds, now, restore = self._clock()
         arguments = (self.database, method, path, encoded, self._token, account_id, seconds, now, restore)
-        answered = self._courier.answered
+        # Only a weak reference rides with the work: the worker's own hold on the courier is taken just
+        # to send and let go before the work ends, while the client or _RETIRED still holds it, so the
+        # last hold is never the worker's and the courier is never freed on its thread.
+        courier = weakref.ref(self._courier)
 
         def work() -> None:
             answer = ask(*arguments)
-            # The window may have closed while the service answered; then no one is left to tell.
-            with contextlib.suppress(RuntimeError):
-                answered.emit(number, answer)
+            target = courier()
+            try:
+                # The window may have closed while the service answered; then no one is left to tell.
+                if target is not None:
+                    with contextlib.suppress(RuntimeError):
+                        target.answered.emit(number, answer)
+            finally:
+                target = None
 
         future = _workers().submit(work)
         self._running.add(future)

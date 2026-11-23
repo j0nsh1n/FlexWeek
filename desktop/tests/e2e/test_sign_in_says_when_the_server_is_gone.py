@@ -69,6 +69,8 @@ def test_sign_in_says_when_no_answer_comes_in_time(
     finally:
         stuck.set()
     assert answered.wait(5)
+    # Until the worker is done, the late answer may not be on its way to the window yet.
+    wait_until(qapp, lambda: not window.session.client._running)
     for _ in range(20):
         qapp.processEvents()
     assert window.session.client.session_token() is None

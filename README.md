@@ -96,7 +96,7 @@ The Linux downloads include a helper that lets an AI assistant you already use (
 
 - **Desktop app**: Python 3.14 with Qt (PySide6), Widgets and QML (Material 3).
 - **Planner and storage**: Rust (`engine/`), built into a Python module with PyO3 and maturin; SQLite (rusqlite).
-- **Local API**: FastAPI and Pydantic, started inside the app on a loopback port.
+- **Saved data**: the Rust service answers the window in the same process; there is no server.
 - **Phone app**: Android, Kotlin with Jetpack Compose, calling the same Rust engine through UniFFI; sync uses iroh.
 - **Packaging**: Linux tarball and AppImage, Windows installers (Inno Setup and WiX), built on GitHub Actions.
 
@@ -117,8 +117,7 @@ On Linux, pip's PySide6 does not include the X11 helpers and keyboard libraries 
 
 Building the Linux download (`./desktop/build_linux.sh`) also needs a C compiler (GCC), Python 3.14's development headers, `patchelf` (installed by `requirements-desktop.txt`) and `readelf` (binutils). The six X11 helpers and the two xkbcommon libraries must be installed, because the build copies them into the bundle. A release is built on Ubuntu 24.04, so nothing in it needs a glibc newer than 2.38; [DESKTOP.md](DESKTOP.md) has the details.
 
-The backend starts inside the app on a loopback port; there is no separate server to run and no page to open in a
-browser.
+The app reads and saves your week itself; there is no server to run and no page to open in a browser.
 
 ## Using FlexWeek
 

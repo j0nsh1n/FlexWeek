@@ -7,10 +7,11 @@ The courier that carries it is kept until the answer is made, then freed on the 
 from __future__ import annotations
 
 import threading
+from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, SignalInstance
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
@@ -78,4 +79,29 @@ def test_every_client_shares_one_bounded_pool_of_workers(
         wait_until(qapp, lambda: all(not each._waiting for each in clients))
         for each in clients:
             each.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_the_work_a_worker_runs_holds_no_qt_object(
+    qapp: QApplication, database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker that held the last reference to a Qt object would free it on its own thread when the work
+    ends. The work it is handed holds none: only a weak reference to the courier."""
+    handed: list[object] = []
+
+    class Holding:
+        def submit(self, work: object) -> Future:
+            handed.append(work)
+            return Future()
+
+    monkeypatch.setattr(client_module, "_workers", lambda: Holding())
+    client = client_module.NativeClient(database)
+    try:
+        client.request("GET", "/api/health", None, lambda _answer: None, lambda _error: None)
+        (work,) = handed
+        held = [cell.cell_contents for cell in work.__closure__ or ()]  # type: ignore[attr-defined]
+        qt = [item for item in held if isinstance(item, (QObject, SignalInstance))]
+        assert qt == [], f"the work holds {qt}"
+    finally:
+        client.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

@@ -1,6 +1,6 @@
 # ruff: noqa: F811
 """Material 3 setup, Week step: the school start and end boxes show the clock in the 12 hour words, and
-typing 24 hour words is read and shown the same way. Needs the real local server and a new account."""
+typing 24 hour words is read and shown the same way. Needs the real service and a new account."""
 
 from __future__ import annotations
 

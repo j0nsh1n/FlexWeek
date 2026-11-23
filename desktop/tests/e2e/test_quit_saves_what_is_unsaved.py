@@ -1,4 +1,4 @@
-"""Leaving the app saves what is unsaved first, against the real local server."""
+"""Leaving the app saves what is unsaved first, against the real service and saved data."""
 
 from __future__ import annotations
 

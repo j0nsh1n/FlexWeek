@@ -4,7 +4,7 @@
 |---|---|
 | Desktop interface | Material 3 in Qt Quick/QML, with Python bridges for account screens, the week editor, settings, sheets and save/retry state |
 | Desktop session | `NativeSession`: edits, planning calls, focus, reminders, alarms, undo and preferences |
-| FastAPI | Session and ownership checks, bounded validated requests, account APIs and the solver route |
+| Rust service | Session and ownership checks, bounded validated requests, account answers and planning, in the app's process |
 | Rust engine and store | Planning, calendar rules, Qt-free desktop logic, validated storage and SQLite migrations |
 | SQLite | Users, hashed sessions, account-owned weeks and revisions, preferences, routines, restore points and sync records |
 
@@ -16,11 +16,11 @@ history (`docs/cac-build-plan.md`, removed 2026-11-06).
 ## Data flow
 
 ```text
-QML control → Material bridge → NativeSession → NativeClient → FastAPI → Rust store
-                                      |                              |
-                                      └──────── Rust engine ←────────┘
+QML control → Material bridge → NativeSession → NativeClient → Rust service → Rust store
+                                      |              (worker thread)           |
+                                      └──────────── Rust engine ←──────────────┘
 
-Register/login → expiring HttpOnly cookie → authenticated account
+Register/login → expiring session token kept by the client → authenticated account
                                              |
 Editor → revision-checked change → account-owned SQLite row
           | 409 conflict                      |
@@ -32,9 +32,9 @@ Preference change → PUT /api/preferences → account preference
 
 Every private query derives its owner from the session. The desktop sends an
 expected account ID so a request made before an account change is rejected.
-Writes carry a custom header and same-origin checks; no CORS is enabled.
-Password hashes use scrypt; SQLite stores hashes of random session tokens, not
-the cookie values.
+Requests are answered in the app's own process (no network port). Password
+hashes use scrypt; SQLite stores hashes of random session tokens, not the
+tokens themselves.
 
 Week writes use transactions and optimistic revisions. A repeated identical
 payload is a no-op; stale differing writes return 409. Failures preserve the
