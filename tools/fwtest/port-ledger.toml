@@ -306,3 +306,12 @@ rust = [
     "flexweek-service::transfer::tests::a_file_whose_week_reaches_the_store_with_a_doubled_id_is_refused_in_words_and_changes_nothing",
 ]
 red = "the restore's doubled-id refusal unmapped and the file check's duplicate-id rule removed each fail their test (2026-11-22); the store-level twins were seen red in #145 and #146"
+
+[[port]]
+python = "backend/tests/test_assignment_notes_api.py"
+rust = [
+    "flexweek-service::assignment_notes::notes_links_and_a_checklist_are_saved_and_listed_and_an_unsafe_link_is_refused",
+    "flexweek-service::assignment_notes::empty_notes_links_and_checklist_are_left_off_and_filled_ones_are_kept",
+    "flexweek-service::assignment_notes::a_javascript_link_and_two_checklist_items_with_one_id_are_refused",
+]
+red = "any link scheme allowed, duplicate checklist ids allowed, and empty notes written out each fail their tests (2026-11-22)"
