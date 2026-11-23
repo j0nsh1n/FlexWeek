@@ -1,18 +1,19 @@
-"""Undo and Redo against the real local server. Expected values follow frontend/history.js."""
+"""Undo and Redo against the real service and saved data. Expected values follow frontend/history.js."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import sunday_due
-from desktop.server import LocalServer
 from desktop.tests.logic_support import (
+    database,  # noqa: F401
     essay,
     fail_once,
     fixed,
     place_on_monday,
     qapp,  # noqa: F401
-    server,  # noqa: F401
     settled,
     signed_in,
     start_focus_on_first_block,
@@ -23,8 +24,8 @@ from desktop.tests.logic_support import (
 # ruff: noqa: F811
 
 
-def test_undo_of_new_homework_does_not_conflict(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_undo_of_new_homework_does_not_conflict(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_homework(essay(session))
     session.save()
     settled(qapp, session)
@@ -40,9 +41,9 @@ def test_undo_of_new_homework_does_not_conflict(qapp: QApplication, server: Loca
 
 
 def test_undo_keeps_focus_minutes_counted_since_the_saved_step(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_homework(essay(session))
     place_on_monday(qapp, session)
     start_focus_on_first_block(session)
@@ -58,8 +59,8 @@ def test_undo_keeps_focus_minutes_counted_since_the_saved_step(
     assert session.assignments["essay"].get("notes") in (None, "")
 
 
-def test_undo_is_blocked_while_an_unsaved_edit_is_waiting(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_undo_is_blocked_while_an_unsaved_edit_is_waiting(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
     session.save()
     settled(qapp, session)
@@ -71,8 +72,8 @@ def test_undo_is_blocked_while_an_unsaved_edit_is_waiting(qapp: QApplication, se
     assert [block["title"] for block in session.blocks] == ["Soccer", "Piano"]
 
 
-def test_a_failed_undo_puts_the_saved_week_back(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_a_failed_undo_puts_the_saved_week_back(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
     session.save()
     settled(qapp, session)
@@ -90,11 +91,11 @@ def test_a_failed_undo_puts_the_saved_week_back(qapp: QApplication, server: Loca
 
 
 def test_undo_takes_back_a_fixed_block_and_homework_saved_together(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
     """The server deletes homework before it writes the week, and that moves the week's revision. One
     save holding both left Undo's week write one revision behind: refused, and the week left empty."""
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(fixed("school", "School", 0, "08:00"))
     session.add_homework(
         {
@@ -127,9 +128,9 @@ def test_undo_takes_back_a_fixed_block_and_homework_saved_together(
 
 
 def test_a_refused_undo_reloads_the_week_and_offers_undo_again(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
     session.save()
     settled(qapp, session)

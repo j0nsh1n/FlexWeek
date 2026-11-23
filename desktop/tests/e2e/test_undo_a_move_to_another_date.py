@@ -1,19 +1,20 @@
-"""Undoing a move between weeks, against the real local server. Saved weeks are read back from it."""
+"""Undoing a move between weeks, against the real service. Saved weeks are read back from it."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import date_for_day
 from desktop.native.controller import NativeSession
-from desktop.server import LocalServer
 from desktop.tests import logic_support
 from desktop.tests.e2e.saved_weeks import read_week
 from desktop.tests.logic_support import (  # noqa: F401
     PASSWORD,
+    database,
     fixed,
     qapp,
-    server,
     settled,
     signed_in,
     titles,
@@ -25,8 +26,8 @@ from desktop.tests.waiting import wait_until
 # ruff: noqa: F811
 
 
-def test_undo_puts_both_weeks_back(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_undo_puts_both_weeks_back(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     first = session.week_start
     second = week_after(first)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
@@ -49,11 +50,11 @@ def test_undo_puts_both_weeks_back(qapp: QApplication, server: LocalServer) -> N
 
 
 def test_undo_of_a_move_is_refused_when_the_other_week_changed_elsewhere(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
     """A later save to the other week, not on this undo stack, is kept. Undo is a 409, the week is
     reloaded as it is saved, and both weeks stay as they are."""
-    alice = signed_in(qapp, server.origin, "alice", create=True)
+    alice = signed_in(qapp, database, "alice", create=True)
     first = alice.week_start
     second = week_after(first)
     alice.add_block(fixed("soccer", "Soccer", 0, "16:00"))
@@ -63,7 +64,7 @@ def test_undo_of_a_move_is_refused_when_the_other_week_changed_elsewhere(
     next_monday = date_for_day(second, 0)
     assert alice.move_to_date("soccer", monday, next_monday) is True
     settled(qapp, alice)
-    bob = NativeSession(server.origin, qapp)
+    bob = NativeSession(database, qapp)
     logic_support.HELD.append(bob)
     bob.login("alice", PASSWORD)
     wait_until(qapp, lambda: bob.account is not None and not bob.busy)

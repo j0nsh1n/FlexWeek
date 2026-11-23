@@ -9,6 +9,12 @@ All notable changes to FlexWeek are documented here. Format follows
 - Settings > Computer has Report a problem. It opens a short form in your browser with your FlexWeek version and computer already filled in.
 - The phone's Settings has Report a problem. It opens an online form with your app version and phone model filled in.
 
+### Changed
+- FlexWeek no longer runs a small web server on your computer. The app reads and saves your week itself and opens no network port (phone sync, once you pair a phone, still listens for it).
+
+### Removed
+- The FLEXWEEK_ORIGIN and FLEXWEEK_DESKTOP_ORIGIN settings, which pointed the app at a hosted FlexWeek server. The app always uses the data saved on this computer.
+
 ### Fixed
 - Settings > Alerts: the reminder notes now say "if the track doesn't play" and "until it's handled", in the app's usual wording.
 

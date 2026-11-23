@@ -1,28 +1,33 @@
-"""Asynchronous access to the desktop's private Python API."""
+"""Asynchronous access to FlexWeek's saved data. Each request is answered by the Rust service
+(`flexweek_engine.service_answer`) on a worker thread, in this process, with no server and no network
+port; the answer comes back on the window's thread on a later turn of its event loop."""
 
 from __future__ import annotations
 
 import contextlib
-import ipaddress
 import json
 import logging
 import re
+import secrets
+import weakref
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from PySide6.QtCore import QByteArray, QObject, QThread, QTimer, QUrl, Signal
-from PySide6.QtNetwork import (
-    QNetworkAccessManager,
-    QNetworkCookie,
-    QNetworkCookieJar,
-    QNetworkProxy,
-    QNetworkReply,
-    QNetworkRequest,
-)
+import flexweek_engine  # type: ignore[import-untyped]
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
+from shiboken6 import isValid
+
+from backend import clock as wall_clock
 
 REQUEST_TIMEOUT_MS = 30_000
-SESSION_COOKIE = b"flexweek_session"
+# Requests answered at once. Each waits on the database or hashes a password without holding Python, so
+# a Plan or a sign-in does not hold up the reads behind it.
+WORKERS = 4
+# How often a gone client's courier looks again for answers still being made before it is freed.
+RELEASE_RETRY_MS = 200
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 PASSWORD_LENGTH_HINT = "At least 12 characters."
 USERNAME_HINT = "3 to 32 letters, numbers or underscores."
@@ -58,29 +63,45 @@ class ApiError:
     message: str
 
 
-class _CookieJar(QNetworkCookieJar):
-    def snapshot(self) -> list[QNetworkCookie]:
-        return self.allCookies()
+@dataclass(frozen=True)
+class Answer:
+    """What the service answered: the status, the body as JSON text (empty for none), and whether the
+    request started a session (`token`), ended it, or kept it."""
+
+    status: int
+    body: bytes
+    session: str = "kept"
+    token: str = ""
 
 
-def _local_origin(origin: str) -> str:
+def ask(
+    database: str,
+    method: str,
+    path: str,
+    body: str,
+    token: str,
+    account_id: int | None,
+    seconds: int,
+    now: str,
+    restore_token: str,
+) -> Answer:
+    """One request answered by the service. Runs on a worker thread, so it touches no Qt object."""
     try:
-        parsed = urlsplit(origin)
-        address = ipaddress.ip_address(parsed.hostname or "")
-        host = f"[{address}]" if address.version == 6 else str(address)
-        canonical = f"http://{host}:{parsed.port}"
-        if (
-            not address.is_loopback
-            or parsed.port is None
-            or parsed.port == 0
-            or parsed.username is not None
-            or parsed.password is not None
-            or origin != canonical
-        ):
-            raise ValueError
-    except ValueError:
-        raise ValueError("The desktop API needs a canonical HTTP loopback origin with a port.") from None
-    return canonical
+        status, text, session, new_token = flexweek_engine.service_answer(
+            database,
+            method,
+            path,
+            body,
+            token,
+            str(account_id) if account_id is not None else None,
+            seconds,
+            now,
+            restore_token,
+        )
+    except Exception as error:  # an engine failure is a server error to the window, as it was
+        logger.error("The service failed to answer a request: %s", type(error).__name__)
+        return Answer(500, b"")
+    return Answer(status, (text or "").encode(), session, new_token)
 
 
 def _api_path(path: str) -> None:
@@ -196,43 +217,80 @@ def auth_error(error: ApiError, *, creating: bool) -> ApiError:
     return error
 
 
+class _Courier(QObject):
+    """Carries answers from the workers to one client. It has no parent: freed with its client, it would
+    go while a worker was still sending on it (devices.py met that crash). A gone client's courier is
+    kept in _RETIRED and freed on the window's thread once no answer for it is being made."""
+
+    # (request number, Answer); queued, so it lands on the window's thread.
+    answered = Signal(int, object)
+
+
+# The workers every client shares, made when the first request is sent.
+_POOL: ThreadPoolExecutor | None = None
+# Couriers whose client is gone, each with the requests still being answered for it.
+_RETIRED: list[tuple[_Courier, set[Future]]] = []
+
+
+def _workers() -> ThreadPoolExecutor:
+    global _POOL
+    if _POOL is None:
+        _POOL = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="flexweek-request")
+    return _POOL
+
+
+def stop_workers() -> None:
+    """At quit: drop requests not started and wait for the ones being answered, so none writes after the
+    app has let go of its files."""
+    global _POOL
+    if _POOL is not None:
+        _POOL.shutdown(wait=True, cancel_futures=True)
+        _POOL = None
+
+
+def _retire(courier: _Courier, running: set[Future]) -> None:
+    """Free a gone client's courier on this (the window's) thread once nothing is answering for it."""
+    kept = (courier, running)
+    _RETIRED.append(kept)
+
+    def release() -> None:
+        if running:
+            QTimer.singleShot(RELEASE_RETRY_MS, release)
+            return
+        _RETIRED.remove(kept)
+        if isValid(courier):
+            courier.deleteLater()
+
+    release()
+
+
 class NativeClient(QObject):
     expired = Signal()
 
-    def __init__(self, origin: str, parent: QObject | None = None) -> None:
+    def __init__(self, database: str | Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self.origin = _local_origin(origin)
+        self.database = str(database)
         self.account: dict | None = None
         self.epoch = 0
-        self._replies: dict[QNetworkAccessManager, set[QNetworkReply]] = {}
-        self._manager = self._new_manager([])
+        self._token = ""
+        self._number = 0
+        # Requests sent and not yet answered: what to do with each answer, by number.
+        self._waiting: dict[int, Callable[[Answer], None]] = {}
+        # Requests a worker is answering or will answer; each leaves the set when its answer is made.
+        self._running: set[Future] = set()
+        courier, running = _Courier(), self._running
+        self._courier = courier
+        courier.answered.connect(self._land, Qt.ConnectionType.QueuedConnection)
+        self.destroyed.connect(lambda *_: _retire(courier, running))
 
     def _check_thread(self) -> None:
         if QThread.currentThread() != self.thread():
             raise RuntimeError("The native API client must be used on its Qt thread.")
 
-    def _new_manager(self, cookies: list[QNetworkCookie]) -> QNetworkAccessManager:
-        manager = QNetworkAccessManager(self)
-        manager.setProxy(QNetworkProxy(QNetworkProxy.ProxyType.NoProxy))
-        jar = _CookieJar(manager)
-        jar.setAllCookies(cookies)
-        manager.setCookieJar(jar)
-        self._replies[manager] = set()
-        return manager
-
-    def _rotate(self, cookies: list[QNetworkCookie]) -> None:
-        previous = self._manager
+    def _rotate(self) -> None:
+        """A new account epoch: every answer still on its way is dropped when it lands. Its timer runs
+        out on its own, at most REQUEST_TIMEOUT_MS later."""
         self.epoch += 1
-        self._manager = self._new_manager(cookies)
-        # Abort can emit finished synchronously. Install the new epoch and jar first.
-        for reply in tuple(self._replies[previous]):
-            reply.abort()
-        self._retire(previous)
-
-    def _retire(self, manager: QNetworkAccessManager) -> None:
-        if manager != self._manager and not self._replies.get(manager):
-            self._replies.pop(manager, None)
-            manager.deleteLater()
 
     def set_account(self, identity: dict) -> None:
         self._check_thread()
@@ -243,32 +301,24 @@ class NativeClient(QObject):
             or not identity["username"]
         ):
             raise ValueError("An account needs a valid id and username.")
-        jar = self._manager.cookieJar()
-        assert isinstance(jar, _CookieJar)
         self.account = {"id": identity["id"], "username": identity["username"]}
-        self._rotate(jar.snapshot())
+        self._rotate()
 
     def reset(self) -> None:
         self._check_thread()
         self.account = None
-        self._rotate([])
+        self._token = ""
+        self._rotate()
 
     def session_token(self) -> str | None:
-        jar = self._manager.cookieJar()
-        for cookie in jar.cookiesForUrl(QUrl(self.origin + "/")):
-            if bytes(cookie.name().data()) == SESSION_COOKIE:
-                return bytes(cookie.value().data()).decode("ascii", "replace") or None
-        return None
+        return self._token or None
 
     def adopt_session(self, token: str) -> None:
-        """A session kept from an earlier launch. That launch's server was on another port, so the
-        cookie is set again for this origin; the next request says whether it still works."""
+        """A session kept from an earlier launch; the next request says whether it still works."""
         self._check_thread()
         self.account = None
-        self._rotate([])
-        jar = self._manager.cookieJar()
-        cookie = QNetworkCookie(SESSION_COOKIE, token.encode("ascii"))
-        jar.setCookiesFromUrl([cookie], QUrl(self.origin + "/"))
+        self._rotate()
+        self._token = token
 
     @staticmethod
     def _notify_error(callback: Callable[[ApiError], None], error: ApiError) -> None:
@@ -284,7 +334,7 @@ class NativeClient(QObject):
         payload: dict | None,
         on_success: Callable[[dict], None],
         on_error: Callable[[ApiError], None],
-    ) -> QNetworkReply | None:
+    ) -> None:
         self._check_thread()
         _api_path(path)
         method = method.upper()
@@ -292,13 +342,18 @@ class NativeClient(QObject):
             raise ValueError("Unsupported API request method.")
         if payload is not None and not isinstance(payload, dict):
             raise ValueError("API request bodies must be JSON objects.")
-        encoded = json.dumps(payload, allow_nan=False).encode() if payload is not None else b""
+        encoded = json.dumps(payload, allow_nan=False) if payload is not None else ""
         account_id = self.account["id"] if self.account is not None else None
         epoch = self.epoch
 
-        def finish(status: int, body: bytes, reached: bool) -> None:
+        def finish(answer: Answer, reached: bool) -> None:
             if epoch != self.epoch:
                 return
+            status, body = answer.status, answer.body
+            if answer.session == "started":
+                self._token = answer.token
+            elif answer.session == "ended":
+                self._token = ""
             result: object = None
             if len(body) <= MAX_RESPONSE_BYTES:
                 with contextlib.suppress(ValueError, UnicodeDecodeError):
@@ -329,54 +384,66 @@ class NativeClient(QObject):
                 logger.error("A native request result handler failed.")
                 self._notify_error(on_error, ApiError(status, "FlexWeek could not display this response."))
 
-        return self._send(method, path, encoded, account_id, finish)
+        self._send(method, path, encoded, account_id, finish)
+
+    def _clock(self) -> tuple[int, str, str]:
+        """The app's clock as the request is sent, and the name a restore point it makes would take."""
+        return (
+            int(wall_clock.seconds()),
+            wall_clock.now().strftime("%Y-%m-%dT%H:%M"),
+            secrets.token_hex(8),
+        )
 
     def _send(
         self,
         method: str,
         path: str,
-        encoded: bytes,
+        encoded: str,
         account_id: int | None,
-        finish: Callable[[int, bytes, bool], None],
-    ) -> QNetworkReply | None:
-        """Send one request to the local server; `finish` gets its status, its body, and whether it got
-        an answer at all. The tests' light app answers in-process here instead (desktop/tests)."""
-        request = QNetworkRequest(QUrl(self.origin + path))
-        request.setAttribute(
-            QNetworkRequest.Attribute.RedirectPolicyAttribute,
-            QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
-        )
-        for name, value in self.headers(account_id).items():
-            request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
-        manager = self._manager
-        reply = manager.sendCustomRequest(request, method.encode("ascii"), QByteArray(encoded))
-        self._replies[manager].add(reply)
-        timer = QTimer(reply)
+        finish: Callable[[Answer, bool], None],
+    ) -> None:
+        """Ask the service on a worker; `finish` gets the answer and whether one came at all (one that
+        takes longer than REQUEST_TIMEOUT_MS counts as none, and is dropped when it lands)."""
+        self._number += 1
+        number = self._number
+        timer = QTimer(self)
         timer.setSingleShot(True)
-        timer.timeout.connect(reply.abort)
-        timer.start(REQUEST_TIMEOUT_MS)
 
-        def finished() -> None:
+        def landed(answer: Answer, reached: bool = True) -> None:
             timer.stop()
-            self._replies[manager].discard(reply)
+            timer.deleteLater()
+            finish(answer, reached)
+
+        def timed_out() -> None:
+            if self._waiting.pop(number, None) is not None:
+                landed(Answer(0, b""), reached=False)
+
+        self._waiting[number] = landed
+        timer.timeout.connect(timed_out)
+        timer.start(REQUEST_TIMEOUT_MS)
+        seconds, now, restore = self._clock()
+        arguments = (self.database, method, path, encoded, self._token, account_id, seconds, now, restore)
+        # Only a weak reference rides with the work: the worker's own hold on the courier is taken just
+        # to send and let go before the work ends, while the client or _RETIRED still holds it, so the
+        # last hold is never the worker's and the courier is never freed on its thread.
+        courier = weakref.ref(self._courier)
+
+        def work() -> None:
+            answer = ask(*arguments)
+            target = courier()
             try:
-                status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute) or 0
-                body = bytes(reply.readAll().data())
-                finish(status, body, reply.error() == QNetworkReply.NetworkError.NoError)
+                # The window may have closed while the service answered; then no one is left to tell.
+                if target is not None:
+                    with contextlib.suppress(RuntimeError):
+                        target.answered.emit(number, answer)
             finally:
-                reply.deleteLater()
-                self._retire(manager)
+                target = None
 
-        reply.finished.connect(finished)
-        return reply
+        future = _workers().submit(work)
+        self._running.add(future)
+        future.add_done_callback(self._running.discard)
 
-    def headers(self, account_id: int | None) -> dict[str, str]:
-        sent = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Origin": self.origin,
-            "X-FlexWeek-Request": "1",
-        }
-        if account_id is not None:
-            sent["X-FlexWeek-Account"] = str(account_id)
-        return sent
+    def _land(self, number: int, answer: Answer) -> None:
+        landed = self._waiting.pop(number, None)
+        if landed is not None:
+            landed(answer)

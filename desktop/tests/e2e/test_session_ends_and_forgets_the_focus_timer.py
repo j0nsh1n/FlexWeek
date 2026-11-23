@@ -4,16 +4,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
 
-from desktop.server import LocalServer
-from desktop.tests.e2e.account_sessions import server, signed_in  # noqa: F401
+from desktop.tests.e2e.account_sessions import database, signed_in  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
-def test_signing_out_clears_the_focus_timer(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_signing_out_clears_the_focus_timer(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     account_id = session.account["id"]
     session.start_quick_focus()
     assert account_id in session.focus_store
@@ -24,9 +25,9 @@ def test_signing_out_clears_the_focus_timer(qapp: QApplication, server: LocalSer
 
 
 def test_an_ended_session_forgets_the_focus_timer_and_says_so(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     account_id = session.account["id"]
     session.start_quick_focus()
     assert account_id in session.focus_store

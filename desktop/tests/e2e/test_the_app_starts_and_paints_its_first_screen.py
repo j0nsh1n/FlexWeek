@@ -1,11 +1,10 @@
-"""Native `--smoke-test` against a real local API, with no Chromium."""
+"""Native `--smoke-test` as the app runs, with no server and no Chromium."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -19,10 +18,11 @@ pytestmark = pytest.mark.skipif(
 
 if importlib.util.find_spec("PySide6") is not None:
     from desktop.main import PAINTED_MIN_COLORS
-    from desktop.server import LocalServer
 
 
-def run_smoke(tmp_path: Path, **extra: str) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def run_smoke(
+    tmp_path: Path, *arguments: str, **extra: str
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     report = tmp_path / "smoke.json"
     (tmp_path / "tmp").mkdir()
     env = {
@@ -37,7 +37,7 @@ def run_smoke(tmp_path: Path, **extra: str) -> tuple[subprocess.CompletedProcess
         if name not in extra:
             env.pop(name, None)
     result = subprocess.run(
-        [sys.executable, "-m", "desktop.main", "--smoke-test", str(report)],
+        [sys.executable, "-m", "desktop.main", "--smoke-test", str(report), *arguments],
         env=env,
         capture_output=True,
         text=True,
@@ -61,23 +61,37 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert cast(int, report["material_painted_colors"]) >= PAINTED_MIN_COLORS
     assert not (tmp_path / "data").exists() or not any((tmp_path / "data").rglob("flexweek.db"))
     assert list((tmp_path / "tmp").glob("flexweek-smoke-*")) == []
+    # Started as the app starts, phone sync set up and no phone paired: no network port. Linux must
+    # report it; elsewhere the socket tables cannot be read (None).
+    if sys.platform.startswith("linux"):
+        assert report["listening"] == [], report["listening"]
+    else:
+        assert report["listening"] in ([], None), report["listening"]
 
 
-def test_smoke_mode_makes_no_account_on_a_hosted_server(tmp_path: Path) -> None:
-    server = LocalServer(tmp_path / "hosted.db")
-    origin = server.start()
-    try:
-        result, report = run_smoke(tmp_path, FLEXWEEK_DESKTOP_ORIGIN=origin)
-    finally:
-        server.stop()
+def test_the_old_hosted_server_setting_is_not_read(tmp_path: Path) -> None:
+    """The hosted server is gone (decision D4): an address left in the setting changes nothing, and the
+    app still opens on its own saved data."""
+    result, report = run_smoke(
+        tmp_path, FLEXWEEK_DESKTOP_ORIGIN="http://127.0.0.1:9", FLEXWEEK_ORIGIN="http://127.0.0.1:9"
+    )
     assert result.returncode == 0, report
-    assert report["stage"] == "first screen shown"
-    with sqlite3.connect(tmp_path / "hosted.db") as database:
-        assert database.execute("SELECT COUNT(*) FROM users").fetchone() == (0,)
+    assert report["stage"] == "week shown after setup Solve"
 
 
-def test_smoke_mode_fails_when_the_page_cannot_load(tmp_path: Path) -> None:
-    result, report = run_smoke(tmp_path, FLEXWEEK_DESKTOP_ORIGIN="http://127.0.0.1:9")
-    assert result.returncode == 1
+def test_a_database_asked_for_in_a_new_folder_is_made_there(tmp_path: Path) -> None:
+    database = tmp_path / "new" / "folder" / "flexweek.db"
+    result, report = run_smoke(tmp_path, "--database", str(database))
+    assert result.returncode == 0, report
+    assert database.is_file()
+
+
+def test_saved_data_that_cannot_be_opened_is_named_in_the_report(tmp_path: Path) -> None:
+    """A start that fails says why (a Windows install once said only that it stopped)."""
+    blocked = tmp_path / "a-file-not-a-folder"
+    blocked.write_text("")
+    result, report = run_smoke(tmp_path, "--database", str(blocked / "flexweek.db"))
+    assert result.returncode == 3
     assert report["ok"] is False
-    assert report["stage"] == "page failed to load"
+    assert str(report["stage"]).startswith("saved data did not open: ")
+    assert list((tmp_path / "tmp").glob("flexweek-smoke-*")) == []

@@ -35,7 +35,7 @@ def hold_clock(window: NativeWindow, day: int, minute: int) -> None:
 def settled_session(qapp: QApplication, session: NativeSession) -> None:
     """The foreground request and the background refreshes it starts are done."""
     wait_until(qapp, lambda: not session.busy)
-    wait_until(qapp, lambda: not any(session.client._replies.values()))
+    wait_until(qapp, lambda: not session.client._waiting)
 
 
 def put_block(

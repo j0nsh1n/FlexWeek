@@ -1,8 +1,9 @@
 """What the account tests share: the Material card helpers, and launches of the app on a database of
-their own with no server (the light app's in-process backend).
+their own (the light app answers on the window's thread).
 
-`Launches`, `launches`, `kept`, `launched` and `page` keep their old shape (a real local server) for the
-tests of other areas that still import them; the account tests use `LightLaunches`."""
+`Launches`, `launches`, `kept`, `launched` and `page` open the app as it runs, its answers coming from
+worker threads, for the tests of other areas that still import them; the account tests use
+`LightLaunches`."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -20,13 +21,13 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
+from backend.storage import initialize
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
-from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for, _close
+from desktop.tests.light_app import InProcessApi, _client_for, _close
 from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, qapp, server  # noqa: F401
+from desktop.tests.window_support import PASSWORD, USERNAME, database, free, look_file, qapp  # noqa: F401
 
 OTHER_PASSWORD = "another-long-password"
 WRONG_PASSWORD = "not-the-right-password"
@@ -48,7 +49,7 @@ class LightLaunches:
 
     def launch(self, kept: KeptSession | None = None, size: tuple[int, int] | None = None) -> NativeWindow:
         with _client_for(self.api):
-            window = NativeWindow(ORIGIN, kept=self.kept if kept is None else kept)
+            window = NativeWindow(self.database, kept=self.kept if kept is None else kept)
         if (size or self.size) is not None:
             window.resize(*(size or self.size))
         window.show()
@@ -103,8 +104,8 @@ def kept(tmp_path: Path) -> KeptSession:
 
 
 @contextlib.contextmanager
-def launched(server: LocalServer, kept: KeptSession) -> Iterator[NativeWindow]:
-    window = NativeWindow(server.origin, kept=kept)
+def launched(database: Path, kept: KeptSession) -> Iterator[NativeWindow]:
+    window = NativeWindow(database, kept=kept)
     window.show()
     try:
         yield window
@@ -121,20 +122,17 @@ def launched(server: LocalServer, kept: KeptSession) -> Iterator[NativeWindow]:
 
 
 class Launches:
-    """Launches of the app against one database on a real local server, each with its own server."""
+    """Launches of the app against one database, as the app runs."""
 
     def __init__(self, qapp: QApplication, folder: Path) -> None:
         self.qapp = qapp
         self.database = folder / "flexweek.db"
+        initialize(self.database)
         self.kept = KeptSession(folder / "signed-in" / "flexweek.json")
-        self.servers: list[LocalServer] = []
         self.windows: list[NativeWindow] = []
 
     def launch(self) -> NativeWindow:
-        running = LocalServer(self.database)
-        origin = running.start()
-        self.servers.append(running)
-        window = NativeWindow(origin, kept=self.kept)
+        window = NativeWindow(self.database, kept=self.kept)
         window.resize(1280, 800)
         window.show()
         self.windows.append(window)
@@ -144,10 +142,9 @@ class Launches:
 
     def close(self) -> None:
         for window in self.windows:
+            with contextlib.suppress(RuntimeError):
+                window.session.client.reset()
             window.hide()
-        for running in self.servers:
-            with contextlib.suppress(Exception):
-                running.stop()
 
 
 @pytest.fixture()

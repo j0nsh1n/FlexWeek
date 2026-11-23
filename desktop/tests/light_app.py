@@ -1,6 +1,6 @@
-"""The light app: the real window and the real backend, with no server and no sign-in per test.
+"""The light app: the real window and the real service, with no sign-in per test.
 
-The backend is called in this process (no socket, no server thread), and each test opens on a copy
+The service answers on the window's thread instead of a worker, and each test opens on a copy
 of one account that was signed up and taken past setup once per worker, through the same window, so
 it starts where the signed-in `window` fixture of window_support.py did."""
 
@@ -13,16 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QByteArray, QObject, QTimer, QUrl
-from PySide6.QtNetwork import QNetworkCookie, QNetworkReply
+from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
-from starlette.testclient import TestClient
 
-from backend.storage import connect, create_session
+from backend.storage import connect, create_session, initialize
 from backend.tests.fake_clock import CLOCK
 from desktop.native import controller as controller_module
-from desktop.native.client import NativeClient
+from desktop.native.client import Answer, NativeClient, ask
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
@@ -30,45 +28,27 @@ from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file
 
-# Never listened on: the backend checks requests' Origin and Host against it.
-ORIGIN = "http://127.0.0.1:8941"
-
 
 class InProcessApi:
-    """The backend app for one database, answering in this process."""
+    """The saved data of one database, which the window's requests are answered from."""
 
     def __init__(self, database: Path) -> None:
-        from backend.app import create_app
-
-        self._client = TestClient(
-            create_app(database=database, origin=ORIGIN),
-            base_url=ORIGIN,
-            raise_server_exceptions=False,
-            follow_redirects=False,
-        )
-        self._client.__enter__()
-
-    def call(
-        self, method: str, path: str, body: bytes, headers: dict[str, str]
-    ) -> tuple[int, bytes, list[str]]:
-        response = self._client.request(method, path, content=body or None, headers=headers)
-        # The window's own cookie jar is the one that keeps the session, as with the real server.
-        self._client.cookies.clear()
-        return response.status_code, response.content, response.headers.get_list("set-cookie")
+        self.database = database
+        initialize(database)
 
     def close(self) -> None:
-        self._client.__exit__(None, None, None)
+        """Nothing is held open between requests; kept so a test closes what it opened."""
 
 
 class LightClient(NativeClient):
-    """NativeClient with every request answered by `api`; its reply comes on the next turn of the
-    event loop, as a real one comes later, never inside the call that sent it. A test that needs a
-    reply to stay on its way holds them (`hold`) and lets them land (`release`)."""
+    """NativeClient with every request answered at once on the window's thread; its answer comes on
+    the next turn of the event loop, as a real one comes later, never inside the call that sent it. A
+    test that needs an answer to stay on its way holds them (`hold`) and lets them land (`release`)."""
 
-    def __init__(self, origin: str, parent: QObject | None, api: InProcessApi) -> None:
-        super().__init__(origin, parent)
+    def __init__(self, parent: QObject | None, api: InProcessApi) -> None:
+        super().__init__(api.database, parent)
         self.api = api
-        # Replies made and not yet handed to the window.
+        # Answers made and not yet handed to the window.
         self.pending = 0
         self._held: list[Callable[[], None]] | None = None
 
@@ -84,33 +64,22 @@ class LightClient(NativeClient):
         self,
         method: str,
         path: str,
-        encoded: bytes,
+        encoded: str,
         account_id: int | None,
-        finish: Callable[[int, bytes, bool], None],
-    ) -> QNetworkReply | None:
-        jar = self._manager.cookieJar()
-        url = QUrl(self.origin + path)
-        headers = self.headers(account_id)
-        sent = "; ".join(
-            f"{bytes(cookie.name().data()).decode()}={bytes(cookie.value().data()).decode()}"
-            for cookie in jar.cookiesForUrl(url)
-        )
-        if sent:
-            headers["Cookie"] = sent
-        status, body, set_cookies = self.api.call(method, path, encoded, headers)
+        finish: Callable[[Answer, bool], None],
+    ) -> None:
+        seconds, now, restore = self._clock()
+        answered = ask(self.database, method, path, encoded, self._token, account_id, seconds, now, restore)
 
         def answer() -> None:
             self.pending -= 1
-            for raw in set_cookies:
-                jar.setCookiesFromUrl(QNetworkCookie.parseCookies(QByteArray(raw.encode("latin-1"))), url)
-            finish(status, body, True)
+            finish(answered, True)
 
         self.pending += 1
         if self._held is not None:
             self._held.append(answer)
         else:
             QTimer.singleShot(0, self, answer)
-        return None
 
 
 @dataclass(frozen=True)
@@ -135,9 +104,7 @@ def _copy(source: Path, target: Path) -> None:
 def _client_for(api: InProcessApi) -> Iterator[None]:
     """While a window is made, its session's client is a LightClient on `api`."""
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(
-            controller_module, "NativeClient", lambda origin, parent: LightClient(origin, parent, api)
-        )
+        patch.setattr(controller_module, "NativeClient", lambda _database, parent: LightClient(parent, api))
         yield
 
 
@@ -164,7 +131,7 @@ def account(qapp: QApplication, root: Path) -> Account:
     api = InProcessApi(database)
     look_file().unlink(missing_ok=True)
     with _client_for(api):
-        window = NativeWindow(ORIGIN)
+        window = NativeWindow(database)
     window.show()
     try:
         sign_up(qapp, window, USERNAME, PASSWORD)
@@ -201,7 +168,7 @@ def open_light_window(
     window: NativeWindow | None = None
     try:
         with _client_for(api):
-            window = NativeWindow(ORIGIN, kept=kept)
+            window = NativeWindow(database, kept=kept)
         if size is not None:
             window.resize(*size)
         window.show()

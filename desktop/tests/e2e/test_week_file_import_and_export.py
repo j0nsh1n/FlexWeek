@@ -6,17 +6,17 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from desktop.server import LocalServer
-from desktop.tests.e2e.account_sessions import HASHING_WAIT, server, signed_in, soccer  # noqa: F401
+from desktop.tests.e2e.account_sessions import HASHING_WAIT, database, signed_in, soccer  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
-def test_a_week_file_round_trip_replaces_the_open_week(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_a_week_file_round_trip_replaces_the_open_week(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.save()
     wait_until(qapp, lambda: session.revision == 1 and not session.busy)
@@ -30,9 +30,9 @@ def test_a_week_file_round_trip_replaces_the_open_week(qapp: QApplication, serve
 
 
 def test_replacing_the_week_from_a_file_waits_for_confirmation(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.save()
     wait_until(qapp, lambda: session.revision == 1 and not session.busy)
@@ -46,19 +46,19 @@ def test_replacing_the_week_from_a_file_waits_for_confirmation(
 
 
 def test_importing_an_account_waits_for_unsaved_changes_to_be_saved(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication, database: Path
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.preview_account_import({"format": 3})
     assert session.transfer_preview is None
     assert session.message == "Save your last change first (More > Retry save), then import."
 
 
-def test_reimporting_changed_homework_gets_its_own_homework(qapp: QApplication, server: LocalServer) -> None:
+def test_reimporting_changed_homework_gets_its_own_homework(qapp: QApplication, database: Path) -> None:
     """The second file's Essay has a new title and due date. Its sessions must not be attached to the
     homework the first import made, which keeps the old title and due date."""
-    source = signed_in(qapp, server.origin, "alice", create=True)
+    source = signed_in(qapp, database, "alice", create=True)
     monday = date.fromisoformat(source.week_start)
     first_due = (monday + timedelta(days=3)).isoformat() + "T21:00"
     later_due = (monday + timedelta(days=4)).isoformat() + "T21:00"
@@ -75,7 +75,7 @@ def test_reimporting_changed_homework_gets_its_own_homework(qapp: QApplication, 
     source.logout()
     wait_until(qapp, lambda: source.account is None and not source.busy, HASHING_WAIT)
 
-    target = signed_in(qapp, server.origin, "bob", create=True)
+    target = signed_in(qapp, database, "bob", create=True)
 
     def imported(raw: str) -> set[str]:
         assert target.import_week_file(raw, replace=True) is True

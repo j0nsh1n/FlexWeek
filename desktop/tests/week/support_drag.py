@@ -46,7 +46,7 @@ def settled(qapp: QApplication, window: NativeWindow) -> None:
         lambda: (
             not session.busy
             and not session.dirty
-            and not any(session.client._replies.values())
+            and not session.client._waiting
             and not getattr(session.client, "pending", 0)
         ),
     )

@@ -62,7 +62,7 @@ def clean_look_file() -> Path:
 def write_material_look(mode: str) -> Path:
     """The look file the window reads on start: Material, light or dark as the play asks.
 
-    Every run has a new server and an empty database, so an earlier run's kept token would 401 and
+    Every run has a new, empty database, so an earlier run's kept token would 401 and
     leave the card on "Please sign in again", where signing up never reaches the recovery codes.
     The kept session is removed for every seed.
     """
@@ -174,26 +174,26 @@ def child_main(args: argparse.Namespace) -> int:
 
     sys.excepthook = on_error
 
+    from backend.storage import initialize
     from desktop.native.kept import KeptSession
     from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
     from desktop.tests.logic_support import past_recovery, sign_up
 
     out = Path(args.out)
-    server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
-    server.start()
+    database = Path(tempfile.mkdtemp()) / "rig.db"
+    initialize(database)
     play = load_play(Path(args.play))
     material_new = play.setup.seed == "material-new"
     write_material_look(play.setup.mode)
-    window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
+    window = NativeWindow(database, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)
     window.show()
     if material_new:
-        return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
+        return run_play(app, window, window.session, out, play, seed_rig_week, python_errors)
     sign_up(app, window, "rig_student", PASSWORD)
     past_recovery(app, window)
-    return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
+    return run_play(app, window, window.session, out, play, seed_rig_week, python_errors)
 
 
 def main() -> int:

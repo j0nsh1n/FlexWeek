@@ -5,20 +5,20 @@
 from __future__ import annotations
 
 import contextlib
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, soccer, table_text
 from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
 from desktop.tests.material_support import material_showing
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import PASSWORD, free, qapp, server, signed_out  # noqa: F401
+from desktop.tests.window_support import PASSWORD, database, free, qapp, signed_out  # noqa: F401
 
 
 def test_a_saved_fixed_time_survives_signing_out_and_in(
-    qapp: QApplication, server: LocalServer, signed_out: NativeWindow
+    qapp: QApplication, database: Path, signed_out: NativeWindow
 ) -> None:
     first = signed_out
     sign_up(qapp, first, "alice", PASSWORD)
@@ -31,7 +31,7 @@ def test_a_saved_fixed_time_survives_signing_out_and_in(
     first.session.logout()
     wait_until(qapp, lambda: first.session.account is None)
 
-    second = NativeWindow(server.origin)
+    second = NativeWindow(database)
     try:
         sign_in(qapp, second, "alice", PASSWORD)
         wait_until(qapp, lambda: material_showing(second), HASHING_WAIT)

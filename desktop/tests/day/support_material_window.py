@@ -48,7 +48,7 @@ def settle(qapp: QApplication, made: NativeWindow) -> None:
     """The save and the refreshes it starts have all landed."""
     session = made.session
     wait_until(
-        qapp, lambda: not session.busy and not session.dirty and not any(session.client._replies.values())
+        qapp, lambda: not session.busy and not session.dirty and not session.client._waiting
     )
 
 

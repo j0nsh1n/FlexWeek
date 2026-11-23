@@ -10,8 +10,8 @@ The rules are in spec.md (Validation & Tooling, "Testing structure"). This page 
 - Logic that lives in the Rust engine is tested in the engine (`engine/engine/tests/<behaviour>.rs`, run by
   `cargo test`). Python keeps the tests of what the wrappers still decide (docs/engine/adapters.md).
 - Backend tests stay in `backend/tests/`, named the same way.
-- `desktop/tests/e2e/` is the small set that keeps the real local server and sign-in: accounts, sync, and save and
-  undo round trips through the server.
+- `desktop/tests/e2e/` is the small set that keeps the real sign-in and the answers from worker threads, as the
+  app runs: accounts, sync, and save and undo round trips through the service.
 
 ## What a code test checks
 Behaviour only: what a click, key, drag, save, undo or sync does, the state that results, the words a student

@@ -1,4 +1,4 @@
-"""Reading a week back from the real local server, for the tests that move blocks between weeks."""
+"""Reading a week back from the real service and saved data, for the tests that move blocks between weeks."""
 
 from __future__ import annotations
 

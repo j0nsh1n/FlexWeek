@@ -1,5 +1,5 @@
 """Signing up, out and in again must not show widgets that became windows only while the sign-in
-pages were replaced. Needs the local server and a real sign-in, so it runs here and not on the
+pages were replaced. Needs the real service and a real sign-in, so it runs here and not on the
 light app."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -19,8 +19,8 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import (
     PASSWORD,
     USERNAME,
+    database,  # noqa: F401
     qapp,  # noqa: F401
-    server,  # noqa: F401
     settled,
     signed_out,  # noqa: F401
 )

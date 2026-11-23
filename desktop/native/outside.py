@@ -1,7 +1,7 @@
 """Changes another program made to this computer's database, such as the assistant's (`flexweek-mcp`),
 so the open window can show them without a restart.
 
-The window's own writes go through its local server and land in the same file, so a change to the
+The window's own writes go through the service and land in the same file, so a change to the
 file alone says nothing about who made it. What the window holds says that: a change it made itself
 leaves the stored revisions equal to its own once the save's reply is in."""
 

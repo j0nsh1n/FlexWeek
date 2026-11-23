@@ -29,7 +29,7 @@ os.environ["FONTCONFIG_FILE"] = str(Path(__file__).with_name("fontconfig.conf"))
 # gate counts as skipped. They run on their own with FLEXWEEK_REGRESS=1 until every item passes.
 collect_ignore = [] if os.environ.get("FLEXWEEK_REGRESS") else ["regress184", "regress190"]
 # As in the app (desktop/native/collector.py), the collector never runs by itself, so it cannot run
-# on the local server's thread mid-test; the fixture below collects on this thread after each test.
+# on a request worker's thread mid-test; the fixture below collects on this thread after each test.
 gc.disable()
 if os.environ.get("PYTEST_XDIST_WORKER"):
     os.environ.setdefault("XDG_CACHE_HOME", str(Path.home() / ".cache"))
@@ -217,7 +217,8 @@ def nothing_leaves_the_test(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture(autouse=True)
 def no_window_is_left_for_the_garbage_collector() -> Iterator[None]:
     """A widget Python owns that a test leaves in a reference cycle is deleted whenever the collector
-    next runs, in whichever thread runs it. That was often the local server's thread in a later test,
+    next runs, in whichever thread runs it. That was often the local server's thread in a later test
+    (a request worker's now),
     and a whole dialog torn down there crashed the worker with a segmentation fault. The collector runs
     here instead, on this thread, and any such widget fails the test that left it."""
     yield

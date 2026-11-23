@@ -23,6 +23,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
 from PySide6.QtQuick import QQuickItem  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.material.theme import scheme, theme_object  # noqa: E402
 
@@ -33,7 +34,9 @@ _HOLD: list[object] = []
 
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QGuiApplication]:
-    yield QGuiApplication.instance() or QGuiApplication(["flexweek-month-chip-marks"])
+    # A QApplication, not a bare QGuiApplication: a test after this one in the same worker may make a
+    # widget, and without one Qt aborts the worker.
+    yield QGuiApplication.instance() or QApplication(["flexweek-month-chip-marks"])
 
 
 @pytest.fixture
