@@ -1,0 +1,420 @@
+# Depot CI Migration
+# Source: .github/workflows/release-windows.yml
+#
+# Changes made:
+# - Removed unsupported trigger "release"
+# - Rewrote .github/ path references to .depot/
+# - Changed runs-on from "windows-latest" to "depot-ubuntu-latest" in job "windows"
+# - Changed runs-on from "ubuntu-24.04" to "depot-ubuntu-24.04" in job "linux"
+
+name: Release packages
+
+# Builds the Windows installers and the Linux downloads (Nuitka can only build
+# for the OS it runs on) and attaches them to the GitHub release. Fires when a
+# release is published; runnable by hand against an existing tag. Pull requests
+# that touch packaging, and a hand run without a tag, build and test everything
+# but upload nothing to a release; the Windows installers are kept as run artifacts.
+#
+# onedir (not onefile): Qt plugins ship as a folder, so each bundle is a
+# directory, installed on Windows and inside a tar.gz or AppImage on Linux.
+# The window is native Qt widgets. Chromium is not in the package.
+# Removed unsupported trigger: release. Release events are not supported.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach packages to (e.g. v0.9.2). Leave empty to build this branch without uploading."
+        required: false
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "desktop/build_windows.ps1"
+      - "desktop/build_linux.sh"
+      - "desktop/package_linux.sh"
+      - ".depot/workflows/release-windows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: depot-ubuntu-latest # was: windows-latest. Nonstandard GitHub runner label detected, changed to default Depot runner.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Check the tag matches the version
+        # A tag that differs from VERSION builds an app that reports the wrong number and is
+        # offered its own release as an update. Fails before anything is built or uploaded.
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python scripts/check_release_tag.py --tag="$env:TAG"
+        shell: pwsh
+
+      - name: Create venv and install build + runtime deps
+        # build_windows.ps1 insists on .venv\Scripts\python.exe (DESKTOP.md §9),
+        # so the deps go into a fresh venv, not the runner's system Python.
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install --upgrade pip
+          .venv\Scripts\python -m pip install -r requirements.txt -r requirements-desktop.txt -r requirements-dev.txt
+
+      - name: Install Rust and build the engine module
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          .venv\Scripts\python -m maturin develop --release --manifest-path engine/py/Cargo.toml
+        shell: pwsh
+
+      - name: Build Windows onedir package
+        # -AssumeYesForDownloads lets Nuitka fetch dependency walker (required
+        # for Windows standalone mode); a prompt would hang the runner.
+        run: ./desktop/build_windows.ps1 -AssumeYesForDownloads
+        shell: pwsh
+
+      - name: Smoke-test package layout and the setup Solve
+        # GUI-subsystem freezes do not set $LASTEXITCODE under `&`. Start-Process
+        # WaitForExit reads the process exit code.
+        # --smoke-test walks a new account through setup to its first Solve and
+        # fails on a blank window, which is how 0.9.0 broke for testers.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $root = "dist\FlexWeek-Windows"
+          $exe = Join-Path $root "FlexWeek.exe"
+          if (-not (Test-Path $exe)) { throw "FlexWeek.exe missing after build" }
+          foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png")) {
+            if (-not (Test-Path (Join-Path $root $name))) { throw "$name missing under $root" }
+          }
+          if (Get-ChildItem -Path $root -Recurse -Filter "*WebEngineCore*" -ErrorAction SilentlyContinue) {
+            throw "Native package must not ship WebEngine"
+          }
+          if (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineProcess.exe" -ErrorAction SilentlyContinue) {
+            throw "Native package must not ship QtWebEngineProcess.exe"
+          }
+          $report = Join-Path (Get-Location) "dist\windows-smoke.json"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test",$report -WorkingDirectory $root -PassThru
+          try {
+            if (-not $proc.WaitForExit(600000)) {
+              Stop-Process -Id $proc.Id -Force
+              throw "FlexWeek --smoke-test timed out after 10 minutes"
+            }
+            if ($null -eq $proc.ExitCode -or $proc.ExitCode -ne 0) {
+              throw "FlexWeek --smoke-test failed with $($proc.ExitCode)"
+            }
+            $result = Get-Content $report -Raw | ConvertFrom-Json
+            if (-not $result.ok -or $result.stage -ne "week shown after setup Solve") {
+              throw "FlexWeek --smoke-test stopped at: $($result.stage)"
+            }
+          } finally {
+            if (Test-Path $report) { Get-Content $report }
+          }
+        shell: pwsh
+
+      - name: Install the installer tools
+        # Inno Setup is not on windows-latest (Server 2025), so fetch the pinned
+        # release and check it against the SHA-256 GitHub lists for it. WiX stays
+        # on v6: v7 blocks every command until its EULA is accepted.
+        env:
+          INNO_URL: https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe
+          INNO_SHA256: 0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "innosetup.exe"
+          Invoke-WebRequest -Uri $env:INNO_URL -OutFile $installer
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:INNO_SHA256) { throw "Inno Setup download has SHA-256 $hash, expected $env:INNO_SHA256" }
+          $dir = Join-Path $env:RUNNER_TEMP "innosetup"
+          $proc = Start-Process -FilePath $installer -PassThru `
+            -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/CURRENTUSER", "/DIR=$dir"
+          if (-not $proc.WaitForExit(600000)) {
+            Stop-Process -Id $proc.Id -Force
+            throw "Inno Setup install timed out after 10 minutes"
+          }
+          if ($proc.ExitCode -ne 0) { throw "Inno Setup install failed with $($proc.ExitCode)" }
+          $iscc = Join-Path $dir "ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe missing under $dir" }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          dotnet tool install --global wix --version 6.0.2
+          if ($LASTEXITCODE -ne 0) { throw "Could not install WiX 6.0.2" }
+          wix --version
+        shell: pwsh
+
+      - name: Build the installers
+        # The version comes from a vX.Y.Z tag; builds without one get 0.0.<run>.
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          $version = if ($env:TAG -match '^v(\d+\.\d+\.\d+)$') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          $app = (Resolve-Path dist\FlexWeek-Windows).Path
+          $out = (Resolve-Path dist).Path
+          & $env:ISCC "/DAppVersion=$version" "/DSourceDir=$app" "/DOutputDir=$out" packaging\windows\flexweek.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          wix build packaging\windows\flexweek.wxs -arch x64 -d "Version=$version" -bindpath "app=$app" `
+            -o dist\FlexWeek-Windows-x64.msi
+          if ($LASTEXITCODE -ne 0) { throw "wix build failed with $LASTEXITCODE" }
+          foreach ($name in @("FlexWeek-Windows-x64-Setup.exe", "FlexWeek-Windows-x64.msi")) {
+            $hash = (Get-FileHash "dist\$name" -Algorithm SHA256).Hash.ToLower()
+            "$hash  $name" | Set-Content -NoNewline "dist\$name.sha256"
+            Write-Host "$name version $version, $((Get-Item "dist\$name").Length) bytes, SHA-256 $hash"
+          }
+        shell: pwsh
+
+      - name: Install, open and uninstall each installer
+        # 0.9.0 and 0.9.1 shipped a zip whose shortcut pointed at the build
+        # machine's folder. Each installer must put a Start menu shortcut that
+        # opens the installed FlexWeek.exe, the installed app must pass the
+        # setup-Solve smoke test, and uninstall must remove it.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          function Invoke-Checked([string] $file, [string[]] $arguments, [string] $what) {
+            $proc = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
+            if (-not $proc.WaitForExit(600000)) {
+              Stop-Process -Id $proc.Id -Force
+              throw "$what timed out after 10 minutes"
+            }
+            if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) { throw "$what failed with $($proc.ExitCode)" }
+          }
+          function Test-Installed([string] $exe, [string] $shortcut, [string] $name) {
+            if (-not (Test-Path $exe)) { throw "$name did not install $exe" }
+            if (-not (Test-Path $shortcut)) { throw "$name did not create $shortcut" }
+            $link = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut)
+            if ($link.TargetPath -ne $exe) { throw "$name shortcut opens '$($link.TargetPath)', not '$exe'" }
+            # Windows Installer resolves a directory with a trailing backslash; Inno does not.
+            if ($link.WorkingDirectory.TrimEnd('\') -ne (Split-Path $exe)) {
+              throw "$name shortcut starts in '$($link.WorkingDirectory)', not '$(Split-Path $exe)'"
+            }
+            $report = Join-Path $env:RUNNER_TEMP "$name-smoke.json"
+            $proc = Start-Process -FilePath $link.TargetPath -ArgumentList "--smoke-test", $report `
+              -WorkingDirectory $link.WorkingDirectory -PassThru
+            try {
+              if (-not $proc.WaitForExit(600000)) {
+                Stop-Process -Id $proc.Id -Force
+                throw "$name installed app smoke test timed out after 10 minutes"
+              }
+              $result = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
+              if ($proc.ExitCode -ne 0 -or -not $result.ok -or $result.stage -ne "week shown after setup Solve") {
+                throw "$name installed app failed its smoke test (exit $($proc.ExitCode), stage $($result.stage))"
+              }
+            } finally {
+              if (Test-Path $report) { Get-Content $report }
+            }
+          }
+          function Wait-Removed([string] $path, [string] $name) {
+            foreach ($i in 1..60) { if (-not (Test-Path $path)) { return }; Start-Sleep -Seconds 1 }
+            throw "$name uninstall left $path behind"
+          }
+
+          $setup = Resolve-Path dist\FlexWeek-Windows-x64-Setup.exe
+          Invoke-Checked $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER") "Setup.exe install"
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\FlexWeek\FlexWeek.exe"
+          Test-Installed $exe (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\FlexWeek.lnk") "Setup.exe"
+          Invoke-Checked (Join-Path (Split-Path $exe) "unins000.exe") @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") "Setup.exe uninstall"
+          Wait-Removed $exe "Setup.exe"
+
+          $msi = (Resolve-Path dist\FlexWeek-Windows-x64.msi).Path
+          Invoke-Checked "msiexec.exe" @("/i", "`"$msi`"", "/qn", "/norestart") ".msi install"
+          $exe = Join-Path $env:ProgramFiles "FlexWeek\FlexWeek.exe"
+          Test-Installed $exe (Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\FlexWeek.lnk") "msi"
+          Invoke-Checked "msiexec.exe" @("/x", "`"$msi`"", "/qn", "/norestart") ".msi uninstall"
+          Wait-Removed $exe "msi"
+        shell: pwsh
+
+      - name: Keep the installers from this run
+        if: github.event_name != 'release' && !inputs.tag
+        uses: actions/upload-artifact@v7
+        with:
+          name: FlexWeek-Windows-installers
+          path: |
+            dist/FlexWeek-Windows-x64-Setup.exe
+            dist/FlexWeek-Windows-x64-Setup.exe.sha256
+            dist/FlexWeek-Windows-x64.msi
+            dist/FlexWeek-Windows-x64.msi.sha256
+          retention-days: 7
+
+      - name: Attach to the release
+        if: github.event_name == 'release' || inputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        # A file already on the release was checked by hand and may already be offered by the
+        # updater, so it is never replaced. To replace one on purpose, delete it from the release first.
+        run: |
+          $have = @(gh release view "$env:TAG" --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0) { throw "Could not list the files on release $env:TAG" }
+          $files = @(
+            "dist\FlexWeek-Windows-x64-Setup.exe",
+            "dist\FlexWeek-Windows-x64-Setup.exe.sha256",
+            "dist\FlexWeek-Windows-x64.msi",
+            "dist\FlexWeek-Windows-x64.msi.sha256"
+          )
+          foreach ($file in $files) {
+            $name = Split-Path $file -Leaf
+            if ($have -contains $name) { Write-Host "$name is already on the release; leaving it as it is"; continue }
+            gh release upload "$env:TAG" $file
+            if ($LASTEXITCODE -ne 0) { throw "Could not upload $name" }
+          }
+
+  linux:
+    runs-on: depot-ubuntu-24.04 # was: ubuntu-24.04. Mapped standard GitHub runner to Depot equivalent.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Check the tag matches the version
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python scripts/check_release_tag.py --tag="$TAG"
+
+      - name: Install bundle tools and xcb helpers to vendor
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            patchelf binutils ccache libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 \
+            libxkbcommon0 libxkbcommon-x11-0 xvfb \
+            libegl1 libgl1 libopengl0 libglx0 libgles2 libgl1-mesa-dri
+
+      - name: Create venv and install build + runtime deps
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt -r requirements-desktop.txt -r requirements-dev.txt
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            engine/target
+          key: engine-build-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: |
+            engine-build-${{ runner.os }}-
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/Nuitka
+            ~/.ccache
+          key: nuitka-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-desktop.txt') }}-${{ hashFiles('desktop/**') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-desktop.txt') }}-
+            nuitka-${{ runner.os }}-
+      - name: Build the engine module
+        run: .venv/bin/python -m maturin develop --release --manifest-path engine/py/Cargo.toml
+
+      - name: Build and package Linux onedir
+        run: |
+          export NUITKA_CACHE_DIR="${HOME}/.cache/Nuitka"
+          export CCACHE_DIR="${HOME}/.ccache"
+          export PATH="/usr/lib/ccache:$PATH"
+          mkdir -p "$NUITKA_CACHE_DIR" "$CCACHE_DIR"
+          ./desktop/build_linux.sh
+          ./desktop/package_linux.sh dist/FlexWeek dist/release
+
+      - name: Smoke the packaged archive
+        # Prove the download itself starts: extract the tarball a user gets and
+        # run the root launcher, not the raw onedir. --smoke-test walks a new
+        # account through setup to its first Solve and fails on a blank window.
+        env:
+          QT_QPA_PLATFORM: offscreen
+          LD_LIBRARY_PATH: ""
+        run: |
+          mkdir dist/stage
+          tar -xzf dist/release/FlexWeek-Linux-x86_64.tar.gz -C dist/stage
+          if find dist/stage/FlexWeek dist/FlexWeek -name '*WebEngineCore*' | grep -q .; then
+            echo "Native package must not ship WebEngine" >&2
+            exit 1
+          fi
+          xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
+          python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
+
+      - name: Smoke the packaged helper in the archive
+        # The download must carry the assistant helper and answer a read-only
+        # request from it: the extracted launcher's --mcp dispatch, the seven
+        # read tools and the sign-in refusal. A release is not done without it
+        # (spec.md, Releases).
+        run: |
+          python desktop/smoke_mcp.py dist/stage/FlexWeek/FlexWeek --timeout 60
+
+      - name: Smoke-test the setup Solve
+        env:
+          QT_QPA_PLATFORM: offscreen
+          LD_LIBRARY_PATH: ""
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" dist/FlexWeek/FlexWeek --smoke-test dist/linux-smoke.json
+          python -c 'import json,sys; r=json.load(open("dist/linux-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
+
+      - name: Build AppImage
+        # Wraps the same onedir the tarball ships (LSA's packaging method).
+        # appimagetool needs desktop-file-validate and mksquashfs; extract-and-
+        # run mode avoids needing FUSE on the runner.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            desktop-file-utils squashfs-tools
+          chmod +x packaging/make-appimage.sh
+          packaging/make-appimage.sh dist/FlexWeek dist/release/FlexWeek-x86_64.AppImage
+          test -x dist/release/FlexWeek-x86_64.AppImage
+          size=$(stat -c%s dist/release/FlexWeek-x86_64.AppImage)
+          echo "AppImage $size bytes"
+          test "$size" -gt 1000000
+
+      - name: Smoke the packaged helper in the AppImage
+        # The AppImage dispatches --mcp before its library checks; the smoke
+        # sets APPIMAGE_EXTRACT_AND_RUN so it starts without FUSE. It must
+        # answer the same read-only exchange the archive's helper does.
+        run: |
+          python desktop/smoke_mcp.py dist/release/FlexWeek-x86_64.AppImage --timeout 60
+
+      - name: Check the checksum files
+        # Each .sha256 names only its file, so `sha256sum -c` works in whatever
+        # folder the user downloaded to. 0.9.0's AppImage checksum held the
+        # runner's /home/runner/work/... path instead.
+        working-directory: dist/release
+        run: |
+          cat FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256
+          if grep -q "/" FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256; then
+            echo "A checksum file names a directory (such as /home/runner), not just the file." >&2
+            exit 1
+          fi
+          sha256sum -c FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256
+
+      - name: Attach to the release
+        if: github.event_name == 'release' || inputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        # A file already on the release was checked by hand and may already be offered by the
+        # updater, so it is never replaced. To replace one on purpose, delete it from the release first.
+        run: |
+          have=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          for file in \
+            dist/release/FlexWeek-Linux-x86_64.tar.gz \
+            dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256 \
+            dist/release/FlexWeek-x86_64.AppImage \
+            dist/release/FlexWeek-x86_64.AppImage.sha256; do
+            name=$(basename "$file")
+            if grep -qxF "$name" <<< "$have"; then
+              echo "$name is already on the release; leaving it as it is"
+              continue
+            fi
+            gh release upload "$TAG" "$file"
+          done
