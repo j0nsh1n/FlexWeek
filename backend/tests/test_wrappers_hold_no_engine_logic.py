@@ -408,12 +408,13 @@ class RustAnswers:
         # called on it or on a name that holds the same value (`answer.clear()`, or through `alias = answer`).
         aliases: dict[str, set[str]] = {}
         for targets, value in assignments:
-            if isinstance(value, ast.Name):
-                for target in targets:
-                    for name in target_names(target):
-                        group = aliases.get(name, {name}) | aliases.get(value.id, {value.id})
-                        for member in group:
-                            aliases[member] = group
+            if not isinstance(value, ast.Name):
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    group = aliases.get(target.id, {target.id}) | aliases.get(value.id, {value.id})
+                    for member in group:
+                        aliases[member] = group
         changed = {
             member
             for item in own_body(node)
@@ -424,13 +425,16 @@ class RustAnswers:
         }
         self.bound: set[str] = set()
         while True:
-            tainted = {
-                name
-                for targets, value in assignments
-                if value is None or not self.from_rust(value)
-                for target in targets
-                for name in target_names(target)
-            }
+            tainted: set[str] = set()
+            for targets, value in assignments:
+                if value is not None and self.from_rust(value):
+                    continue
+                for target in targets:
+                    names = target_names(target)
+                    # A store into the value (`x[k] = ...`, `x += ...`) changes it under every name it has.
+                    if value is None or isinstance(target, (ast.Subscript, ast.Attribute)):
+                        names = {member for name in names for member in aliases.get(name, {name})}
+                    tainted |= names
             grown = (
                 {
                     name
