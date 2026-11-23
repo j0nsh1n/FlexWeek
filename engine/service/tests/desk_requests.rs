@@ -28,6 +28,8 @@ struct Window<'a> {
     entropy: Counting,
     /// Requests sent, so each names its own restore point, as the app draws a new name for each.
     sent: u64,
+    /// The recovery codes sign-up gave, for the tests that use one.
+    first_codes: Vec<Value>,
 }
 
 impl<'a> Window<'a> {
@@ -38,6 +40,7 @@ impl<'a> Window<'a> {
             account: None,
             entropy: Counting(0),
             sent: 0,
+            first_codes: Vec::new(),
         }
     }
 
@@ -90,6 +93,10 @@ impl<'a> Window<'a> {
             json!({ "username": name, "password": PASSWORD }),
         );
         assert_eq!(made.status, 201, "{made:?}");
+        window.first_codes = made.body.unwrap()["recovery_codes"]
+            .as_array()
+            .unwrap()
+            .clone();
         window
     }
 }
@@ -617,9 +624,19 @@ fn new_recovery_codes_need_the_password_and_replace_the_old_ones() {
         "/api/auth/recovery-codes",
         json!({ "password": PASSWORD }),
     );
+    assert_eq!(renewed.status, 200, "{renewed:?}");
     let body = renewed.body.unwrap();
     assert_eq!(body["remaining"], 8);
     assert_eq!(body["recovery_codes"].as_array().unwrap().len(), 8);
+    // A code sign-up gave no longer works.
+    let old = ana.first_codes[0].clone();
+    ana.send("POST", "/api/auth/logout", "");
+    let refused_old = ana.json(
+        "POST",
+        "/api/auth/recover",
+        json!({ "username": "ana", "code": old, "password": "replacement-pw-1" }),
+    );
+    assert_eq!(refused_old.status, 401, "{refused_old:?}");
 }
 
 #[test]
@@ -741,4 +758,115 @@ fn a_restore_point_is_previewed_and_restored() {
         404,
         "Restore point not found",
     );
+}
+
+fn soccer() -> Value {
+    json!({ "id": "soccer", "title": "Soccer", "kind": "locked", "duration_min": 60, "days": [0],
+            "start": "16:00" })
+}
+
+#[test]
+fn signing_in_again_starts_a_session_with_200() {
+    let db = TestDb::new("desk-sign-in");
+    let mut ana = Window::signed_up(&db, "ana");
+    ana.send("POST", "/api/auth/logout", "");
+    let back = ana.json(
+        "POST",
+        "/api/auth/login",
+        json!({ "username": "Ana", "password": PASSWORD }),
+    );
+    assert_eq!(back.status, 200, "{back:?}");
+    assert!(matches!(back.session, Session::Started(_)));
+    assert_eq!(back.body.unwrap()["username"], "ana");
+}
+
+#[test]
+fn a_new_account_reads_eight_codes_default_preferences_and_empty_lists() {
+    let db = TestDb::new("desk-new-account");
+    let mut ana = Window::signed_up(&db, "ana");
+    assert_eq!(
+        ana.send("GET", "/api/auth/recovery-status", "").body,
+        Some(json!({ "remaining": 8 }))
+    );
+    let preferences = ana.send("GET", "/api/preferences", "").body.unwrap();
+    assert_eq!(preferences["theme"], "system");
+    assert_eq!(
+        ana.send("GET", "/api/routines", "").body,
+        Some(json!({ "routines": [] }))
+    );
+    assert_eq!(
+        ana.send("GET", "/api/restore-points", "").body,
+        Some(json!({ "restore_points": [] }))
+    );
+    assert_eq!(
+        ana.send("GET", "/api/weeks", "").body,
+        Some(json!({ "weeks": [] }))
+    );
+    assert_eq!(
+        ana.json("POST", "/api/repeat-edits", json!({ "repeats": [] }))
+            .body,
+        Some(json!({ "weeks": [], "line": null }))
+    );
+}
+
+#[test]
+fn a_saved_week_shows_on_its_day_its_month_and_the_week_list() {
+    let db = TestDb::new("desk-saved-week");
+    let mut ana = Window::signed_up(&db, "ana");
+    let saved = ana.json(
+        "PUT",
+        "/api/week",
+        json!({ "week_start": "2026-11-02", "blocks": [soccer()], "revision": 0 }),
+    );
+    assert_eq!(saved.status, 200, "{saved:?}");
+    assert_eq!(saved.body.as_ref().unwrap()["revision"], 1);
+    assert_eq!(saved.body.unwrap()["blocks"][0]["title"], "Soccer");
+    assert_eq!(
+        ana.send("GET", "/api/weeks", "").body,
+        Some(json!({ "weeks": ["2026-11-02"] }))
+    );
+    // Monday 2 November holds Soccer; the month of November holds that day.
+    let day = ana
+        .send("GET", "/api/day?date=2026-11-02", "")
+        .body
+        .unwrap();
+    assert_eq!(day["date"], "2026-11-02");
+    assert!(day.to_string().contains("Soccer"), "{day}");
+    let month = ana
+        .send("GET", "/api/month?month=2026-11", "")
+        .body
+        .unwrap();
+    assert_eq!(month["month"], "2026-11");
+    assert!(month.to_string().contains("Soccer"), "{month}");
+}
+
+#[test]
+fn preferences_saved_are_read_back() {
+    let db = TestDb::new("desk-preferences");
+    let mut ana = Window::signed_up(&db, "ana");
+    let mut chosen = ana.send("GET", "/api/preferences", "").body.unwrap();
+    chosen["theme"] = json!("slate");
+    let saved = ana.json("PUT", "/api/preferences", chosen);
+    assert_eq!(saved.status, 200, "{saved:?}");
+    let read = ana.send("GET", "/api/preferences", "").body.unwrap();
+    assert_eq!(read["theme"], "slate");
+}
+
+#[test]
+fn a_homework_is_spread_from_a_day() {
+    let db = TestDb::new("desk-spread");
+    let mut ana = Window::signed_up(&db, "ana");
+    let essay = json!({ "id": "essay", "title": "Essay", "due": "2026-11-06T23:59",
+                        "estimate_min": 120, "revision": 0 });
+    assert_eq!(ana.json("PUT", "/api/assignments/essay", essay).status, 200);
+    let spread = ana.json(
+        "POST",
+        "/api/assignments/essay/spread",
+        json!({ "session_min": 60, "from_date": "2026-11-02" }),
+    );
+    assert_eq!(spread.status, 200, "{spread:?}");
+    let body = spread.body.unwrap();
+    assert_eq!(body["assignment_id"], "essay");
+    // Two hours in one-hour sessions: two sessions.
+    assert_eq!(body["sessions"].as_array().unwrap().len(), 2);
 }
