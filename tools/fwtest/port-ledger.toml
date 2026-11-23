@@ -452,3 +452,13 @@ rust = [
     "flexweek-engine::test_assignment_models::a_done_day_needs_a_finished_placed_flexible_block_on_that_day",
 ]
 red = "pinned allowed on a block with two days, and a done day outside the block's days allowed each fail their test (2026-11-22); the length and day-range rules are red-checked in validate_models.rs"
+
+[[port]]
+python = "backend/tests/test_two_accounts_stay_apart.py"
+rust = [
+    "flexweek-service::two_accounts_stay_apart::two_accounts_keep_their_own_weeks_and_preferences",
+    "flexweek-service::two_accounts_stay_apart::week_homework_day_and_month_reads_stay_with_their_account",
+    "flexweek-service::two_accounts_stay_apart::spreading_homework_reads_the_callers_own_homework",
+    "flexweek-service::two_accounts_stay_apart::plan_uses_the_callers_end_of_day_and_not_anothers",
+]
+red = "the saved-weeks list, the homework rows and the preferences row each read across accounts fail their tests (2026-11-22). Its sign-in checks for a request with no session go with the server in P2"
