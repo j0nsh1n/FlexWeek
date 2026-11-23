@@ -636,7 +636,7 @@ red = "the label changed to \"On this computer\" fails the test (2026-11-23); th
 [[port]]
 python = "backend/tests/test_desk_requests_answer_as_the_server.py"
 rust = ["engine/service/tests/desk_requests.rs"]
-red = "it compared the Rust answers with backend/app.py, which is gone; every route it reached has a desk_requests test of its own now (31 tests, recover, recovery codes, timer presets, reminder limits, split preview, changes, plan, homework delete, import preview and import, restore preview and restore among them), each seen red by a break of its route in desk_requests.rs (2026-11-23)"
+red = "it compared the Rust answers with backend/app.py, which is gone; every route it reached has a desk_requests test that gets past the session check to the route's own answer (36 tests); each route's answer replaced by a server error (or, for sign-in, 201 for 200) fails at least one of them (2026-11-23)"
 
 [[port]]
 python = "backend/tests/test_assignment_view_estimate_limit.py"

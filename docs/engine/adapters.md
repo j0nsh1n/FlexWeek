@@ -516,6 +516,3 @@ The desktop wrapper modules, plus `look.py`, `custom_look.py` and `version.py`. 
 | weekmodel.WeekModel.on_day | default, type test | either tuple missing skips the day cache |
 | weekmodel.WeekModel.load_min | default, type test | either tuple missing skips the load cache |
 | weekmodel.WeekModel.day_queue | branch | no current block stays None |
-| app.adopt_legacy_deadlines | truth test | the engine's "over the cap" becomes the 422 |
-| app.require_own_assignments | truth test | the engine's "not owned" becomes the 422 |
-| app.insert_restore_point | default | a missing keep-set is an empty list |
