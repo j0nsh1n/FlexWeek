@@ -11,6 +11,7 @@ pub mod accounts;
 pub mod blocks;
 pub mod changes;
 pub mod comfort;
+pub mod desk_requests;
 pub mod homework_saves;
 pub mod plans;
 pub mod preferences;

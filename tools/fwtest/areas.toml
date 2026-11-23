@@ -146,7 +146,7 @@ paths = [
   "desktop/tests/__init__.py", "desktop/tests/conftest.py", "desktop/tests/light_app.py",
   "desktop/tests/waiting.py", "desktop/tests/fontconfig.conf", "desktop/tests/logic_support.py",
   "desktop/tests/pictures/screen.py", "desktop/tests/pictures/__init__.py",
-  "backend/tests/__init__.py", "backend/tests/conftest.py", "backend/tests/fake_clock.py",
+  "backend/tests/__init__.py", "backend/tests/fake_clock.py",
   "scripts/pictures/", "scripts/brand.py", "scripts/instance_fonts.py",
 ]
 everything = true

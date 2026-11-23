@@ -602,4 +602,4 @@ rust = [
     "flexweek-engine::planning_real_student_weeks::a_priority_1_item_is_never_dropped_for_a_lower_one",
     "flexweek-engine::planning_real_student_weeks::a_priority_1_item_is_never_dropped_for_a_lower_one_on_a_slower_laptop",
 ]
-red = "weekend days not offered for work due after Sunday fails the week 17 weekend test (2026-11-22); the three known failures are the Python file's strict expected failures, each shown able to fail by asking for no more than the planner does (no cap, no buffer, no gap); the floor and priority twins were seen red when they were written"
+red = "weekend days not offered for work due after Sunday fails the week 17 weekend test (2026-11-22); work due after the week offered no day past Thursday fails the week 17 Friday test (0 of 3 placed; 2026-11-23); the three known failures are the Python file's strict expected failures, each shown able to fail by asking for no more than the planner does (no cap, no buffer, no gap); the floor and priority twins were seen red when they were written"

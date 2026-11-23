@@ -6,8 +6,8 @@ use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
 use flexweek_service::{
-    Refusal, ServiceError, ServiceResult, changes, comfort, homework_saves, plans, preferences,
-    records, transfer, views, week_saves, weeks,
+    Refusal, ServiceError, ServiceResult, changes, comfort, desk_requests, homework_saves, plans,
+    preferences, records, transfer, views, week_saves, weeks,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
@@ -714,6 +714,65 @@ fn service_delete_homework(
     })
 }
 
+/// One request from the desktop window, answered in this process with no server (P2): the status, the
+/// body as JSON text (None for none), whether the session was "kept", "started" or "ended", and the new
+/// session token ("" unless started). Refusals are answers here, not exceptions.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (path, method, api_path, body, token, account, seconds, now, restore_token))]
+fn service_answer(
+    py: Python<'_>,
+    path: &str,
+    method: &str,
+    api_path: &str,
+    body: &str,
+    token: &str,
+    account: Option<&str>,
+    seconds: i64,
+    now: &str,
+    restore_token: &str,
+) -> PyResult<(u16, Option<String>, &'static str, String)> {
+    guard(|| {
+        let mut secrets = Secrets {
+            module: py.import("secrets")?.unbind(),
+            failed: None,
+        };
+        let request = desk_requests::Request {
+            method,
+            path: api_path,
+            body,
+            token,
+            account,
+        };
+        let start_clock = || -> plans::Stopwatch {
+            let started = std::time::Instant::now();
+            Box::new(move || started.elapsed().as_secs_f64() * 1000.0)
+        };
+        let clock = desk_requests::Clock {
+            seconds,
+            now,
+            restore_token,
+            stopwatch: &start_clock,
+        };
+        let answer =
+            py.detach(|| desk_requests::answer(Path::new(path), &request, &clock, &mut secrets));
+        if let Some(error) = secrets.failed {
+            return Err(error);
+        }
+        let (session, new_token) = match answer.session {
+            desk_requests::Session::Kept => ("kept", String::new()),
+            desk_requests::Session::Started(token) => ("started", token),
+            desk_requests::Session::Ended => ("ended", String::new()),
+        };
+        Ok((
+            answer.status,
+            answer.body.map(|body| body.to_string()),
+            session,
+            new_token,
+        ))
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("ServiceRefusal", module.py().get_type::<ServiceRefusal>())?;
     crate::export!(
@@ -752,6 +811,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_create_restore_point,
         service_delete_routine,
         service_delete_homework,
+        service_answer,
     );
     Ok(())
 }
