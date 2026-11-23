@@ -7,15 +7,18 @@
   `flexweek_engine.service_answer`, on a shared pool of 4 worker threads in `desktop/native/client.py`), the app
   opens no network port with no phone paired (checked in-process and in the smoke report's `listening`),
   `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the hosted-server
-  settings (D4) are no longer read. The request tests are `engine/service/tests/desk_requests.rs` (36, one per
-  route's own answer). P2 is not complete: pydantic (`backend/models.py`, about 115 uses incl. the planner
+  settings (D4) are no longer read. The request tests are `engine/service/tests/desk_requests.rs` (36 tests covering
+  every route's own answer). P2 is not complete: pydantic (`backend/models.py`, about 115 uses incl. the planner
   adapters and the sheets' error wording) is Jonathan's call (now or in P4); spec.md's wording waits in held #157.
-- P3 slice 1 (#158): the test door (`desktop/tests/door.py`, a local socket file, test-only), `door_app.py`, and
-  `flexweek-testkit::door` (Driver + Door); `test_material_go_to_date.py`'s 12 cases run in Rust against the Python
-  app (`engine/testkit/tests/week_date_picker.rs`, with `-- --ignored`). CI does not run them yet (a workflow change,
-  Jonathan's call); the Python originals stay until it does.
-- Port ledger rows may be `gone` (the approved decision that removed what a deleted test file tested) instead of
-  Rust twins; the gate prints each one this branch deleted.
+- P3 slice 1 (#158, merged ee90444e): the test door (`desktop/tests/door.py`, a local socket file, test-only),
+  `door_app.py`, and `flexweek-testkit::door` (Driver + Door); `test_material_go_to_date.py`'s 13 cases run as 12
+  Rust tests against the Python app (`engine/testkit/tests/week_date_picker.rs`, plus 4 door tests in
+  `the_test_door.rs`, with `-- --ignored`). Six rules were broken by hand to see their tests fail; not every test
+  has been seen red yet. CI does not run them (a workflow change, Jonathan's call), and the Python originals are
+  still in place.
+- `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
+  tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
+  deleted.
 - Main had #140 (Material only, its own Qt Quick window, #118's weekly fixed times) and #137 (the phone 1.4.0 fixes)
   before 1.5.0. Done time is the larger of focus minutes and minutes ticked done (`plan::done_time`).
 - Latest release: v1.5.0, published 2026-11-20 (US time) from main 0effa56f (PR #141). The previous release is
@@ -39,8 +42,8 @@
   (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
 - 2.0.0 follow-ups after P1: `hypothesis` is installed and unused (remove in P2); the Python store methods
   `apply_repeat_intents`, `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers;
-  nine corpus generators still count any exception as a refusal
-  (`make_transfer_corpus.py` was fixed); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
+  the five remaining corpus generators still count any exception as a refusal (the seven that needed
+  backend/app.py were removed in #156); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
   fail on CI depending on the clock (passed on re-run, 2026-11-22).
 - Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
   slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
@@ -121,12 +124,12 @@ preview. Recorded `operation_id` values make a retried write return the first re
 
 ## Session Handoff
 - 2026-11-23 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/afk-run-2026-11-23.md`): P2 parts 1-3
-  merged (#154 c32d792a..10cef8e8, #155, #156), each after a Gemini 4 Neon PASS (rounds: 2, 3, 3) and green CI.
-  P3 slice 1 (#158) passed Gemini round 3. Held for Jonathan: #157 (spec.md), and #153 (Depot) from before.
-  Parked: when pydantic goes, CI for the door tests, the sign-in timeout words ("its server"), the `gone` ledger
-  rows (a choice to confirm). Local gotchas: fwtest's gate compares with the local `main` branch first (stale in
-  this worktree), so set `VERIFY_BASE_SHA`; ruff's cache can hide import errors after a module is deleted
-  (`--no-cache`); rustfmt is not in the local gate (CI runs `cargo fmt --check` in engine and tools/fwtest).
+  merged (#154 670e4534, #155 b2b2f56a, #156 cd96e7f0), each after a Gemini 4 Neon PASS (rounds: 2, 3, 3) and green
+  CI. P3 slice 1 (#158) merged ee90444e after Gemini round 3 and a confirmed CI fix (the door now reaches the window through the test helper). Held for Jonathan: #157 (spec.md), and #153 (Depot) from
+  before. Parked: when pydantic goes, CI for the door tests, the sign-in timeout words ("its server"), the `gone`
+  ledger rows (a choice to confirm). Facts the run met: `fwtest gate` takes its base from `VERIFY_BASE_SHA`, then the
+  local `main` branch, then `origin/main` (`tools/fwtest/src/gate.rs`); it runs `ruff check .` with ruff's cache on;
+  it does not run `cargo fmt --check`, which CI runs in engine and tools/fwtest.
   Next: Jonathan's answers, then P2's pydantic step or P4; P3's next slice (door setup steps for seeded data,
   more Week files, the CI step).
 - 2026-11-22: 2.0.0 P1's work is merged (main 7cdd8e16, #148-#151). #148, #149 and #151 had a Grok 4.7 PASS; #150's
