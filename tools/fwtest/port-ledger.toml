@@ -326,3 +326,16 @@ rust = [
     "flexweek-service::spread_api::a_free_day_gets_its_share_before_a_day_with_a_placed_session",
 ]
 red = "days that hold a session put back in date order, and finished homework allowed to spread each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_week_save_with_weekday_latest.py"
+rust = [
+    "flexweek-service::weekday_latest::a_weekday_deadline_makes_the_homework_if_missing_and_stores_a_session",
+    "flexweek-service::weekday_latest::saving_it_again_does_not_change_the_homework_it_made",
+    "flexweek-service::weekday_latest::a_save_from_an_old_revision_leaves_no_new_homework",
+    "flexweek-service::weekday_latest::a_homework_session_with_a_weekday_deadline_is_refused",
+    "flexweek-service::weekday_latest::a_done_block_ending_at_midnight_saves_and_reloads",
+    "flexweek-service::weekday_latest::done_at_midnight_on_the_last_day_stays_on_the_last_day",
+    "flexweek-service::weekday_latest::a_done_block_on_the_last_day_ending_at_midnight_saves",
+]
+red = "a midnight finish not rolled to the next date, no last-day clamp, and existing homework made again on a re-save each fail their tests (2026-11-22)"
