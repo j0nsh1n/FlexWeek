@@ -339,3 +339,18 @@ rust = [
     "flexweek-service::weekday_latest::a_done_block_on_the_last_day_ending_at_midnight_saves",
 ]
 red = "a midnight finish not rolled to the next date, no last-day clamp, and existing homework made again on a re-save each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_homework_due_bounds_in_solve.py"
+rust = [
+    "flexweek-service::due_bounds_in_plan::a_week_is_needed_when_a_block_is_a_homework_session",
+    "flexweek-service::due_bounds_in_plan::another_accounts_homework_is_refused",
+    "flexweek-service::due_bounds_in_plan::due_next_tuesday_places_sunday_this_week_and_monday_next_week",
+    "flexweek-service::due_bounds_in_plan::due_sunday_at_2359_allows_a_session_that_ends_at_the_end_of_the_day",
+    "flexweek-service::due_bounds_in_plan::due_monday_0000_next_week_puts_no_bound_inside_this_week",
+    "flexweek-service::due_bounds_in_plan::a_due_before_the_week_is_a_missed_deadline",
+    "flexweek-service::due_bounds_in_plan::finished_homework_keeps_its_done_sessions_and_drops_open_ones",
+    "flexweek-service::due_bounds_in_plan::a_due_with_no_time_is_kept_and_bounds_plan_at_the_end_of_that_day",
+    "flexweek-service::due_bounds_in_plan::a_due_time_bounds_plan_at_that_minute",
+]
+red = "no week needed for homework sessions, finished homework keeping its open sessions, and no due bound inside the week each fail their tests (2026-11-22)"
