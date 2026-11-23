@@ -4,7 +4,7 @@
 //!
 //! Run from `engine/`: `cargo test -p flexweek-engine --test test_regress_item1c_session_days`;
 //! known failures: add `-- --include-ignored`. The solver-level guards (week 17, week 2, Timmy's
-//! 18 weeks) are in `backend/tests/test_regress_item1c_spread.py`.
+//! 18 weeks) are in `planning_real_student_weeks.rs`.
 
 use flexweek_engine::desk::planning::session_days;
 use serde_json::json;

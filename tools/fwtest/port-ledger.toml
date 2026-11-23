@@ -575,3 +575,31 @@ rust = [
     "flexweek-engine::test_stage4_availability::test_a_window_start_in_other_digits_is_read_as_python_reads_it",
 ]
 red = "reading only ASCII digits in time::py_int fails both (2026-11-22)"
+
+[[port]]
+python = "backend/tests/regress184/test_regress_extra_block_keys.py"
+rust = [
+    "flexweek-service::regress_block_keys::the_weeks_table_key_is_user_and_week_start",
+    "flexweek-service::regress_block_keys::a_week_that_repeats_a_block_id_is_refused_and_nothing_is_stored",
+    "flexweek-service::regress_block_keys::the_week_check_names_the_repeated_id_rule",
+    "flexweek-service::regress_block_keys::saving_a_week_again_upserts_it_in_place",
+    "flexweek-service::regress_block_keys::a_stale_second_insert_of_the_same_week_is_a_conflict_not_a_second_row",
+    "flexweek-service::regress_block_keys::the_same_id_may_repeat_across_weeks_and_accounts",
+    "flexweek-service::regress_block_keys::an_import_refuses_a_file_week_that_repeats_a_block_id",
+]
+red = "the weeks key taking the revision too, a stale save not refused, a week read without its account, and the repeated-id rule off in the week check (and, for the refused save, in the store's guard as well) each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/regress184/test_regress_item1c_spread.py"
+rust = [
+    "flexweek-engine::planning_real_student_weeks::week_17_offers_plan_friday_at_least",
+    "flexweek-engine::planning_real_student_weeks::week_17_uses_the_weekend_and_friday_stays_under_the_cap",
+    "flexweek-engine::planning_real_student_weeks::known_failure_week_2_puts_a_day_over_the_cap_while_a_lighter_day_has_room",
+    "flexweek-engine::planning_real_student_weeks::known_failure_week_2_ends_work_less_than_a_day_before_its_due_date",
+    "flexweek-engine::planning_real_student_weeks::known_failure_homework_starts_right_when_school_ends",
+    "flexweek-engine::planning_real_student_weeks::no_week_places_fewer_items_than_before",
+    "flexweek-engine::planning_real_student_weeks::no_week_places_fewer_items_than_before_on_a_slower_laptop",
+    "flexweek-engine::planning_real_student_weeks::a_priority_1_item_is_never_dropped_for_a_lower_one",
+    "flexweek-engine::planning_real_student_weeks::a_priority_1_item_is_never_dropped_for_a_lower_one_on_a_slower_laptop",
+]
+red = "weekend days not offered for work due after Sunday fails the week 17 weekend test (2026-11-22); the three known failures are the Python file's strict expected failures, each shown able to fail by asking for no more than the planner does (no cap, no buffer, no gap); the floor and priority twins were seen red when they were written"

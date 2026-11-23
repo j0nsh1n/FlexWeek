@@ -2,7 +2,7 @@
 //!
 //! In 0.18.4 a week is one row of `weeks` holding its blocks as a JSON list, so the key is split:
 //! the row's primary key covers (user_id, week_start) and the id must be unique inside the list.
-//! Python's `WeekRequest` checks the list (see `backend/tests/test_regress_extra_block_keys.py`); these
+//! The week check refuses a repeated id first (see `engine/service/tests/regress_block_keys.rs`); these
 //! tests check what the store itself guarantees.
 //!
 //! Run: `cargo test -p flexweek-store --test test_regress_extra_block_keys` from `engine/`;
