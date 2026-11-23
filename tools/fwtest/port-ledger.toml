@@ -498,3 +498,23 @@ rust = [
     "flexweek-service::store_writes_and_reads::replacing_an_account_that_fails_after_its_deletes_leaves_the_account_as_it_was",
 ]
 red = "a changed week listing its revision first, a homework or routine delete not comparing revisions, and a failed write committing instead of rolling back each fail their tests (2026-11-22). Revisions beyond 64 bits are read by the server's query parser and go with the server in P2"
+
+[[port]]
+python = "backend/tests/test_recovery_codes_and_password_change.py"
+rust = [
+    "flexweek-service::recovery_codes_and_password::the_codes_show_as_four_groups_of_four_and_all_eight_are_left",
+    "flexweek-service::accounts::signing_up_gives_eight_codes_and_the_store_keeps_only_their_hashes",
+    "flexweek-service::recovery_codes_and_password::a_code_typed_in_capitals_without_dashes_works_for_the_name_in_capitals",
+    "flexweek-service::accounts::a_recovery_code_sets_a_new_password_signs_in_and_is_used_up",
+    "flexweek-service::accounts::recovering_does_not_say_whether_the_name_exists",
+    "flexweek-service::accounts::wrong_recovery_codes_also_wait_five_minutes",
+    "flexweek-service::accounts::new_codes_retire_the_old_ones_and_need_the_password",
+    "flexweek-service::accounts::renewed_codes_work_and_a_refused_renewal_keeps_the_old_ones",
+    "flexweek-service::accounts::a_new_password_ends_every_other_session_and_keeps_this_one_signed_in",
+    "flexweek-service::recovery_codes_and_password::a_wrong_password_refuses_every_password_gated_action_and_changes_nothing",
+    "flexweek-service::recovery_codes_and_password::the_recovery_count_belongs_to_each_account",
+    "flexweek-service::recovery_codes_and_password::recovering_spends_one_code_and_signs_out_only_that_account",
+    "flexweek-service::recovery_codes_and_password::a_password_check_reads_the_signed_in_accounts_own_password",
+    "flexweek-service::accounts::a_sign_up_whose_randomness_fails_makes_no_account",
+]
+red = "codes shown without their four groups, a typed code's capitals kept, a spent code removed from every account, a new password ending every account's sessions, the code count taken over every account, the password read from the first account, and deleting without the password each fail their tests (2026-11-22); the accounts.rs twins were seen red in P0. A short random draw cannot happen in Rust (a code's draw is eight bytes by type); the signed-out answers go with the server in P2"
