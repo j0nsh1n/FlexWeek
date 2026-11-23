@@ -283,3 +283,16 @@ rust = [
     "flexweek-service::week_api::the_saved_weeks_are_listed_oldest_first_and_only_for_their_account",
 ]
 red = "no shortcut for saving the same blocks, the weeks listed newest first, and 1999-12-20 allowed as a week each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_saving_a_week.py"
+rust = [
+    "flexweek-service::saving_a_week::two_different_saves_at_once_keep_one_and_refuse_the_other",
+    "flexweek-service::saving_a_week::saving_the_same_week_twice_is_one_revision_and_a_bad_save_never_replaces_it",
+    "flexweek-service::saving_a_week::a_done_block_keeps_its_done_day_and_category",
+    "flexweek-service::saving_a_week::a_weekly_times_until_date_survives_a_save_and_a_bad_one_is_refused",
+    "flexweek-service::saving_a_week::focus_and_pomodoro_fields_survive_a_save_and_a_bad_link_or_overlap_is_refused",
+    "flexweek-service::saving_a_week::a_17_minute_block_survives_a_restart_and_the_account_still_exports",
+    "flexweek-service::saving_a_week::two_devices_signed_in_to_one_account_share_a_week_and_the_stale_one_is_refused",
+]
+red = "no stale-revision conflict, the done day dropped, the Until date dropped, and a pomodoro parent allowed with its chunks each fail their tests (2026-11-22). Its 256 KiB request limit (413), its removed demo address (404) and its hosted-server origin go with the server in P2"
