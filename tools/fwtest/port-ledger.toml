@@ -462,3 +462,15 @@ rust = [
     "flexweek-service::two_accounts_stay_apart::plan_uses_the_callers_end_of_day_and_not_anothers",
 ]
 red = "the saved-weeks list, the homework rows and the preferences row each read across accounts fail their tests (2026-11-22). Its sign-in checks for a request with no session go with the server in P2"
+
+[[port]]
+python = "backend/tests/test_one_accounts_writes_leave_the_other_alone.py"
+rust = [
+    "flexweek-service::one_accounts_writes::deleting_homework_leaves_the_other_accounts_rows_with_the_same_id_alone",
+    "flexweek-service::one_accounts_writes::saving_and_renaming_homework_leaves_the_other_accounts_same_id_alone",
+    "flexweek-service::one_accounts_writes::a_deadline_one_account_turned_into_homework_is_still_made_for_the_other",
+    "flexweek-service::one_accounts_writes::renaming_a_routine_leaves_the_other_accounts_same_id_routine_alone",
+    "flexweek-service::one_accounts_writes::importing_into_one_account_leaves_the_other_accounts_rows_alone",
+    "flexweek-service::homework_saves::another_accounts_homework_does_not_count_toward_the_limit",
+]
+red = "a homework delete reading every account's weeks, a routine rename reaching every account, and an import clearing every account's homework each fail their test (2026-11-22); the limit twin was seen red in P1"
