@@ -415,3 +415,17 @@ rust = [
     "flexweek-service::reminder_timer_and_alarm_preferences::opening_an_old_database_twice_adds_the_timer_and_alarm_columns_once",
 ]
 red = "a reminder lead up to 180 minutes allowed, a 'dark' theme kept, and the upgrade no longer turning reminders on each fail their test (2026-11-22; the twins were written in P0). The upgrade test now also checks an account that was there before the upgrade: the Python original only checked a new one, which the upgrade does not touch"
+
+[[port]]
+python = "backend/tests/test_availability_preferences_api.py"
+rust = [
+    "flexweek-service::availability_preferences::time_off_the_grid_is_refused_and_plan_keeps_to_the_end_of_the_day",
+    "flexweek-service::availability_preferences::estimates_and_the_planners_hours_stay_on_the_quarter_hour",
+    "flexweek-service::availability_preferences::preferred_study_hours_saved_by_an_older_build_open_as_study_hours",
+    "flexweek-service::availability_preferences::an_older_app_sending_preferred_study_hours_saves_them_as_study_hours",
+    "flexweek-service::availability_preferences::protected_time_keeps_an_optional_name",
+    "flexweek-service::availability_preferences::protected_times_may_touch_but_not_overlap_on_the_same_day",
+    "flexweek-service::availability_preferences::the_preferences_check_refuses_overlapping_protected_time_and_takes_touching",
+    "flexweek-service::availability_preferences::a_study_hours_subject_must_be_a_real_name",
+]
+red = "protected times allowed to overlap, a blank protected-time name kept, and a 41-character subject allowed each fail their tests (2026-11-22). Removing the blank-subject check alone stays green: a later check refuses that subject too"
