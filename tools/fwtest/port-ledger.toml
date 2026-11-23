@@ -429,3 +429,16 @@ rust = [
     "flexweek-service::availability_preferences::a_study_hours_subject_must_be_a_real_name",
 ]
 red = "protected times allowed to overlap, a blank protected-time name kept, and a 41-character subject allowed each fail their tests (2026-11-22). Removing the blank-subject check alone stays green: a later check refuses that subject too"
+
+[[port]]
+python = "backend/tests/test_comfort_and_timer_preferences_api.py"
+rust = [
+    "flexweek-service::comfort_and_timer_preferences::a_new_account_answers_no_comfort_defaults",
+    "flexweek-service::comfort_and_timer_preferences::comfort_choices_are_kept_and_values_out_of_range_are_refused",
+    "flexweek-service::comfort_and_timer_preferences::splitting_into_pomodoros_refuses_a_25_minute_work_length",
+    "flexweek-service::comfort_and_timer_preferences::the_timer_split_preview_rounds_to_the_grid_and_plans_a_90_minute_task_without_saving",
+    "flexweek-service::comfort_and_timer_preferences::the_timer_presets_and_the_reminder_notes_are_the_contracts",
+    "flexweek-service::comfort_and_timer_preferences::open_on_keeps_each_of_the_four_screens",
+    "flexweek-service::comfort_and_timer_preferences::open_on_still_refuses_other_screens",
+]
+red = "an alert volume of 101 allowed, Settings allowed as the screen to open on, and the Long preset at 60 minutes each fail their test (2026-11-22). The reminder notes follow the approved contraction rule ('doesn't play', 'it's handled'), as the engine has them; the Python route still shows the old wording until it moves to Rust in P2. Its 'routes need a session' goes with the server in P2"
