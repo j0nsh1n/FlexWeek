@@ -387,3 +387,17 @@ rust = [
     "flexweek-service::work_windows::stored_study_hours_are_kept_and_bind_plan",
 ]
 red = "study hours ending where they start allowed, the day ending at 23:45, and the whole-day flag flipped each fail their tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_planner_settings.py"
+rust = [
+    "flexweek-service::planner_settings::a_new_account_answers_no_planner_settings_and_saves_back_unchanged",
+    "flexweek-service::planner_settings::the_focus_timers_pacing_stays_apart_from_splitting_a_long_task",
+    "flexweek-service::planner_settings::the_gap_before_fixed_blocks_is_15_by_default_and_an_unknown_gap_is_refused",
+    "flexweek-service::planner_settings::each_planner_setting_moves_the_week",
+    "flexweek-service::planner_settings::a_new_account_plans_with_a_15_minute_gap",
+    "flexweek-service::planner_settings::choosing_no_gap_is_saved_and_kept",
+    "flexweek-service::planner_settings::a_spread_that_must_share_a_day_is_planned_and_says_so",
+    "flexweek-service::planner_settings::splitting_long_tasks_leaves_homework_saved_as_one_go_whole",
+]
+red = "a 10-minute gap allowed, the timer-pacing check removed, and the shared-day notice reworded each fail their test (2026-11-22)"
