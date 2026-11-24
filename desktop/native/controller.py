@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
@@ -10,6 +11,7 @@ from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
@@ -19,7 +21,7 @@ from backend.assignments import (
     planned_minutes_from_day,
     unplanned_minutes,
 )
-from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
+from backend.models import ProtectedWindow, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
@@ -200,13 +202,24 @@ SETUP_ALREADY_HERE = (
 )
 
 
+# Blocks and homework are checked and written as the engine does it (engine/service/src/blocks.rs and
+# homework_saves.rs, matched to the old pydantic models on 2,500 blocks and 2,000 homework saves); one it
+# refuses raises ValueError.
+HOMEWORK_FIELDS = frozenset(flexweek_engine.homework_fields())
+
+
+def _checked_block(block: dict) -> dict:
+    return json.loads(flexweek_engine.checked_block(json.dumps(block)))
+
+
+def _checked_homework(item: dict) -> dict:
+    return json.loads(flexweek_engine.checked_homework(json.dumps(item)))
+
+
 def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
     if item is None:
         return {"id": item_id, "assignment": None, "revision": revision}
-    body = Assignment.model_validate(
-        {key: value for key, value in item.items() if key in Assignment.model_fields}
-    )
-    dumped = body.model_dump(mode="json")
+    dumped = _checked_homework({key: value for key, value in item.items() if key in HOMEWORK_FIELDS})
     dumped.pop("revision", None)
     return {"id": item_id, "assignment": dumped, "revision": revision}
 
@@ -214,7 +227,7 @@ def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
 def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
     return {
         "week_start": week_start,
-        "blocks": [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks],
+        "blocks": [_checked_block(block) for block in blocks],
         "revision": revision,
     }
 
@@ -1408,7 +1421,7 @@ class NativeSession(QObject):
         }
 
     def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
-        validated = TimeBlock.model_validate(block).model_dump(mode="json")
+        validated = _checked_block(block)
         verb = "editing " if any(item["id"] == validated["id"] for item in self.blocks) else "adding "
         self.blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
         self._touch(verb + validated["title"], keep={validated["id"]})
@@ -1418,7 +1431,7 @@ class NativeSession(QObject):
     ) -> None:
         """Save `assignment` and keep its sessions in step. `spread` drops every open time it has and
         makes no new one, for `spread_after_save` to write the sessions that replace them."""
-        payload = {key: value for key, value in assignment.items() if key in Assignment.model_fields}
+        payload = {key: value for key, value in assignment.items() if key in HOMEWORK_FIELDS}
         payload.setdefault("revision", 0)
         known = self.assignments.get(payload.get("id"))
         if known is not None:
@@ -1426,7 +1439,7 @@ class NativeSession(QObject):
             # client's saveHomework, an edit never sets the revision or the focus counters.
             for key in ("revision", "focus_minutes", "focus_sessions"):
                 payload[key] = known.get(key) or 0
-        body = Assignment.model_validate(payload).model_dump(mode="json")
+        body = _checked_homework(payload)
         if known is not None:
             body["session_weeks"] = list(known.get("session_weeks") or [])
             # The server's counts stay paired with `_assignments_basis`, the week they were read with, until
@@ -1464,7 +1477,7 @@ class NativeSession(QObject):
                 session["days"] = days
             if "fixed_at" in assignment and not session.get("completed"):
                 self._fix_session(session, assignment["fixed_at"])
-            blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
+            blocks.append(_checked_block(session))
         # A homework already known gets a session for what is still to place of it, by the one count (its
         # done time and later weeks' sessions off), and none when nothing is: a new one gets its estimate.
         length = (
@@ -1486,7 +1499,7 @@ class NativeSession(QObject):
             }
             if assignment.get("fixed_at"):
                 self._fix_session(session, assignment["fixed_at"])
-            blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
+            blocks.append(_checked_block(session))
         finished = bool(body.get("completed"))
         label = ("editing " if known is not None else "adding ") + body["title"]
         if known is not None and finished != bool(known.get("completed")):
@@ -1628,7 +1641,7 @@ class NativeSession(QObject):
     def setup_repeats(self, blocks: list[dict]) -> list[dict]:
         """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
         time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
-        made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
+        made = [_checked_block(block) for block in blocks]
         weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
         return made + weekly
 
@@ -3114,10 +3127,7 @@ class NativeSession(QObject):
         return self._attempts[key]
 
     def _dump_blocks(self, blocks: list[dict] | None = None) -> list[dict]:
-        return [
-            TimeBlock.model_validate(block).model_dump(mode="json")
-            for block in (blocks if blocks is not None else self.blocks)
-        ]
+        return [_checked_block(block) for block in (blocks if blocks is not None else self.blocks)]
 
     def _fetch_weeks(self) -> None:
         if self.account is None:
