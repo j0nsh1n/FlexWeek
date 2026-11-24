@@ -10,7 +10,9 @@
 //! So far: the frame (group 1), which sends requests and takes their answers back, and the status (which
 //! request is the latest, whether the session is busy, the status line).
 
+pub mod autosave;
 pub mod frame;
+pub mod leaving;
 pub mod status;
 pub mod words;
 
@@ -25,6 +27,8 @@ pub use status::Status;
 pub struct Session {
     frame: Frame,
     status: Status,
+    autosave: autosave::Autosave,
+    leaving: leaving::Leaving,
 }
 
 impl Session {
@@ -32,6 +36,8 @@ impl Session {
         Self {
             frame: Frame::new(database, host, wake),
             status: Status::default(),
+            autosave: autosave::Autosave::default(),
+            leaving: leaving::Leaving::default(),
         }
     }
 
@@ -85,7 +91,10 @@ impl Session {
                 Ok(json!({}))
             }
             Some("begin") => {
-                let planning = command["planning"].as_bool().unwrap_or(false);
+                let planning = match &command["planning"] {
+                    Value::Null => false,
+                    planning => planning.as_bool().ok_or("planning is true or false")?,
+                };
                 Ok(json!({ "ticket": self.status.begin(planning) }))
             }
             Some("idle") => {
@@ -102,6 +111,75 @@ impl Session {
                 let busy = command["busy"].as_bool().ok_or("busy is true or false")?;
                 self.status.set_busy(busy);
                 Ok(json!({}))
+            }
+            Some("autosave") => {
+                let flag = |name: &str| -> Result<bool, String> {
+                    command[name]
+                        .as_bool()
+                        .ok_or_else(|| format!("{name} is true or false"))
+                };
+                let week = autosave::Week {
+                    signed_in: flag("signed_in")?,
+                    conflict: flag("conflict")?,
+                    dirty: flag("dirty")?,
+                    pending: flag("pending")?,
+                };
+                let busy = self.status.busy();
+                // The clock is read only when a save could be due, as the window did.
+                let save = !(!week.signed_in || busy || week.conflict)
+                    && self.autosave.due(week, busy, self.frame.steady_ms());
+                Ok(json!({ "save": save }))
+            }
+            Some("autosave_times") => {
+                let time = |name: &str| -> Result<Option<i64>, String> {
+                    match &command[name] {
+                        Value::Null => Ok(None),
+                        value => value
+                            .as_i64()
+                            .map(Some)
+                            .ok_or_else(|| format!("{name} is a whole number")),
+                    }
+                };
+                let (changed, tried) = (time("changed_ms")?, time("last_try_ms")?);
+                if let Some(changed) = changed {
+                    self.autosave.changed_ms = changed;
+                }
+                if let Some(tried) = tried {
+                    self.autosave.last_try_ms = tried;
+                }
+                Ok(json!({}))
+            }
+            Some("autosave_changed") => {
+                self.autosave.changed_ms = self.frame.steady_ms();
+                Ok(json!({}))
+            }
+            Some("autosave_failed") => {
+                self.autosave.last_try_ms = self.frame.steady_ms();
+                Ok(json!({}))
+            }
+            Some("leaving_start") => {
+                let limit = command["limit_ms"]
+                    .as_i64()
+                    .ok_or("limit_ms is a whole number")?;
+                self.leaving.start(limit, text("again")?);
+                Ok(json!({}))
+            }
+            Some("leaving_poll") => {
+                let poll = command["poll_ms"]
+                    .as_i64()
+                    .ok_or("poll_ms is a whole number")?;
+                let flag = |name: &str| -> Result<bool, String> {
+                    command[name]
+                        .as_bool()
+                        .ok_or_else(|| format!("{name} is true or false"))
+                };
+                let (held, parked) = (flag("held")?, flag("parked")?);
+                let step = self.leaving.poll(poll, self.status.busy(), held, parked);
+                let mut answer = json!({ "step": step.name() });
+                if step == leaving::Step::GiveUp {
+                    answer["words"] = json!(self.leaving.gave_up_words());
+                }
+                Ok(answer)
             }
             Some("say") => {
                 self.status.say(text("text")?);
@@ -135,6 +213,13 @@ impl Session {
                 "busy": self.status.busy(),
                 "planning": self.status.planning(),
                 "message": self.status.message(),
+            })
+            .to_string(),
+            "autosave" => json!({
+                "changed_ms": self.autosave.changed_ms,
+                "last_try_ms": self.autosave.last_try_ms,
+                "after_ms": autosave::AFTER_MS,
+                "retry_ms": autosave::RETRY_MS,
             })
             .to_string(),
             other => json!({ "error": format!("no view called {other:?}") }).to_string(),

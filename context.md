@@ -21,7 +21,10 @@
   window's requests go through it: `desktop/native/client.py`'s `NativeClient` is a shell over
   `flexweek_engine.NativeCore` (engine/py/src/session.rs) that keeps each request's callbacks by number and takes
   one answer per turn of the window's loop; `stop_workers()` at quit stops the Rust workers. The light app's client
-  answers inline (`Frame::answer_inline`). Pydantic leaves in P4 (Jonathan, 2026-11-23). The 30-second sign-in
+  answers inline (`Frame::answer_inline`). The session's busy state, latest ticket and status line are Rust's
+  (`session/status.rs`, #164); when the week saves itself (`session/autosave.rs`) and the steps of saving before
+  leaving (`session/leaving.rs`) are decided there too, the window running the timers. Pydantic leaves in P4
+  (Jonathan, 2026-11-23). The 30-second sign-in
   words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
 - `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
   tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch

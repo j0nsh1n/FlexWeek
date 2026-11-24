@@ -561,7 +561,7 @@ class NativeSession(QObject):
         self.status.emit(text)
 
     def _begin(self, planning: bool = False) -> int:
-        ticket = int(self.client.command({"cmd": "begin", "planning": planning})["ticket"])
+        ticket = int(self.client.command({"cmd": "begin", "planning": bool(planning)})["ticket"])
         self.busy_changed.emit(True)
         return ticket
 
