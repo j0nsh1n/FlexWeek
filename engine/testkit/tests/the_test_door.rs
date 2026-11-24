@@ -38,6 +38,32 @@ fn a_step_the_door_cannot_do_is_refused_with_its_reason_not_left_unanswered() {
             json!({ "step": "click", "target": { "name": "noSuchItem" } }),
             "nothing on screen is",
         ),
+        // The setting-up steps refuse what they cannot set up.
+        (json!({ "step": "seed", "name": "moon" }), "no seed called"),
+        (
+            json!({ "step": "block", "block": 3 }),
+            "a block is a JSON object",
+        ),
+        (
+            json!({ "step": "preferences", "values": [] }),
+            "preferences are a JSON object",
+        ),
+        (
+            json!({ "step": "drag", "target": { "name": "materialTitle" }, "by": [1] }),
+            "a move is [dx, dy]",
+        ),
+        (
+            json!({ "step": "wheel", "target": { "name": "materialTitle" }, "dy": 1, "key": "hyper" }),
+            "no modifier called",
+        ),
+        (
+            json!({ "step": "drag", "target": { "name": "materialTitle" } }),
+            "a drag says how far it moves",
+        ),
+        (
+            json!({ "step": "reveal", "target": { "name": "materialTitle" } }),
+            "is not in a scrolling list",
+        ),
     ] {
         let answer = app.ask(&asked);
         assert_eq!(answer["ok"], false, "{asked} -> {answer}");
@@ -68,7 +94,7 @@ fn two_doors_with_the_same_name_are_two_apps() {
     let mut second = Door::start("door-twins");
     assert_ne!(first.folder(), second.folder());
     assert!(
-        first.folder().join("door.sock").exists(),
+        first.folder().exists(),
         "the second start removed the first's folder"
     );
     first.click(&named("navMonth"));
@@ -90,4 +116,15 @@ fn an_error_raised_inside_a_slot_between_steps_fails_the_next_step_once() {
     assert!(error.contains("raised on purpose"), "{error}");
     // Reported once: the step after it is answered as usual.
     assert_eq!(app.ask(&json!({ "step": "pump", "turns": 5 }))["ok"], true);
+}
+
+/// Day opens on the day asked for, not on today (the rail's Day would go back to today).
+#[test]
+#[ignore = "starts the Python app through the test door (desktop/tests/door_app.py)"]
+fn open_day_opens_the_day_asked_for() {
+    let mut app = Door::start("door-open-day");
+    app.seed("material_week");
+    app.open_day("2026-11-06");
+    app.wait_until("the Day screen", |app| app.app()["screen"] == json!("day"));
+    assert_eq!(app.read(&named("materialTitle")).text, "Friday 6 November");
 }

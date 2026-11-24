@@ -641,3 +641,69 @@ red = "it compared the Rust answers with backend/app.py, which is gone; every ro
 [[port]]
 python = "backend/tests/test_assignment_view_estimate_limit.py"
 gone = "P2 (plan section 7): backend/app.py and its assignment_view helper, the Python call whose 64-bit overflow this pinned, were deleted; requests reach the engine as JSON text now"
+
+[[port]]
+python = "desktop/tests/week/test_material_go_to_date.py"
+rust = [
+    "flexweek-testkit::week_date_picker::the_week_title_opens_the_month_picker_on_the_week_on_view",
+    "flexweek-testkit::week_date_picker::a_day_picked_with_the_keyboard_shows_its_week_and_the_title_keeps_the_keyboard",
+    "flexweek-testkit::week_date_picker::escape_closes_the_picker_keeps_the_week_and_gives_the_keyboard_back_to_the_title",
+    "flexweek-testkit::week_date_picker::enter_and_space_on_the_title_open_the_picker_too",
+    "flexweek-testkit::week_date_picker::a_day_picked_with_the_mouse_shows_its_week",
+    "flexweek-testkit::week_date_picker::the_month_buttons_and_page_keys_change_the_pickers_month",
+    "flexweek-testkit::week_date_picker::tab_reaches_the_title_on_week_and_month",
+    "flexweek-testkit::week_date_picker::the_day_title_opens_no_picker",
+    "flexweek-testkit::week_date_picker::a_keyboard_pick_in_the_month_title_shows_that_month",
+    "flexweek-testkit::week_date_picker::a_mouse_pick_in_the_month_title_shows_that_month",
+    "flexweek-testkit::week_date_picker::escape_in_the_month_picker_gives_the_keyboard_back_and_keeps_the_month",
+    "flexweek-testkit::week_date_picker::the_picker_closes_when_the_rail_changes_the_screen",
+]
+red = "red by hand (2026-11-23), every test failed at least once: the closed picker not giving the title the keyboard fails 5; the week pick not moving the week fails 2; the Month pick not moving the month fails 2; the picker left open on a screen change fails the rail test; PageUp not stepping fails the month-buttons test; the title not a Tab stop fails the Tab test; Enter and Space not opening it fail 3; a tap not opening it fails 10; the Day title pickable fails the Day test; the picker opening a month late fails 7"
+
+[[port]]
+python = "desktop/tests/week/test_material_keyboard_returns_to_week.py"
+rust = [
+    "flexweek-testkit::week_keyboard_returns::a_sheet_that_closes_gives_the_keyboard_back_to_the_block_that_opened_it",
+    "flexweek-testkit::week_keyboard_returns::after_plan_by_keyboard_the_keyboard_is_on_the_week",
+    "flexweek-testkit::week_keyboard_returns::ctrl_z_from_a_block_leaves_the_keyboard_on_the_week",
+    "flexweek-testkit::week_keyboard_returns::redo_leaves_the_keyboard_on_the_week",
+    "flexweek-testkit::week_keyboard_returns::the_notices_undo_by_keyboard_leaves_the_keyboard_on_the_week",
+    "flexweek-testkit::week_keyboard_returns::a_dropped_block_keeps_the_keyboard_on_the_week",
+    "flexweek-testkit::week_keyboard_returns::the_notices_undo_is_still_a_tab_away_after_plan",
+]
+red = "red by hand (2026-11-23): the sheet not handing the keyboard back fails the sheet test; the keyboard sent to the title after Plan or Undo fails plan-by-keyboard and the notice's Undo; focusWeek ignoring the block fails the drop and Ctrl+Z tests; restoreKeyboard off fails drop, Ctrl+Z and redo; the notice not a Tab stop fails the Tab-to-Undo test"
+
+[[port]]
+python = "desktop/tests/week/test_material_now_label.py"
+rust = [
+    "flexweek-testkit::week_now_label::there_is_no_label_in_the_settings_preview_without_a_line",
+    "flexweek-testkit::week_now_label::week_label_shows_the_time_in_the_24_hour_clock",
+    "flexweek-testkit::week_now_label::day_label_shows_the_time_in_the_24_hour_clock",
+    "flexweek-testkit::week_now_label::week_label_shows_the_time_in_the_12_hour_clock",
+    "flexweek-testkit::week_now_label::day_label_shows_the_time_in_the_12_hour_clock",
+    "flexweek-testkit::week_now_label::week_label_sits_in_the_hour_column_at_the_lines_height_and_covers_no_block",
+    "flexweek-testkit::week_now_label::day_label_sits_in_the_hour_column_at_the_lines_height_and_covers_no_block",
+    "flexweek-testkit::week_now_label::week_label_moves_with_the_line_on_the_clock_tick_and_with_zoom",
+    "flexweek-testkit::week_now_label::day_label_moves_with_the_line_on_the_clock_tick_and_with_zoom",
+    "flexweek-testkit::week_now_label::week_hour_number_under_the_label_is_hidden_and_the_others_stay",
+    "flexweek-testkit::week_now_label::day_hour_number_under_the_label_is_hidden_and_the_others_stay",
+    "flexweek-testkit::week_now_label::week_every_hour_number_shows_when_the_label_is_between_two_hours",
+    "flexweek-testkit::week_now_label::day_every_hour_number_shows_when_the_label_is_between_two_hours",
+]
+red = "red by hand (2026-11-23): the screen-reader name changed fails 6; a 12-hour clock ignored fails 2; the label 8 px off the line fails 4; the label moved into the grid fails 3; hour numbers never hidden fails 2; hiding by nearness fails the between-hours pair; the label forced visible fails the Settings preview test (the Python original could not fail: it looked on plain Settings, where no preview is loaded)"
+
+[[port]]
+python = "desktop/tests/week/test_material_preview_dialog_keys.py"
+rust = [
+    "flexweek-testkit::week_paste_preview_keys::escape_closes_the_duplicate_preview_on_week_and_adds_nothing",
+    "flexweek-testkit::week_paste_preview_keys::escape_closes_the_duplicate_preview_on_day_and_adds_nothing",
+    "flexweek-testkit::week_paste_preview_keys::escape_closes_the_ctrl_v_preview_on_week_and_adds_nothing",
+    "flexweek-testkit::week_paste_preview_keys::escape_closes_the_ctrl_v_preview_on_day_and_adds_nothing",
+    "flexweek-testkit::week_paste_preview_keys::a_number_key_does_not_change_week_behind_the_duplicate_preview",
+    "flexweek-testkit::week_paste_preview_keys::a_number_key_does_not_change_day_behind_the_duplicate_preview",
+    "flexweek-testkit::week_paste_preview_keys::a_number_key_does_not_change_week_behind_the_ctrl_v_preview",
+    "flexweek-testkit::week_paste_preview_keys::a_number_key_does_not_change_day_behind_the_ctrl_v_preview",
+    "flexweek-testkit::week_paste_preview_keys::the_keyboard_comes_back_when_the_duplicate_preview_closes",
+    "flexweek-testkit::week_paste_preview_keys::the_keyboard_comes_back_when_the_ctrl_v_preview_closes",
+]
+red = "red by hand (2026-11-23): Esc saving the preview fails the 4 Esc tests; an open sheet no longer holding the number keys fails the 4 number-key tests; the closed preview never told to the window fails the 2 keyboard-back tests"
