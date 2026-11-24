@@ -80,8 +80,8 @@ list, all shipped).
   run in Rust against the app through the test door, in CI (`screens`, in parallel with the desktop shards), each
   seen red by a rule broken by hand; their four Python files are deleted with ledger rows. P4 [ ] started: the
   session's frame in Rust (#161, merged a9deb612); the window's requests go through it (#163), its busy state and
-  status line are Rust's (#164), and so are when the week saves itself and saving before leaving (2026-11-24).
-  P5-P8 [ ] planned.
+  status line are Rust's (#164), and so are when the week saves itself and saving before leaving (#167); the
+  window's block and homework checks are the engine's (#168, #169, 2026-11-24). P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)

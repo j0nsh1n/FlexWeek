@@ -134,10 +134,16 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-24 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4-afk-2026-11-24.md`): P4's second
-  piece moves the window's requests onto the Rust session (branch `feat/p4-native-client`). Next: the account flows
-  (sign-in, sign-up, resume, sign-out) into the session, then the other groups (draft:
-  `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4/slice1-draft.md`).
+- 2026-11-24 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4-afk-2026-11-24.md`): merged #163
+  (requests through the Rust session), #164 (status), #167 (autosave, saving before leaving), #168 (block and
+  homework checks by the engine) and #169 (strip parity), each after a Gemini 4 Neon PASS and green CI. Held for
+  Jonathan as auth: #165 (sign-in, sign-up, recover, resume, sign-out in Rust) and #166 (password, recovery codes,
+  account deletion), both reviewed (Gemini PASS on 4ed0c562 and a6f95261, and on their merge with main through
+  #167); main was merged in again through #168 (a context.md conflict only, not re-reviewed); they do not have
+  #169. Parked: the hours windows' refusal words (moving that check off pydantic changes what the status line says).
+  A developer build from 635e7ba6 is in
+  `~/.flexweek-ui-harness/scratch/rust-2.0.0/dev-build-p4/` (TRY-IT.md). Next: Jonathan's word on #165/#166 and the
+  hours-window words; then group 2's save core with group 3 (undo), planned as one step since they share state.
 - 2026-11-23 (after the AFK run; run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p3-p4-run-2026-11-23.md`):
   Jonathan's answers: pydantic in P4, one CI job for the Rust screen tests, the timeout words stay until P4, then
   "Finish P3 and start on P4". P3 finished in #160 (merged 00d5b41b, Gemini 4 Neon PASS round 2). P4's first PR,
