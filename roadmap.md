@@ -75,9 +75,11 @@ list, all shipped).
   serves data calls Rust (checked by a test), every data test file has a Rust twin seen to fail (port-ledger.toml),
   and the app and the assistant save through one change function; the 11 test files that check the Python bindings,
   the server or Python's clock reads go with the server in P2 (Jonathan, 2026-11-22).
-- Status (2026-11-23): P2 [ ] no network port and no FastAPI, uvicorn or httpx (#154-#156); pydantic left, its
-  timing is Jonathan's call (now, or with the session in P4). P3 [ ] slice 1 (#158, merged ee90444e): the test door and 12
-  Week tests in Rust; six rules broken by hand to see their tests fail, not every test seen red yet; not in CI. P4-P8 [ ] planned.
+- Status (2026-11-23): P2 [ ] no network port and no FastAPI, uvicorn or httpx (#154-#156); pydantic goes in P4
+  (Jonathan, 2026-11-23), where its adapters are deleted. P3 [x] done 2026-11-23 (#158, #160): 42 Week screen tests
+  run in Rust against the app through the test door, in CI (`screens`, in parallel with the desktop shards), each
+  seen red by a rule broken by hand; their four Python files are deleted with ledger rows. P4 [ ] started: the
+  session's frame in Rust (#161, merged a9deb612). P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
