@@ -7,9 +7,11 @@
 //! - `take_event()`: the next thing that happened, or `null`; one at a time, so what the window does with
 //!   one (signing out, say) counts before the next is read.
 //!
-//! So far: the frame (group 1), which sends requests and takes their answers back.
+//! So far: the frame (group 1), which sends requests and takes their answers back, and the status (which
+//! request is the latest, whether the session is busy, the status line).
 
 pub mod frame;
+pub mod status;
 pub mod words;
 
 use std::path::PathBuf;
@@ -18,15 +20,18 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 pub use frame::{Event, Frame, Host, Identity, Outcome};
+pub use status::Status;
 
 pub struct Session {
     frame: Frame,
+    status: Status,
 }
 
 impl Session {
     pub fn new(database: PathBuf, host: Arc<dyn Host>, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
         Self {
             frame: Frame::new(database, host, wake),
+            status: Status::default(),
         }
     }
 
@@ -79,12 +84,36 @@ impl Session {
                 self.frame.adopt_session(text("token")?);
                 Ok(json!({}))
             }
+            Some("begin") => {
+                let planning = command["planning"].as_bool().unwrap_or(false);
+                Ok(json!({ "ticket": self.status.begin(planning) }))
+            }
+            Some("idle") => {
+                let ticket = command["ticket"]
+                    .as_u64()
+                    .ok_or("ticket is a whole number")?;
+                Ok(json!({ "idle": self.status.idle(ticket) }))
+            }
+            Some("cancel") => {
+                self.status.cancel();
+                Ok(json!({}))
+            }
+            Some("set_busy") => {
+                let busy = command["busy"].as_bool().ok_or("busy is true or false")?;
+                self.status.set_busy(busy);
+                Ok(json!({}))
+            }
+            Some("say") => {
+                self.status.say(text("text")?);
+                Ok(json!({}))
+            }
             other => Err(format!("no command called {other:?}")),
         }
     }
 
     /// One view as JSON text. `frame`: the account, the epoch, the session token held (or null), how many
-    /// requests wait, and when on the steady clock the next one reaches its limit (or null).
+    /// requests wait, and when on the steady clock the next one reaches its limit (or null). `status`: the
+    /// latest ticket, whether the session is busy or planning, and the status line.
     pub fn view(&self, name: &str) -> String {
         match name {
             "frame" => {
@@ -101,6 +130,13 @@ impl Session {
                 })
                 .to_string()
             }
+            "status" => json!({
+                "ticket": self.status.ticket(),
+                "busy": self.status.busy(),
+                "planning": self.status.planning(),
+                "message": self.status.message(),
+            })
+            .to_string(),
             other => json!({ "error": format!("no view called {other:?}") }).to_string(),
         }
     }
