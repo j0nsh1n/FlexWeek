@@ -148,7 +148,8 @@ pub struct Frame {
     epoch: u64,
     number: u64,
     waiting: BTreeMap<u64, Waiting>,
-    /// Set when the frame goes: work not yet started is skipped, and no one is woken.
+    /// Set when the frame goes: work not yet started is skipped. (Work under way finishes, and its answer
+    /// goes nowhere: the frame's end of the channel is gone, so no one is woken.)
     closed: Arc<AtomicBool>,
     landed_tx: Sender<Landed>,
     landed: Receiver<Landed>,
@@ -296,7 +297,7 @@ impl Frame {
                 session: Session::Kept,
             });
             // The frame may be gone; then no one is left to tell.
-            if landed.send(Landed { number, answer }).is_ok() && !closed.load(Ordering::SeqCst) {
+            if landed.send(Landed { number, answer }).is_ok() {
                 wake();
             }
         });
@@ -357,8 +358,8 @@ impl Frame {
 }
 
 impl Drop for Frame {
-    /// Work already handed out is skipped if not started; an answer still being made goes nowhere and
-    /// wakes no one. Nothing here waits for a worker.
+    /// Work handed out and not yet started is skipped; an answer still being made goes nowhere and wakes no
+    /// one. Nothing here waits for a worker.
     fn drop(&mut self) {
         self.closed.store(true, Ordering::SeqCst);
     }

@@ -415,6 +415,35 @@ fn a_frame_that_goes_away_wakes_no_one() {
     assert!(woken.recv_timeout(Duration::from_secs(2)).is_err());
 }
 
+/// Work the frame handed out but no worker had started is skipped once the frame goes: with every worker
+/// held at a gate, the gone frame's request waits behind them, and its host is never asked for anything.
+#[test]
+fn work_not_started_when_the_frame_goes_is_skipped() {
+    let db = TestDb::new("frame-skipped");
+    let workers = flexweek_app::session::frame::WORKERS;
+    let mut holding = rig("frame-skipped-holding", true);
+    for _ in 0..workers {
+        holding.frame.request("GET", "/api/auth/me", None).unwrap();
+    }
+    let gone_host = host(None);
+    let (wake, _woken) = waker();
+    let mut gone = Frame::new(db.path.clone(), gone_host.clone(), wake);
+    gone.request("GET", "/api/auth/me", None).unwrap();
+    let asked = gone_host.draws.load(Ordering::SeqCst);
+    drop(gone);
+    holding.open_gate(workers);
+    holding.answers(workers);
+    // One more request after it, so the gone frame's work has been taken from the queue by now.
+    holding.frame.request("GET", "/api/auth/me", None).unwrap();
+    holding.open_gate(1);
+    holding.answers(1);
+    assert_eq!(
+        gone_host.draws.load(Ordering::SeqCst),
+        asked,
+        "the gone frame's work ran"
+    );
+}
+
 #[test]
 fn an_account_needs_an_id_and_a_name_and_signing_in_starts_a_new_epoch() {
     let mut rig = rig("frame-account", false);
