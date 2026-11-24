@@ -21,7 +21,11 @@
   window's requests go through it: `desktop/native/client.py`'s `NativeClient` is a shell over
   `flexweek_engine.NativeCore` (engine/py/src/session.rs) that keeps each request's callbacks by number and takes
   one answer per turn of the window's loop; `stop_workers()` at quit stops the Rust workers. The light app's client
-  answers inline (`Frame::answer_inline`). Pydantic leaves in P4 (Jonathan, 2026-11-23). The 30-second sign-in
+  answers inline (`Frame::answer_inline`). The session's busy state, latest ticket and status line are Rust's
+  (`session/status.rs`); `NativeSession.busy`/`message`/`planning` read it. Signing in, up and out run in Rust
+  (`session/account.rs`): the session sends the request and reads the answer, and the window gets one event per flow
+  (`signed_in`, `registered`, `auth_failed`, `signed_out`) for its own part (setup answers, the kept file, the focus
+  store, loading the week). Pydantic leaves in P4 (Jonathan, 2026-11-23). The 30-second sign-in
   words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
 - `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
   tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
@@ -131,9 +135,9 @@ preview. Recorded `operation_id` values make a retried write return the first re
 
 ## Session Handoff
 - 2026-11-24 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4-afk-2026-11-24.md`): P4's second
-  piece moves the window's requests onto the Rust session (branch `feat/p4-native-client`). Next: the account flows
-  (sign-in, sign-up, resume, sign-out) into the session, then the other groups (draft:
-  `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4/slice1-draft.md`).
+  piece moved the window's requests onto the Rust session (#163, merged 0fbfdf50); the status went to Rust (#164)
+  and the sign-in flows (held for Jonathan as auth). Next: change password, recovery codes and account deletion
+  into account.rs, then the other groups (draft: `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4/slice1-draft.md`).
 - 2026-11-23 (after the AFK run; run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p3-p4-run-2026-11-23.md`):
   Jonathan's answers: pydantic in P4, one CI job for the Rust screen tests, the timeout words stay until P4, then
   "Finish P3 and start on P4". P3 finished in #160 (merged 00d5b41b, Gemini 4 Neon PASS round 2). P4's first PR,
