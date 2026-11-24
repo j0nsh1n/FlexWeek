@@ -1,23 +1,39 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-22)
+## Current State (2026-11-23)
 - 2.0.0 (the Rust overhaul; plan `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`) is under way on main,
-  developer builds only until 2.0.0. P0 (#142) and P1 (#143-#152) are merged: every route that
-  serves account data calls `flexweek-service`, and the timer presets and reminder notes call the engine
-  (`flexweek_engine.timer_presets`, `reminder_limits`), checked by `test_routes_only_decode_call_and_encode`; health and
-  storage info (the server's address and body limit, with the signed-in name) answer in Python and go with the
-  server in P2.
-  `backend/app.py` keeps HTTP, cookies and request checks; JSON saves hand the service the raw body, sign-in, sign-up,
-  recovery and password change pass their parsed fields. P1 PRs: #143
-  (one block check, Week and homework saves), #144 (routines, spread, repeat edits, Plan), #145 (the multi-week save),
-  #146 (account export and import), #148-#150 (the backend tests' Rust twins, ledger `tools/fwtest/port-ledger.toml`),
-  #151 (one change function, `flexweek_store::changes`, for the app and the assistant; account check parity). Each
-  move was compared with the old Python route over HTTP and against generated corpora
-  (`engine/service/tests/fixtures`). Python backend tests left: the thread test in `test_database_transactions.py`,
-  and 11 files that check the Python bindings, the server or Python's own clock reads, which go in P2 (`test_assignment_view_estimate_limit`, `test_database_matches_sqlite3`,
-  `test_engine_exports_are_guarded`, `test_engine_panics_become_python_errors`, `test_number_parsing_matches_python`,
-  `test_one_wall_clock`, `test_service_calls_release_python`, `test_session_cookie_and_request_checks`,
-  `test_storage_info`, `test_sync_pairing_and_removal`, `test_wrappers_hold_no_engine_logic`).
+  developer builds only until 2.0.0. P0 (#142) and P1 (#143-#152) are merged. P2 parts 1-3 are merged (#154-#156):
+  the window asks the Rust service in its own process (`flexweek_service::desk_requests` through
+  `flexweek_engine.service_answer`, on a shared pool of 4 worker threads in `desktop/native/client.py`), the app
+  opens no network port with no phone paired (checked in-process and in the smoke report's `listening`),
+  `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the hosted-server
+  settings (D4) are no longer read. The request tests are `engine/service/tests/desk_requests.rs` (36 tests covering
+  every route's own answer). P2 is not complete: pydantic (`backend/models.py`, about 115 uses incl. the planner
+  adapters and the sheets' error wording) goes in P4; spec.md's wording waits in held #157.
+- P3 is done (#158, #160): the test door (`desktop/tests/door.py`, test-only, a local socket file; its docstring
+  lists the steps, setting-up steps included), `door_app.py`, and `flexweek-testkit::door` (Driver + Door). 42 Week
+  screen tests in `engine/testkit/tests/week_*.rs` (plus 5 door tests in `the_test_door.rs`) run with `-- --ignored`
+  against the Python app; CI's `screens` job runs them (about 5 minutes). The Python files they replaced
+  (`test_material_go_to_date.py`, `..._keyboard_returns_to_week.py`, `..._now_label.py`, `..._preview_dialog_keys.py`)
+  are deleted with ledger rows. fwtest's flaky rerun still covers pytest only.
+- P4 has started: `flexweek-app::session` (engine/app/src/session) holds the session's frame (requests on one pool
+  of 4 workers, epochs, the 30 s limit on a steady clock, the expiry rule, the window's error words; #161). The
+  window's requests go through it: `desktop/native/client.py`'s `NativeClient` is a shell over
+  `flexweek_engine.NativeCore` (engine/py/src/session.rs) that keeps each request's callbacks by number and takes
+  one answer per turn of the window's loop; `stop_workers()` at quit stops the Rust workers. The light app's client
+  answers inline (`Frame::answer_inline`). The session's busy state, latest ticket and status line are Rust's
+  (`session/status.rs`, #164); `NativeSession.busy`/`message`/`planning` read it. When the week saves itself
+  (`session/autosave.rs`) and the steps of saving before leaving (`session/leaving.rs`) are decided there too, the
+  window running the timers (#167). Signing in, up and out run in Rust (`session/account.rs`): the session sends the
+  request and reads the answer, and the window gets one event per flow (`signed_in`, `registered`, `auth_failed`,
+  `signed_out`) for its own part (setup answers, the kept file, the focus store, loading the week). Pydantic leaves
+  in P4 (Jonathan, 2026-11-23); controller.py checks blocks and homework with the engine (`checked_block`,
+  `checked_homework`, #168), and its remaining pydantic use is the hours windows (ProtectedWindow, WorkWindow). The
+  30-second sign-in
+  words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
+- `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
+  tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
+  deleted.
 - Main had #140 (Material only, its own Qt Quick window, #118's weekly fixed times) and #137 (the phone 1.4.0 fixes)
   before 1.5.0. Done time is the larger of focus minutes and minutes ticked done (`plan::done_time`).
 - Latest release: v1.5.0, published 2026-11-20 (US time) from main 0effa56f (PR #141). The previous release is
@@ -41,15 +57,14 @@
   (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
 - 2.0.0 follow-ups after P1: `hypothesis` is installed and unused (remove in P2); the Python store methods
   `apply_repeat_intents`, `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers;
-  nine corpus generators still count any exception as a refusal
-  (`make_transfer_corpus.py` was fixed); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
+  the five remaining corpus generators still count any exception as a refusal (the seven that needed
+  backend/app.py were removed in #156); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
   fail on CI depending on the clock (passed on re-run, 2026-11-22).
 - Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
   slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
   desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
   decode.
-- Python: the FastAPI routes (no SQL in them; the account-data ones call the service), password hashing's
-  salt, the clock, environment and file reads, the pydantic checks, `backend/models.py`'s Spotify and due-date
+- Python: the window's client (it hands each request to the Rust service), password hashing's salt, the clock, environment and file reads, the pydantic checks, `backend/models.py`'s Spotify and due-date
   copies, `CATEGORIES` in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing and
   `scripts/rig/drive.py`.
 - Speed (pr35 review): placing the probe week 1.1 ms; drawing a frame of the hours 10.2 ms median (limit 16 ms).
@@ -70,8 +85,8 @@ docs/engine/            contract.md, adapters.md (every wrapper's class), interf
 tools/fwtest/           Rust test runner: gate, mutate, rig, run, clean (contract docs/tooling/fwtest.md)
 scripts/mutations/      mutation specs (JSON); engine cases point at `cargo:` tests
 scripts/rig/            rig driver and plays for the hidden real-display session
-backend/app.py          FastAPI routes: account, session, ownership; serves no pages
-desktop/main.py         launcher: starts the backend in-process, then the native window
+engine/service/src/desk_requests.rs  the window's requests by method and /api/ path, answered in process
+desktop/main.py         launcher: opens the saved data, phone sync if paired, then the native window
 desktop/native/window.py     chrome, pages, dialogs, autosave, updater wiring
 desktop/native/controller.py session: saves, solve, focus, alarms, reminders; now_ms is the clock
 desktop/native/settings.py   Widgets Settings (Look preview side by side from 1000 px)
@@ -88,8 +103,8 @@ conftest.py             root: every test runs on backend/tests/fake_clock.CLOCK
 
 ## Domain Model
 SQLite: users → sessions, many dated weeks keyed (user_id, week_start), one preference row. Default desktop mode
-uses a local per-user database; hosted mode uses the configured deployment; there is no automatic sync between
-them except device sync. The engine writes the database; device sync (`engine/sync`) and the phone bindings
+uses a local per-user database (there is no hosted mode since 2.0.0's P2, D4); there is no automatic sync between
+computers except device sync. The engine writes the database; device sync (`engine/sync`) and the phone bindings
 (`engine/ffi`) write through their own connections, and the desktop opens it only read-only (to notice another
 program's changes and a linked phone). Assignments are keyed (user_id, id) with a JSON body
 and revision; a flexible block with `assignment_id` is a work session of that assignment. Routines are named
@@ -106,8 +121,8 @@ preview. Recorded `operation_id` values make a retried write return the first re
 - The engine builds at opt-level 2 in debug so the solver's 150 ms budget holds under load (Jonathan's choice).
 - A stored week's identity is its Monday; GET /api/week answers another calendar day as the week shown from that day
   (built from the two stored weeks it covers), not snapped to a Monday and not refused.
-- The desktop app runs the backend in-process on a pre-bound loopback socket (CSRF origin and TrustedHost pin one
-  origin). An invalid FLEXWEEK_*_ORIGIN is an error, never a fall back to local.
+- The desktop app runs no server: requests are answered by the Rust service on worker threads in the app's process,
+  so it opens no network port (phone sync listens only once a phone is paired). FLEXWEEK_*_ORIGIN are not read.
 - Nuitka is called directly; `pyside6-deploy` rewrites its spec with machine paths.
 - Windows installers: the Inno `AppId` and MSI `UpgradeCode` never change; Inno 7.1.0 is checksum-checked; WiX is
   pinned to 6.0.2. Linux leads with a tar.gz so the executable bit survives.
@@ -123,6 +138,29 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-24 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4-afk-2026-11-24.md`): merged #163
+  (requests through the Rust session), #164 (status), #167 (autosave, saving before leaving), #168 (block and
+  homework checks by the engine) and #169 (strip parity), each after a Gemini 4 Neon PASS and green CI. Held for
+  Jonathan as auth: #165 (sign-in, sign-up, recover, resume, sign-out in Rust) and #166 (password, recovery codes,
+  account deletion), both reviewed (Gemini PASS on 4ed0c562 and a6f95261, and on their merge with main through
+  #167); main was merged in again through #168 (a context.md conflict only, not re-reviewed); they do not have
+  #169. Parked: the hours windows' refusal words (moving that check off pydantic changes what the status line says).
+  A developer build from 635e7ba6 is in
+  `~/.flexweek-ui-harness/scratch/rust-2.0.0/dev-build-p4/` (TRY-IT.md). Next: Jonathan's word on #165/#166 and the
+  hours-window words; then group 2's save core with group 3 (undo), planned as one step since they share state.
+- 2026-11-23 (after the AFK run; run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p3-p4-run-2026-11-23.md`):
+  Jonathan's answers: pydantic in P4, one CI job for the Rust screen tests, the timeout words stay until P4, then
+  "Finish P3 and start on P4". P3 finished in #160 (merged 00d5b41b, Gemini 4 Neon PASS round 2). P4's first PR,
+  #161 (the frame), merged a9deb612 after Gemini round 3.
+- 2026-11-23 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/afk-run-2026-11-23.md`): P2 parts 1-3
+  merged (#154 670e4534, #155 b2b2f56a, #156 cd96e7f0), each after a Gemini 4 Neon PASS (rounds: 2, 3, 3) and green
+  CI. P3 slice 1 (#158) merged ee90444e after Gemini round 3 and a confirmed CI fix (the door now reaches the window through the test helper). Held for Jonathan: #157 (spec.md), and #153 (Depot) from
+  before. Parked: when pydantic goes, CI for the door tests, the sign-in timeout words ("its server"), the `gone`
+  ledger rows (a choice to confirm). Facts the run met: `fwtest gate` takes its base from `VERIFY_BASE_SHA`, then the
+  local `main` branch, then `origin/main` (`tools/fwtest/src/gate.rs`); it runs `ruff check .` with ruff's cache on;
+  it does not run `cargo fmt --check`, which CI runs in engine and tools/fwtest.
+  Next: Jonathan's answers, then P2's pydantic step or P4; P3's next slice (door setup steps for seeded data,
+  more Week files, the CI step).
 - 2026-11-22: 2.0.0 P1's work is merged (main 7cdd8e16, #148-#151). #148, #149 and #151 had a Grok 4.7 PASS; #150's
   route test went four Grok rounds and Jonathan chose to merge it with the last fix unreviewed (all 14 named
   bypasses caught). Jonathan marked P1 complete once only Python-only tests were left; the two backend

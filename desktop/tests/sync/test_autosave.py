@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.calendar import sunday_due  # noqa: E402
-from desktop.native.window import AUTOSAVE_RETRY_MS, NativeWindow  # noqa: E402
+from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
     qapp,  # noqa: F401
     wait_until,
@@ -106,6 +106,6 @@ def test_a_failed_save_waits_the_full_retry_time_before_autosave_tries_it_again(
     session.save = lambda *a, **k: posted.append(1)
     window._autosave_tick()
     assert posted == [], "the failed save was tried again on the very next tick"
-    window._last_try_ms -= AUTOSAVE_RETRY_MS
+    window._last_try_ms -= window.session.client.view("autosave")["retry_ms"]
     window._autosave_tick()
     assert posted == [1], "a failed save is never tried again"

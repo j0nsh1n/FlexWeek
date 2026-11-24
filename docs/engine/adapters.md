@@ -8,7 +8,7 @@ A backend wrapper is one of three classes.
 
 **STAYS.** It cannot move, and only for one of these reasons: it reads the clock, the environment, a file, or randomness (the engine core is pure, so Python reads those and passes them in); it is a dataclass, a `Protocol`, or an exception; it is the pydantic validation the contract keeps in Python (`backend/models.py`, which this table does not list); or it is a method of the connection that only forwards to the Rust connection.
 
-`limits` and `slots` define no functions. They re-export engine names and constants, as `weeks` does besides `current_week_start` and the shown-week adapters below. `storage.SESSION_SECONDS` stays in Python because `backend/app.py` imports it for the cookie lifetime. Adding that many seconds to the clock reading happens in `open_session`.
+`limits` and `slots` define no functions. They re-export engine names and constants, as `weeks` does besides `current_week_start` and the shown-week adapters below. Adding `storage.SESSION_SECONDS` to the clock reading happens in `open_session`.
 
 The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` and `custom_look.py` still sanitize stored look data and share look files, but the Widgets look editor is gone. Material's current controls live in `desktop/native/material/theme.py` and its QML Settings pages. `test_wrappers_hold_no_engine_logic.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
 
@@ -142,22 +142,9 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 ## backend/app.py helpers
 
-`backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
-
-`POST /api/changes` is one call to the Rust service (`service_changes`, `flexweek_service::changes::apply_changes`), which applies a batch's `repeats` through `flexweek_store::apply_repeat_intents`, the function the assistant's `changes::apply` calls too. `POST /api/repeat-edits` is one call to the Rust service (`service_repeat_edits`), which checks the list and asks `flexweek_store::preview_edited_weeks` for the later weeks that have their own edit. `GET /api/week` reads them with `db.standing_blocks`.
-
-| Module | Function | Class | Reason |
-| --- | --- | --- | --- |
-| app | adopt_legacy_deadlines | ADAPTER | One connection call. `adopt_legacy_deadlines` in the engine picks the blocks and enforces the cap. Python maps "over the cap" to the 422 and revalidates the blocks. |
-| app | encode_new_assignment | ADAPTER | The pydantic check the engine calls for each new assignment, then the stored text. |
-| app | rewrite_blocks | ADAPTER | One engine call; the engine picks which blocks take their assignment's fields. |
-| app | normalize_stored_block | ADAPTER | The pydantic check the engine calls for each rewritten stored block. |
-| app | rewrite_stored_blocks | ADAPTER | One engine call; the engine picks which stored blocks are rewritten. |
-| app | assignment_view | ADAPTER | One engine call; the engine adds `planned_min` and `unplanned_min`. |
-| app | require_own_assignments | ADAPTER | One connection call; the engine says whether the account holds every id. Python maps "no" to the 422. |
-| app | naive_now | STAYS | Reads the clock. |
-
-The helpers that saved and deleted homework and wrote a week's row for the routes left `backend/app.py` when those routes moved to the Rust service; the revision check, the cap, and the identical-body shortcut were always in the store.
+`backend/app.py` was deleted in 2.0.0's P2: the window's requests are answered by the Rust service in the app's
+process (`flexweek_service::desk_requests`, called through `flexweek_engine.service_answer`). Its helper rows and
+`test_app_helpers_keep_no_engine_logic` went with it.
 
 ## Desktop
 
@@ -529,6 +516,3 @@ The desktop wrapper modules, plus `look.py`, `custom_look.py` and `version.py`. 
 | weekmodel.WeekModel.on_day | default, type test | either tuple missing skips the day cache |
 | weekmodel.WeekModel.load_min | default, type test | either tuple missing skips the load cache |
 | weekmodel.WeekModel.day_queue | branch | no current block stays None |
-| app.adopt_legacy_deadlines | truth test | the engine's "over the cap" becomes the 422 |
-| app.require_own_assignments | truth test | the engine's "not owned" becomes the 422 |
-| app.insert_restore_point | default | a missing keep-set is an empty list |

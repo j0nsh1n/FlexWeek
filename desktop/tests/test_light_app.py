@@ -1,5 +1,5 @@
-"""The light app opens where signing up and skipping setup on a real server does, so a test moved onto
-it checks what it checked before."""
+"""The light app opens where signing up and skipping setup in the running app leaves it, so a test
+moved onto it checks what it checked before."""
 
 from __future__ import annotations
 

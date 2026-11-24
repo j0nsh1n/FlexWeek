@@ -9,6 +9,11 @@ The rules are in spec.md (Validation & Tooling, "Testing structure"). This page 
   lane or finding that added it. Test functions say what the student sees or does.
 - Logic that lives in the Rust engine is tested in the engine (`engine/engine/tests/<behaviour>.rs`, run by
   `cargo test`). Python keeps the tests of what the wrappers still decide (docs/engine/adapters.md).
+- Screen tests being moved to Rust (2.0.0) live in `engine/testkit/tests/<area>_<behaviour>.rs`. Each starts
+  the Python app offscreen on a copy of the test account and steps it through the test door
+  (`desktop/tests/door.py`, which lists the steps), so they are ignored by a plain `cargo test`. Run them from
+  `engine/` with `cargo test -p flexweek-testkit --tests -- --ignored`; CI's `screens` job does. A Python test
+  file is deleted once its Rust twin passes, with a row in `tools/fwtest/port-ledger.toml`.
 - Backend tests stay in `backend/tests/`, named the same way.
 - `desktop/tests/e2e/` is the small set that keeps the real sign-in and the answers from worker threads, as the
   app runs: accounts, sync, and save and undo round trips through the service.

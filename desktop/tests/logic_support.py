@@ -1,4 +1,4 @@
-"""Shared fixtures for the native logic tests: a real local API and signed-in NativeSessions."""
+"""Shared fixtures for the native logic tests: the real service and signed-in NativeSessions."""
 
 from __future__ import annotations
 

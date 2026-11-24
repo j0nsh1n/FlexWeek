@@ -204,19 +204,6 @@ def test_about_open_folder_opens_the_folder_the_week_lives_in(
     assert opened == [QUrl.fromLocalFile(str(window._look_path().parent))]
 
 
-def test_about_on_a_server_names_the_server_and_has_no_folder_button(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    root, quick = _material(qapp, window)
-    window.session.storage_info = {"mode": "hosted", "origin": "https://school.example"}
-    _sheets(window).openAbout()
-    pump(qapp, 40)
-    assert _text(root, "aboutWhere") == (
-        "Your week is saved on your FlexWeek server, https://school.example, under this account."
-    )
-    assert _one(root, "aboutOpenFolder").property("visible") is False
-
-
 def test_about_closes_with_esc_and_the_keyboard_goes_back(qapp: QApplication, window: NativeWindow) -> None:
     root, quick = _material(qapp, window)
     fab = _one(root, "materialFab")
@@ -416,25 +403,6 @@ def test_sign_out_says_in_full_where_the_week_lives(
     assert dict(_sheets(window).property("ask"))["body"] == (
         "Your week is saved on this computer, under this account. Sign in again to see it."
     )
-    _sheets(window).answer("stay")
-    window.session.storage_info = {"mode": "hosted"}
-    window._log_out()
-    pump(qapp, 20)
-    assert dict(_sheets(window).property("ask"))["body"] == (
-        "Your week is saved on your FlexWeek server, under this account. Sign in again to see it."
-    )
-
-
-def test_sign_out_on_a_server_names_the_server(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _sign_out_rig(window, monkeypatch)
-    window.session.storage_info = {"mode": "hosted", "origin": "https://school.example"}
-    _material(qapp, window)
-    window._log_out()
-    pump(qapp, 20)
-    body = dict(_sheets(window).property("ask"))["body"]
-    assert body.startswith("Your week is saved on your FlexWeek server,")
 
 
 def test_answering_sign_out_signs_out_once(

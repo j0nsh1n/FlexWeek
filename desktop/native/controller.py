@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
@@ -10,6 +11,7 @@ from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
@@ -19,7 +21,7 @@ from backend.assignments import (
     planned_minutes_from_day,
     unplanned_minutes,
 )
-from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
+from backend.models import ProtectedWindow, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
@@ -56,7 +58,7 @@ from desktop.native.calendar import (
     week_start_on,
     windows_on_week,
 )
-from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
+from desktop.native.client import SESSION_ENDED, ApiError, NativeClient
 from desktop.native.files import (
     export_day_payload,
     export_week_payload,
@@ -200,13 +202,24 @@ SETUP_ALREADY_HERE = (
 )
 
 
+# Blocks and homework are checked and written as the engine does it (engine/service/src/blocks.rs and
+# homework_saves.rs, matched to the old pydantic models on 2,500 blocks and 2,000 homework saves); one it
+# refuses raises ValueError.
+HOMEWORK_FIELDS = frozenset(flexweek_engine.homework_fields())
+
+
+def _checked_block(block: dict) -> dict:
+    return json.loads(flexweek_engine.checked_block(json.dumps(block)))
+
+
+def _checked_homework(item: dict) -> dict:
+    return json.loads(flexweek_engine.checked_homework(json.dumps(item)))
+
+
 def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
     if item is None:
         return {"id": item_id, "assignment": None, "revision": revision}
-    body = Assignment.model_validate(
-        {key: value for key, value in item.items() if key in Assignment.model_fields}
-    )
-    dumped = body.model_dump(mode="json")
+    dumped = _checked_homework({key: value for key, value in item.items() if key in HOMEWORK_FIELDS})
     dumped.pop("revision", None)
     return {"id": item_id, "assignment": dumped, "revision": revision}
 
@@ -214,7 +227,7 @@ def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
 def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
     return {
         "week_start": week_start,
-        "blocks": [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks],
+        "blocks": [_checked_block(block) for block in blocks],
         "revision": revision,
     }
 
@@ -372,6 +385,7 @@ class NativeSession(QObject):
         super().__init__(parent)
         self.client = NativeClient(database, self)
         self.client.expired.connect(self._on_expired)
+        self.client.told.connect(self._told)
         self.account: dict | None = None
         # Keep me signed in: where this database's kept session lives, and the choice on the sign-in
         # card at the last sign-in. A session resumed at launch was kept, so it stays kept.
@@ -389,8 +403,6 @@ class NativeSession(QObject):
         self.conflict = False
         self.pending_save: dict | None = None
         self._save_status: str | None = None
-        self.busy = False
-        self.message = ""
         self.planner_view = "week"
         self.selected_day = wall_clock.today().isoformat()
         self.day_data: dict | None = None
@@ -406,8 +418,6 @@ class NativeSession(QObject):
         self.armed_category: str | None = None
         self.selected_block_id: str | None = None
         self.selected_occurrence_day: int | None = None
-        self._ticket = 0
-        self._plan_ticket: int | None = None
         self._day_ticket = 0
         self._month_ticket = 0
         self._month_cache: dict[tuple[str, str], dict] = {}
@@ -535,29 +545,56 @@ class NativeSession(QObject):
         self._reminder_blocks: list[dict] = []
         self._reminder_trace: dict | None = None
 
+    # Which request is the latest, whether the session is busy, and the status line live in the session in
+    # Rust (engine/app/src/session/status.rs); the signals stay here.
+    def _status(self) -> dict:
+        return self.client.view("status")
+
+    @property
+    def busy(self) -> bool:
+        return bool(self._status()["busy"])
+
+    @busy.setter
+    def busy(self, value: bool) -> None:
+        self.client.command({"cmd": "set_busy", "busy": bool(value)})
+
+    @property
+    def message(self) -> str:
+        return str(self._status()["message"])
+
+    @message.setter
+    def message(self, text: str) -> None:
+        self.client.command({"cmd": "say", "text": text})
+
+    @property
+    def _ticket(self) -> int:
+        return int(self._status()["ticket"])
+
     def _say(self, text: str) -> None:
         self.message = text
         self.status.emit(text)
 
     def _begin(self, planning: bool = False) -> int:
-        self._ticket += 1
-        self._plan_ticket = self._ticket if planning else None
-        self.busy = True
+        ticket = int(self.client.command({"cmd": "begin", "planning": bool(planning)})["ticket"])
         self.busy_changed.emit(True)
-        return self._ticket
+        return ticket
 
     @property
     def planning(self) -> bool:
         """A plan was asked for and its result is not back yet."""
-        return self.busy and self._plan_ticket == self._ticket
+        return bool(self._status()["planning"])
 
     def _alive(self, ticket: int) -> bool:
         return ticket == self._ticket
 
     def _idle(self, ticket: int) -> bool:
-        if not self._alive(ticket):
+        if not self.client.command({"cmd": "idle", "ticket": ticket})["idle"]:
             return False
-        self.busy = False
+        self._went_idle()
+        return True
+
+    def _went_idle(self) -> None:
+        """The session has just stopped being busy with the latest request."""
         self.busy_changed.emit(False)
         if self._credits_waiting:
             # After the reply that made this call has been put in place.
@@ -565,7 +602,6 @@ class NativeSession(QObject):
         if self._refollow_week:
             # A first day of the week picked while this request ran: its week once the reply is in place.
             QTimer.singleShot(0, self, self._follow_week)
-        return True
 
     def _credit_when_free(self) -> None:
         if self._credits_waiting and not self.busy:
@@ -1010,34 +1046,82 @@ class NativeSession(QObject):
         token = self.kept.token() if self.kept is not None else None
         if token is None or self.account is not None or self.busy:
             return
-        ticket = self._begin()
-        self._say("Signing in…")
-        self.client.adopt_session(token)
+        self._start_flow({"cmd": "resume", "token": token})
 
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
+    # Signing in, up and out, and the account's own changes, run in the session
+    # (engine/app/src/session/account.rs): it sends the request,
+    # reads the answer, and says what happened; what follows here is the window's own part.
+    def _start_flow(self, command: dict) -> dict:
+        answer = self.client.command(command)
+        self.busy_changed.emit(True)
+        # The words it began with, even when it finished at once (a sign-out with no one signed in).
+        self.status.emit(answer["said"])
+        return answer
+
+    def _told(self, event: dict) -> None:
+        kind = event["kind"]
+        if kind == "signed_in":
+            data = event["account"]
             self._drop_other_setup(data["id"])
-            if not self._idle(ticket):
-                return
-            self.client.set_account(data)
+            self._went_idle()
             self.account = {"id": data["id"], "username": data["username"]}
-            self.keep_signed_in = True
+            if event["how"] == "resume":
+                self.keep_signed_in = True
+            else:
+                self._keep_session()
             self.account_changed.emit(self.account)
             self.load_week(self.week_start, discard=True)
-
-        def failed(error: ApiError) -> None:
-            if error.status == 401:
+        elif kind == "registered":
+            data = event["account"]
+            self._drop_other_setup(data["id"])
+            self.account = {"id": data["id"], "username": data["username"]}
+            self.new_account = True
+            self.busy_changed.emit(False)
+            self.account_changed.emit(self.account)
+            self.recovery_codes.emit(list(event["codes"] or []))
+            self.status.emit(self.message)
+        elif kind == "auth_failed":
+            if event["forget"]:
                 self._forget_session()
-            self.client.reset()
-            self._fail(ticket, error)
-
-        self.client.request("GET", "/api/auth/me", None, ok, failed)
+            if event["idle"]:
+                self._went_idle()
+                self.status.emit(self.message)
+        elif kind == "password_replaced":
+            self._went_idle()
+            if event["account"] is not None:
+                data = event["account"]
+                self.account = {"id": data["id"], "username": data["username"]}
+                # The new password came with a new session, and the kept one no longer works.
+                self._keep_session()
+            self.status.emit(self.message)
+            self.week_changed.emit()
+        elif kind == "codes_replaced":
+            self._went_idle()
+            self.recovery_remaining = int(event["remaining"])
+            self.recovery_codes.emit(list(event["codes"]))
+            self.status.emit(self.message)
+        elif kind == "account_deleted":
+            self._forget_session()
+            if self.kept is not None and event["owner"] is not None:
+                self.kept.forget_look(event["owner"])
+            self._clear_local()
+            self.busy_changed.emit(False)
+            self.account_changed.emit(None)
+            self.week_changed.emit()
+            self.status.emit(self.message)
+        elif kind == "signed_out":
+            if event["account_id"] is not None:
+                self.focus_store.pop(event["account_id"], None)
+            self._clear_local()
+            self.busy_changed.emit(False)
+            self.account_changed.emit(None)
+            self.week_changed.emit()
+            self.focus_changed.emit()
+            self.status.emit(self.message)
 
     def _on_expired(self) -> None:
         self._forget_session()
-        self._ticket += 1
-        self.busy = False
+        self.client.command({"cmd": "cancel"})
         self.busy_changed.emit(False)
         self.client.reset()
         self._clear_local()
@@ -1046,52 +1130,13 @@ class NativeSession(QObject):
         self._say(SESSION_ENDED)
 
     def register(self, username: str, password: str) -> None:
-        ticket = self._begin()
-        self._say("Creating account…")
-
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._drop_other_setup(data["id"])
-            self.client.set_account(data)
-            self.account = {"id": data["id"], "username": data["username"]}
-            self.new_account = True
-            self.busy = False
-            self.busy_changed.emit(False)
-            self.account_changed.emit(self.account)
-            self.recovery_codes.emit(list(data.get("recovery_codes") or []))
-            self._say("Save these recovery codes before continuing.")
-
-        self.client.request(
-            "POST",
-            "/api/auth/register",
-            {"username": username, "password": password, "keep": self.keep_signed_in},
-            ok,
-            lambda error: self._fail(ticket, auth_error(error, creating=True)),
+        self._start_flow(
+            {"cmd": "register", "username": username, "password": password, "keep": bool(self.keep_signed_in)}
         )
 
     def login(self, username: str, password: str) -> None:
-        ticket = self._begin()
-        self._say("Signing in…")
-
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._drop_other_setup(data["id"])
-            if not self._idle(ticket):
-                return
-            self.client.set_account(data)
-            self.account = {"id": data["id"], "username": data["username"]}
-            self._keep_session()
-            self.account_changed.emit(self.account)
-            self.load_week(self.week_start, discard=True)
-
-        self.client.request(
-            "POST",
-            "/api/auth/login",
-            {"username": username, "password": password, "keep": self.keep_signed_in},
-            ok,
-            lambda error: self._fail(ticket, auth_error(error, creating=False)),
+        self._start_flow(
+            {"cmd": "login", "username": username, "password": password, "keep": bool(self.keep_signed_in)}
         )
 
     def finish_recovery(self) -> None:
@@ -1107,27 +1152,9 @@ class NativeSession(QObject):
         # Forgotten first, so a sign-out that fails to reach the server still leaves nothing to resume.
         self._forget_session()
         account_id = None if self.account is None else self.account["id"]
-        ticket = self._begin()
-        self._say("Signing out…")
-
-        def finish() -> None:
-            if not self._alive(ticket):
-                return
-            if account_id is not None:
-                self.focus_store.pop(account_id, None)
-            self.client.reset()
-            self._clear_local()
-            self.busy = False
-            self.busy_changed.emit(False)
-            self.account_changed.emit(None)
-            self.week_changed.emit()
-            self.focus_changed.emit()
-            self._say("Signed out.")
-
-        if self.client.account is None:
-            finish()
-            return
-        self.client.request("POST", "/api/auth/logout", None, lambda _data: finish(), lambda _error: finish())
+        finished = self._start_flow({"cmd": "logout", "account_id": account_id})["finished"]
+        if finished is not None:
+            self._told(finished)
 
     def load_week(
         self, week_start: str | None = None, *, discard: bool = False, said: str = "This week."
@@ -1418,7 +1445,7 @@ class NativeSession(QObject):
         }
 
     def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
-        validated = TimeBlock.model_validate(block).model_dump(mode="json")
+        validated = _checked_block(block)
         verb = "editing " if any(item["id"] == validated["id"] for item in self.blocks) else "adding "
         self.blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
         self._touch(verb + validated["title"], keep={validated["id"]})
@@ -1428,7 +1455,7 @@ class NativeSession(QObject):
     ) -> None:
         """Save `assignment` and keep its sessions in step. `spread` drops every open time it has and
         makes no new one, for `spread_after_save` to write the sessions that replace them."""
-        payload = {key: value for key, value in assignment.items() if key in Assignment.model_fields}
+        payload = {key: value for key, value in assignment.items() if key in HOMEWORK_FIELDS}
         payload.setdefault("revision", 0)
         known = self.assignments.get(payload.get("id"))
         if known is not None:
@@ -1436,7 +1463,7 @@ class NativeSession(QObject):
             # client's saveHomework, an edit never sets the revision or the focus counters.
             for key in ("revision", "focus_minutes", "focus_sessions"):
                 payload[key] = known.get(key) or 0
-        body = Assignment.model_validate(payload).model_dump(mode="json")
+        body = _checked_homework(payload)
         if known is not None:
             body["session_weeks"] = list(known.get("session_weeks") or [])
             # The server's counts stay paired with `_assignments_basis`, the week they were read with, until
@@ -1474,7 +1501,7 @@ class NativeSession(QObject):
                 session["days"] = days
             if "fixed_at" in assignment and not session.get("completed"):
                 self._fix_session(session, assignment["fixed_at"])
-            blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
+            blocks.append(_checked_block(session))
         # A homework already known gets a session for what is still to place of it, by the one count (its
         # done time and later weeks' sessions off), and none when nothing is: a new one gets its estimate.
         length = (
@@ -1496,7 +1523,7 @@ class NativeSession(QObject):
             }
             if assignment.get("fixed_at"):
                 self._fix_session(session, assignment["fixed_at"])
-            blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
+            blocks.append(_checked_block(session))
         finished = bool(body.get("completed"))
         label = ("editing " if known is not None else "adding ") + body["title"]
         if known is not None and finished != bool(known.get("completed")):
@@ -1638,7 +1665,7 @@ class NativeSession(QObject):
     def setup_repeats(self, blocks: list[dict]) -> list[dict]:
         """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
         time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
-        made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
+        made = [_checked_block(block) for block in blocks]
         weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
         return made + weekly
 
@@ -3124,10 +3151,7 @@ class NativeSession(QObject):
         return self._attempts[key]
 
     def _dump_blocks(self, blocks: list[dict] | None = None) -> list[dict]:
-        return [
-            TimeBlock.model_validate(block).model_dump(mode="json")
-            for block in (blocks if blocks is not None else self.blocks)
-        ]
+        return [_checked_block(block) for block in (blocks if blocks is not None else self.blocks)]
 
     def _fetch_weeks(self) -> None:
         if self.account is None:
@@ -4925,98 +4949,27 @@ class NativeSession(QObject):
         self.client.request("GET", "/api/storage-info", None, storage, lambda _error: None)
 
     def recover(self, username: str, code: str, password: str) -> None:
-        ticket = self._begin()
-        self._say("Recovering account…")
-
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._drop_other_setup(data["id"])
-            if not self._idle(ticket):
-                return
-            self.client.set_account(data)
-            self.account = {"id": data["id"], "username": data["username"]}
-            self._keep_session()
-            self.account_changed.emit(self.account)
-            self.load_week(self.week_start, discard=True)
-
-        self.client.request(
-            "POST",
-            "/api/auth/recover",
-            {"username": username, "code": code, "password": password, "keep": self.keep_signed_in},
-            ok,
-            lambda error: self._fail(ticket, error),
+        self._start_flow(
+            {
+                "cmd": "recover",
+                "username": username,
+                "code": code,
+                "password": password,
+                "keep": bool(self.keep_signed_in),
+            }
         )
 
     def change_password(self, current_password: str, new_password: str) -> None:
-        ticket = self._begin()
-        self._say("Changing password…")
-
-        def ok(data: dict) -> None:
-            if not self._idle(ticket):
-                return
-            if data.get("id"):
-                self.client.set_account(data)
-                self.account = {"id": data["id"], "username": data["username"]}
-                # The new password came with a new session, and the kept one no longer works.
-                self._keep_session()
-            self._say("Password replaced.")
-            self.week_changed.emit()
-
-        self.client.request(
-            "POST",
-            "/api/auth/password",
-            {"current_password": current_password, "new_password": new_password},
-            ok,
-            lambda error: self._fail(ticket, error),
+        self._start_flow(
+            {"cmd": "change_password", "current_password": current_password, "new_password": new_password}
         )
 
     def replace_recovery_codes(self, password: str) -> None:
-        ticket = self._begin()
-        self._say("Replacing recovery codes…")
-
-        def ok(data: dict) -> None:
-            if not self._idle(ticket):
-                return
-            codes = list(data.get("recovery_codes") or [])
-            self.recovery_remaining = int(data.get("remaining") or len(codes))
-            self.recovery_codes.emit(codes)
-            self._say("Save these replacement recovery codes.")
-
-        self.client.request(
-            "POST",
-            "/api/auth/recovery-codes",
-            {"password": password},
-            ok,
-            lambda error: self._fail(ticket, error),
-        )
+        self._start_flow({"cmd": "replace_recovery_codes", "password": password})
 
     def delete_account(self, password: str) -> None:
-        ticket = self._begin()
-        self._say("Deleting account…")
         owner = str(self.account["id"]) if self.account else None
-
-        def ok(_data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._forget_session()
-            if self.kept is not None and owner is not None:
-                self.kept.forget_look(owner)
-            self.client.reset()
-            self._clear_local()
-            self.busy = False
-            self.busy_changed.emit(False)
-            self.account_changed.emit(None)
-            self.week_changed.emit()
-            self._say("Account deleted.")
-
-        self.client.request(
-            "DELETE",
-            "/api/auth/account",
-            {"password": password},
-            ok,
-            lambda error: self._fail(ticket, error),
-        )
+        self._start_flow({"cmd": "delete_account", "password": password, "owner": owner})
 
     def _fetch_restore_points(self) -> None:
         if self.account is None:

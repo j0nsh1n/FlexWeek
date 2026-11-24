@@ -111,11 +111,8 @@ MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
 DRAW_ERROR_COVERS = MATERIAL_ACCOUNT_PAGES
 # Long enough for the student to read that the update installed before the window goes.
 UPDATE_QUIT_MS = 1200
-# How long after the last change the week saves itself. Long enough that dragging a block does not
-# post on every pixel, short enough that closing the laptop straight after a change keeps it.
-AUTOSAVE_AFTER_MS = 1500
-# A failed save keeps its payload and its operation id, so trying again writes the same thing once.
-AUTOSAVE_RETRY_MS = 6000
+# How often the window asks the session whether the week should save itself (the waits are in
+# engine/app/src/session/autosave.rs).
 AUTOSAVE_TICK_MS = 500
 LAYOUT_TICK_MS = 20_000
 # Leaving the app waits this long, checking this often, for what is unsaved to reach the server.
@@ -238,8 +235,6 @@ class NativeWindow(QObject):
         self._telling = False
         # The last reminder the toast said, so Got it on the same reminder takes it away.
         self._reminder_said = ""
-        self._changed_ms = 0
-        self._last_try_ms = 0
         self._autosave = QTimer(self)
         self._autosave.setInterval(AUTOSAVE_TICK_MS)
         self._autosave.timeout.connect(self._autosave_tick)
@@ -484,29 +479,38 @@ class NativeWindow(QObject):
         return False
 
     def _autosave_tick(self) -> None:
-        """Save the week without being asked.
-
-        Save stopped being a button, so this has to be dependable rather than clever. It waits for
-        the student to stop changing things, refuses while a request is in flight, and never touches
-        a week whose save came back 409: a conflict means another window wrote this week, and
-        answering that is the student's decision, not a timer's.
-        """
+        """Save the week without being asked, when the session says it is time (autosave.rs: after the
+        student stops changing things, never while a request is in flight or after a 409, and a failed save
+        again every few seconds)."""
         session = self.session
-        if session.account is None or session.busy or session.conflict:
-            return
-        # Time since the last change, not the time of day: a clock set back must not hold a save.
-        now = int(time.monotonic() * 1000)
-        if session.pending_save is not None:
-            # A save that failed. Its payload and operation id are kept, so this writes the same
-            # thing once however many times it is tried.
-            if now - self._last_try_ms >= AUTOSAVE_RETRY_MS:
-                self._last_try_ms = now
-                session.save()
-            return
-        if not session.dirty or now - self._changed_ms < AUTOSAVE_AFTER_MS:
-            return
-        self._last_try_ms = now
-        session.save()
+        due = session.client.command(
+            {
+                "cmd": "autosave",
+                "signed_in": session.account is not None,
+                "conflict": bool(session.conflict),
+                "dirty": bool(session.dirty),
+                "pending": session.pending_save is not None,
+            }
+        )["save"]
+        if due:
+            session.save()
+
+    # When the last change was made and when a save was last tried, on the session's steady clock.
+    @property
+    def _changed_ms(self) -> int:
+        return int(self.session.client.view("autosave")["changed_ms"])
+
+    @_changed_ms.setter
+    def _changed_ms(self, value: int) -> None:
+        self.session.client.command({"cmd": "autosave_times", "changed_ms": int(value)})
+
+    @property
+    def _last_try_ms(self) -> int:
+        return int(self.session.client.view("autosave")["last_try_ms"])
+
+    @_last_try_ms.setter
+    def _last_try_ms(self, value: int) -> None:
+        self.session.client.command({"cmd": "autosave_times", "last_try_ms": int(value)})
 
     def listen_for_instances(self, name: str) -> bool:
         server = QLocalServer(self)
@@ -1056,7 +1060,7 @@ class NativeWindow(QObject):
             return
         if self.session.dirty:
             # Every change reaches here, so this is where the clock on "stopped changing" restarts.
-            self._changed_ms = int(time.monotonic() * 1000)
+            self.session.client.command({"cmd": "autosave_changed"})
         if self._on_recovery() and not self._allow_week_page:
             return
         self._set_clock()
@@ -1634,7 +1638,7 @@ class NativeWindow(QObject):
         if not stored:
             # The retry wait starts at a failure, whoever started the save: one started by a button
             # left the timer's last try long ago, and it tried again on its very next tick.
-            self._last_try_ms = int(time.monotonic() * 1000)
+            self.session.client.command({"cmd": "autosave_failed"})
         change, self._change_saving = self._change_saving, None
         if stored and change is not None:
             self._change_saved = change
@@ -2029,12 +2033,7 @@ class NativeWindow(QObject):
             self.session._say("This machine doesn't support starting at login.")
 
     def _log_out(self) -> None:
-        where = (
-            "your FlexWeek server"
-            if (self.session.storage_info or {}).get("mode") == "hosted"
-            else "this computer"
-        )
-        question = SIGN_OUT_QUESTION.format(where=where)
+        question = SIGN_OUT_QUESTION.format(where="this computer")
         page = self._material_shown()
         if page is not None:
             page.bridge.sheets.ask_sign_out(question, self._sign_out_confirmed)
@@ -2209,48 +2208,39 @@ class NativeWindow(QObject):
         timer = QTimer(self)
         timer.setInterval(LEAVE_POLL_MS)
         self._leaving = timer
-        tried = {"week": False}
-        waited = 0
+        # Which step each poll takes is the session's (engine/app/src/session/leaving.rs).
+        session.client.command({"cmd": "leaving_start", "limit_ms": LEAVE_WAIT_MS, "again": again})
 
         def stop() -> None:
             timer.stop()
             timer.deleteLater()
             self._leaving = None
 
-        def give_up() -> None:
-            stop()
-            session._say(
-                "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
-                f"Choose Retry save, then {again}."
-            )
-            self.restore_window()
-
         def poll() -> None:
-            nonlocal waited
-            waited += LEAVE_POLL_MS
-            if waited > LEAVE_WAIT_MS:
-                give_up()
-                return
-            if session.busy:
-                return
-            if session._held():
-                if tried["week"]:
-                    give_up()
-                    return
-                tried["week"] = True
+            answer = session.client.command(
+                {
+                    "cmd": "leaving_poll",
+                    "poll_ms": LEAVE_POLL_MS,
+                    "held": bool(session._held()),
+                    "parked": session.parked_unsaved_week() is not None,
+                }
+            )
+            step = answer["step"]
+            if step == "give_up":
+                stop()
+                session._say(answer["words"])
+                self.restore_window()
+            elif step == "save":
                 session.save()
-                return
-            parked = session.parked_unsaved_week()
-            if parked is not None:
-                tried["week"] = False
-                session.load_week(parked)
-                return
-            stop()
-            self._saved_to_leave = True
-            try:
-                leave()
-            finally:
-                self._saved_to_leave = False
+            elif step == "load":
+                session.load_week(session.parked_unsaved_week())
+            elif step == "leave":
+                stop()
+                self._saved_to_leave = True
+                try:
+                    leave()
+                finally:
+                    self._saved_to_leave = False
 
         timer.timeout.connect(poll)
         timer.start()

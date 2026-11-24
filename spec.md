@@ -742,7 +742,9 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   a real PC is unverified here.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
   pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
-  `rig`, `mutate` and `mutate-python`. `rig` runs once for Material Day and once
+  `screens`, `rig`, `mutate` and `mutate-python`. `screens` runs the screen tests
+  written in Rust (`engine/testkit/tests`) against the Python app through the
+  test door. `rig` runs once for Material Day and once
   for Material Week with a real pointer on a hidden display (Xvfb, Openbox,
   xdotool) and uploads the frames and results; CI has no ffmpeg, so there is no
   video. `.github/workflows/codeql.yml` runs CodeQL on Python.

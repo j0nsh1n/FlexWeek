@@ -356,7 +356,7 @@ def test_a_sign_out_during_the_preview_ends_the_wait(qapp, window, after_setup, 
 
     def request(method, path, payload, ok, err):
         if path == "/api/repeat-edits":
-            window.session.client.epoch += 1
+            window.session.client.reset()
             return None
         return real(method, path, payload, ok, err)
 
