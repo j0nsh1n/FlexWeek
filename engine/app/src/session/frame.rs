@@ -129,7 +129,11 @@ fn workers() -> &'static Mutex<Sender<Job>> {
                         Err(_) => return,
                     };
                     match job {
-                        Ok(job) => job(),
+                        // The work catches its own failures; this also catches one in the window's `wake`,
+                        // so no worker is ever lost.
+                        Ok(job) => {
+                            let _ = catch_unwind(AssertUnwindSafe(job));
+                        }
                         Err(_) => return,
                     }
                 }

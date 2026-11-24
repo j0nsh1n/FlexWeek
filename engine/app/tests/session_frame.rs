@@ -3,7 +3,7 @@
 //! (client.py `_error`); the 30-second limit and the expiry rule are client.py's.
 
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -23,6 +23,8 @@ struct TestHost {
     steady: AtomicI64,
     draws: AtomicU64,
     gate: Option<Mutex<Receiver<()>>>,
+    /// Told when a worker has started this host's work (just before the gate).
+    entered: Option<Mutex<Sender<()>>>,
     broken: AtomicBool,
 }
 
@@ -37,6 +39,9 @@ impl Host for TestHost {
         format!("{:016x}", self.draws.fetch_add(1, Ordering::SeqCst))
     }
     fn entropy(&self) -> Box<dyn Entropy + Send> {
+        if let Some(entered) = &self.entered {
+            let _ = entered.lock().unwrap().send(());
+        }
         if let Some(gate) = &self.gate {
             let _ = gate.lock().unwrap().recv();
         }
@@ -64,6 +69,7 @@ fn host(gate: Option<Receiver<()>>) -> Arc<TestHost> {
         steady: AtomicI64::new(1_000),
         draws: AtomicU64::new(1),
         gate: gate.map(Mutex::new),
+        entered: None,
         broken: AtomicBool::new(false),
     })
 }
@@ -402,21 +408,34 @@ fn a_failure_inside_a_worker_is_a_server_error_and_the_workers_carry_on() {
     rig.sign_up("ana");
 }
 
+/// The frame goes while its work is under way: the answer goes nowhere and no one is woken. The waker is
+/// let go of once the work ends, so the test hears "disconnected", never a wake.
 #[test]
-fn a_frame_that_goes_away_wakes_no_one() {
+fn a_frame_that_goes_away_while_its_work_is_under_way_wakes_no_one() {
     let db = TestDb::new("frame-gone");
     let (release, gate) = channel();
-    let host = host(Some(gate));
+    let (entered_tx, entered) = channel();
+    let host = Arc::new(TestHost {
+        steady: AtomicI64::new(1_000),
+        draws: AtomicU64::new(1),
+        gate: Some(Mutex::new(gate)),
+        entered: Some(Mutex::new(entered_tx)),
+        broken: AtomicBool::new(false),
+    });
     let (wake, woken) = waker();
     let mut frame = Frame::new(db.path.clone(), host, wake);
     frame.request("GET", "/api/auth/me", None).unwrap();
+    entered
+        .recv_timeout(Duration::from_secs(20))
+        .expect("a worker to start the work");
     drop(frame);
     release.send(()).unwrap();
-    assert!(woken.recv_timeout(Duration::from_secs(2)).is_err());
+    assert_eq!(
+        woken.recv_timeout(Duration::from_secs(20)),
+        Err(RecvTimeoutError::Disconnected)
+    );
 }
 
-/// Work the frame handed out but no worker had started is skipped once the frame goes: with every worker
-/// held at a gate, the gone frame's request waits behind them, and its host is never asked for anything.
 #[test]
 fn work_not_started_when_the_frame_goes_is_skipped() {
     let db = TestDb::new("frame-skipped");
@@ -426,21 +445,51 @@ fn work_not_started_when_the_frame_goes_is_skipped() {
         holding.frame.request("GET", "/api/auth/me", None).unwrap();
     }
     let gone_host = host(None);
-    let (wake, _woken) = waker();
+    let (wake, woken) = waker();
     let mut gone = Frame::new(db.path.clone(), gone_host.clone(), wake);
     gone.request("GET", "/api/auth/me", None).unwrap();
     let asked = gone_host.draws.load(Ordering::SeqCst);
     drop(gone);
     holding.open_gate(workers);
     holding.answers(workers);
-    // One more request after it, so the gone frame's work has been taken from the queue by now.
-    holding.frame.request("GET", "/api/auth/me", None).unwrap();
-    holding.open_gate(1);
-    holding.answers(1);
+    // Its work was taken from the queue and let go of without waking anyone.
+    assert_eq!(
+        woken.recv_timeout(Duration::from_secs(20)),
+        Err(RecvTimeoutError::Disconnected)
+    );
     assert_eq!(
         gone_host.draws.load(Ordering::SeqCst),
         asked,
         "the gone frame's work ran"
+    );
+}
+
+/// A window whose `wake` fails loses no worker: more such answers than there are workers, then an ordinary
+/// request is still answered.
+#[test]
+fn a_wake_that_fails_loses_no_worker() {
+    let db = TestDb::new("frame-wake-fails");
+    let woke = Arc::new(AtomicU64::new(0));
+    let counted = Arc::clone(&woke);
+    let mut frame = Frame::new(
+        db.path.clone(),
+        host(None),
+        Arc::new(move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+            panic!("the window's wake failed on purpose");
+        }),
+    );
+    let failing = flexweek_app::session::frame::WORKERS + 1;
+    for _ in 0..failing {
+        frame.request("GET", "/api/auth/me", None).unwrap();
+    }
+    let mut rig = rig("frame-wake-fails-after", false);
+    rig.sign_up("ana");
+    // The sign-up waited in the queue behind all five, so at least two workers had already failed their wake
+    // and gone on (the fifth and the sign-up each needed a worker that had finished one).
+    assert!(
+        woke.load(Ordering::SeqCst) >= 2,
+        "the wakes did not fail, so the test says nothing"
     );
 }
 
