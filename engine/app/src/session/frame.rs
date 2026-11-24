@@ -2,17 +2,22 @@
 //! window sends, answered by the service on worker threads and taken back on the window's thread. It does
 //! what `desktop/native/client.py`'s `NativeClient` does today, with no window toolkit:
 //!
-//! - a request is numbered, sent to a worker, and its answer comes back as an event when the window takes
-//!   its events (after the worker's `wake`);
+//! - a request is numbered and sent to one of the process's workers; its answer comes back as an event
+//!   when the window takes the next one (after the worker's `wake`);
+//! - events are taken one at a time, so what the window does with one answer (signing out, say) counts
+//!   before the next answer is read, as it did when each answer landed on its own;
 //! - signing in as someone else, or out, starts a new epoch: an answer sent in an earlier one is dropped;
 //! - a request with no answer after [`REQUEST_LIMIT_MS`] fails as unanswered, and its late answer is dropped;
-//! - a 401 for a signed-in account, other than a wrong password, says the session ended.
+//!   [`Frame::next_deadline`] says when the window should look next;
+//! - a 401 for a signed-in account, other than a wrong password, says the session ended, unless the window
+//!   signed out or in again while it handled that answer.
 
 use std::collections::BTreeMap;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use flexweek_service::accounts::Entropy;
 use flexweek_service::desk_requests::{self, Answer, Session};
@@ -23,15 +28,16 @@ use super::words::{NOT_AN_EXPIRY, UNREADABLE, error_words};
 
 /// How long a request may wait for its answer before it fails as unanswered.
 pub const REQUEST_LIMIT_MS: i64 = 30_000;
-/// Requests answered at once. Each waits on the database or hashes a password, so a Plan or a sign-in does
-/// not hold up the reads behind it.
+/// Requests answered at once, by one set of workers for the whole process. Each waits on the database or
+/// hashes a password, so a Plan or a sign-in does not hold up the reads behind it.
 pub const WORKERS: usize = 4;
 /// A larger answer is not read (the window's limit since 1.0).
 pub const MAX_ANSWER_BYTES: usize = 4 * 1024 * 1024;
 const METHODS: [&str; 5] = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
 /// What the session needs from the computer it runs on (group 1's part of the platform trait). Shared with
-/// the workers, so it must be safe to use from any thread.
+/// the workers, so it must be safe to use from any thread. Its calls cannot fail: a host that asks
+/// something else (Python) answers with a fallback rather than panicking.
 pub trait Host: Send + Sync {
     /// Milliseconds on a clock that only moves forward, for the request limit (not the app's clock, which a
     /// test may hold still).
@@ -53,7 +59,7 @@ pub struct Identity {
     pub username: String,
 }
 
-/// What the window learns when it takes its events.
+/// What the window learns when it takes the next event.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     /// A request's answer: `Ok` with the body read as JSON (an empty body reads as `{}`), or the words to show.
@@ -107,6 +113,32 @@ struct Landed {
 
 type Job = Box<dyn FnOnce() + Send>;
 
+/// The process's workers, started with the first frame and kept for the life of the program, as the
+/// window's pool was. A frame that goes away never waits for them.
+fn workers() -> &'static Mutex<Sender<Job>> {
+    static POOL: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
+    POOL.get_or_init(|| {
+        let (jobs, queue) = channel::<Job>();
+        let queue = Arc::new(Mutex::new(queue));
+        for _ in 0..WORKERS {
+            let queue = Arc::clone(&queue);
+            std::thread::spawn(move || {
+                loop {
+                    let job = match queue.lock() {
+                        Ok(queue) => queue.recv(),
+                        Err(_) => return,
+                    };
+                    match job {
+                        Ok(job) => job(),
+                        Err(_) => return,
+                    }
+                }
+            });
+        }
+        Mutex::new(jobs)
+    })
+}
+
 pub struct Frame {
     database: PathBuf,
     host: Arc<dyn Host>,
@@ -116,35 +148,19 @@ pub struct Frame {
     epoch: u64,
     number: u64,
     waiting: BTreeMap<u64, Waiting>,
-    jobs: Option<Sender<Job>>,
-    workers: Vec<JoinHandle<()>>,
+    /// Set when the frame goes: work not yet started is skipped, and no one is woken.
+    closed: Arc<AtomicBool>,
     landed_tx: Sender<Landed>,
     landed: Receiver<Landed>,
+    /// A 401 just handed to the window that means the session ended, with the epoch it was sent in: told
+    /// next, unless the window has signed out or in since.
+    expiry: Option<u64>,
 }
 
 impl Frame {
     /// The frame for the account database at `database`. `wake` is called on a worker thread whenever an
     /// answer is ready, so the window can take its events on its own thread.
     pub fn new(database: PathBuf, host: Arc<dyn Host>, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
-        let (jobs, queue) = channel::<Job>();
-        let queue = Arc::new(Mutex::new(queue));
-        let workers = (0..WORKERS)
-            .map(|_| {
-                let queue = Arc::clone(&queue);
-                std::thread::spawn(move || {
-                    loop {
-                        let job = match queue.lock() {
-                            Ok(queue) => queue.recv(),
-                            Err(_) => return,
-                        };
-                        match job {
-                            Ok(job) => job(),
-                            Err(_) => return,
-                        }
-                    }
-                })
-            })
-            .collect();
         let (landed_tx, landed) = channel();
         Self {
             database,
@@ -155,10 +171,10 @@ impl Frame {
             epoch: 0,
             number: 0,
             waiting: BTreeMap::new(),
-            jobs: Some(jobs),
-            workers,
+            closed: Arc::new(AtomicBool::new(false)),
             landed_tx,
             landed,
+            expiry: None,
         }
     }
 
@@ -178,6 +194,12 @@ impl Frame {
     /// Requests sent and not yet answered or timed out.
     pub fn waiting(&self) -> usize {
         self.waiting.len()
+    }
+
+    /// When, on the steady clock, the next request reaches its limit: the window looks again then, since a
+    /// request that never comes back wakes no one.
+    pub fn next_deadline(&self) -> Option<i64> {
+        self.waiting.values().map(|waiting| waiting.deadline).min()
     }
 
     /// Signed in as `identity`: answers to requests sent before no longer count.
@@ -219,9 +241,11 @@ impl Frame {
         }
         let encoded = match body {
             None => String::new(),
-            Some(Value::Object(_)) => body.map(Value::to_string).unwrap_or_default(),
+            Some(object @ Value::Object(_)) => object.to_string(),
             Some(_) => return Err("API request bodies must be JSON objects.".into()),
         };
+        let (seconds, now) = self.host.request_clock();
+        let restore = self.host.restore_token();
         self.number += 1;
         let number = self.number;
         self.waiting.insert(
@@ -232,8 +256,6 @@ impl Frame {
                 signed_in: self.account.is_some(),
             },
         );
-        let (seconds, now) = self.host.request_clock();
-        let restore = self.host.restore_token();
         let token = self.token.clone();
         let account = self
             .account
@@ -244,74 +266,76 @@ impl Frame {
         let host = Arc::clone(&self.host);
         let wake = Arc::clone(&self.wake);
         let landed = self.landed_tx.clone();
+        let closed = Arc::clone(&self.closed);
         let job: Job = Box::new(move || {
-            let request = desk_requests::Request {
-                method: &method,
-                path: &path,
-                body: &encoded,
-                token: &token,
-                account: account.as_deref(),
-            };
-            let start = || host.stopwatch();
-            let clock = desk_requests::Clock {
-                seconds,
-                now: &now,
-                restore_token: &restore,
-                stopwatch: &start,
-            };
-            let mut entropy = host.entropy();
-            let answer = desk_requests::answer(&database, &request, &clock, entropy.as_mut());
+            if closed.load(Ordering::SeqCst) {
+                return;
+            }
+            // A failure inside the service is a server error to the window, as it was, and the worker lives on.
+            let answer = catch_unwind(AssertUnwindSafe(|| {
+                let request = desk_requests::Request {
+                    method: &method,
+                    path: &path,
+                    body: &encoded,
+                    token: &token,
+                    account: account.as_deref(),
+                };
+                let start = || host.stopwatch();
+                let clock = desk_requests::Clock {
+                    seconds,
+                    now: &now,
+                    restore_token: &restore,
+                    stopwatch: &start,
+                };
+                let mut entropy = host.entropy();
+                desk_requests::answer(&database, &request, &clock, entropy.as_mut())
+            }))
+            .unwrap_or(Answer {
+                status: 500,
+                body: None,
+                session: Session::Kept,
+            });
             // The frame may be gone; then no one is left to tell.
-            if landed.send(Landed { number, answer }).is_ok() {
+            if landed.send(Landed { number, answer }).is_ok() && !closed.load(Ordering::SeqCst) {
                 wake();
             }
         });
-        if let Some(jobs) = &self.jobs {
+        // If no worker could take it, it fails at its limit like any unanswered request.
+        if let Ok(jobs) = workers().lock() {
             let _ = jobs.send(job);
         }
         Ok(number)
     }
 
-    /// The events since the last call, in the order they happened: answers that came in, requests past
-    /// their limit, and an ended session.
-    pub fn take_events(&mut self) -> Vec<Event> {
-        let mut events = Vec::new();
-        let now = self.host.steady_ms();
-        let late: Vec<u64> = self
-            .waiting
-            .iter()
-            .filter(|(_, waiting)| waiting.deadline <= now)
-            .map(|(number, _)| *number)
-            .collect();
-        let mut finished: Vec<(u64, Waiting, Option<Answer>)> = Vec::new();
+    /// The next thing that happened, or None: an answer that came in (in the order they came), a request
+    /// past its limit, or an ended session. Taken one at a time, so whatever the window does with one
+    /// (signing out, say) counts before the next is read.
+    pub fn take_event(&mut self) -> Option<Event> {
+        if let Some(epoch) = self.expiry.take()
+            && epoch == self.epoch
+        {
+            return Some(Event::Expired);
+        }
         while let Ok(Landed { number, answer }) = self.landed.try_recv() {
             // An answer that came after its request's limit was already given up on.
             if let Some(waiting) = self.waiting.remove(&number) {
-                finished.push((number, waiting, Some(answer)));
+                return Some(self.finish(number, &waiting, Some(answer)));
             }
         }
-        for number in late {
-            if let Some(waiting) = self.waiting.remove(&number) {
-                finished.push((number, waiting, None));
-            }
-        }
-        finished.sort_by_key(|(number, _, _)| *number);
-        for (number, waiting, answer) in finished {
-            self.finish(number, &waiting, answer, &mut events);
-        }
-        events
+        let now = self.host.steady_ms();
+        let late = self
+            .waiting
+            .iter()
+            .filter(|(_, waiting)| waiting.deadline <= now)
+            .min_by_key(|(number, waiting)| (waiting.deadline, **number))
+            .map(|(number, _)| *number)?;
+        let waiting = self.waiting.remove(&late)?;
+        Some(self.finish(late, &waiting, None))
     }
 
-    fn finish(
-        &mut self,
-        number: u64,
-        waiting: &Waiting,
-        answer: Option<Answer>,
-        events: &mut Vec<Event>,
-    ) {
+    fn finish(&mut self, number: u64, waiting: &Waiting, answer: Option<Answer>) -> Event {
         if waiting.epoch != self.epoch {
-            events.push(Event::Dropped { number });
-            return;
+            return Event::Dropped { number };
         }
         let reached = answer.is_some();
         let answer = answer.unwrap_or(Answer {
@@ -324,51 +348,67 @@ impl Frame {
             Session::Ended => self.token.clear(),
             Session::Kept => {}
         }
-        // Read as the window read the text: an empty body is `{}`, an over-large one is not read at all.
-        let body = match &answer.body {
-            None => Some(json!({})),
-            Some(body) if body.to_string().len() > MAX_ANSWER_BYTES => None,
-            Some(body) => Some(body.clone()),
-        };
-        let status = answer.status;
-        if !(200..300).contains(&status) || !reached {
-            let detail = body.as_ref().and_then(|body| body.get("detail"));
-            let message = error_words(status, detail).to_string();
-            let expired = status == 401
-                && waiting.signed_in
-                && !detail
-                    .and_then(Value::as_str)
-                    .is_some_and(|said| NOT_AN_EXPIRY.contains(&said));
-            events.push(Event::Answered {
-                number,
-                outcome: Outcome::Failed { status, message },
-            });
-            if expired {
-                events.push(Event::Expired);
-            }
-            return;
+        let (outcome, expired) = read(answer.status, answer.body, reached, waiting.signed_in);
+        if expired {
+            self.expiry = Some(waiting.epoch);
         }
-        let outcome = match body {
-            Some(body @ Value::Object(_)) if answer.body.is_some() || status == 204 => {
-                Outcome::Ok { status, body }
-            }
-            _ => Outcome::Failed {
-                status,
-                message: UNREADABLE.into(),
-            },
-        };
-        events.push(Event::Answered { number, outcome });
+        Event::Answered { number, outcome }
     }
 }
 
 impl Drop for Frame {
-    /// Requests already handed out are still answered; their answers go nowhere.
+    /// Work already handed out is skipped if not started; an answer still being made goes nowhere and
+    /// wakes no one. Nothing here waits for a worker.
     fn drop(&mut self) {
-        self.jobs = None;
-        for worker in self.workers.drain(..) {
-            let _ = worker.join();
+        self.closed.store(true, Ordering::SeqCst);
+    }
+}
+
+/// What the window makes of an answer, as client.py read the text it was given: `status` (0 when none came),
+/// the body (None for an empty one, which reads as `{}`; one over [`MAX_ANSWER_BYTES`] is not read), whether
+/// one came, and whether someone was signed in when it was sent. Also says whether it means the session ended.
+pub fn read(status: u16, body: Option<Value>, reached: bool, signed_in: bool) -> (Outcome, bool) {
+    let empty = body.is_none();
+    let body = match body {
+        None => Some(json!({})),
+        Some(body) if serialized_len(&body) > MAX_ANSWER_BYTES => None,
+        Some(body) => Some(body),
+    };
+    if !(200..300).contains(&status) || !reached {
+        let detail = body.as_ref().and_then(|body| body.get("detail"));
+        let message = error_words(status, detail).to_string();
+        let expired = status == 401
+            && signed_in
+            && !detail
+                .and_then(Value::as_str)
+                .is_some_and(|said| NOT_AN_EXPIRY.contains(&said));
+        return (Outcome::Failed { status, message }, expired);
+    }
+    let outcome = match body {
+        Some(body @ Value::Object(_)) if !empty || status == 204 => Outcome::Ok { status, body },
+        _ => Outcome::Failed {
+            status,
+            message: UNREADABLE.into(),
+        },
+    };
+    (outcome, false)
+}
+
+/// The length of a value written as JSON text, without keeping the text.
+fn serialized_len(value: &Value) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 += bytes.len();
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
         }
     }
+    let mut count = Count(0);
+    let _ = serde_json::to_writer(&mut count, value);
+    count.0
 }
 
 /// Only a relative `/api/` path may be asked for, with nothing that could step outside it (the window's
@@ -418,4 +458,80 @@ fn hex_value(byte: u8) -> Option<u8> {
     (byte as char)
         .to_digit(16)
         .and_then(|digit| u8::try_from(digit).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ok(status: u16, body: Value) -> (Outcome, bool) {
+        (Outcome::Ok { status, body }, false)
+    }
+
+    fn unreadable(status: u16) -> (Outcome, bool) {
+        (
+            Outcome::Failed {
+                status,
+                message: UNREADABLE.into(),
+            },
+            false,
+        )
+    }
+
+    /// client.py read the text it was given: empty is `{}`, which only a 204 may be; a body must be an
+    /// object; one over 4 MiB is not read, so an error then has no detail.
+    #[test]
+    fn an_answer_is_read_as_the_window_read_its_text() {
+        assert_eq!(read(204, None, true, true), ok(204, json!({})));
+        assert_eq!(read(200, None, true, true), unreadable(200));
+        assert_eq!(read(200, Some(json!([1, 2])), true, true), unreadable(200));
+        assert_eq!(read(200, Some(json!("text")), true, true), unreadable(200));
+        assert_eq!(
+            read(201, Some(json!({ "id": 3 })), true, true),
+            ok(201, json!({ "id": 3 }))
+        );
+        let large = json!({ "detail": "Incorrect password", "pad": "x".repeat(MAX_ANSWER_BYTES) });
+        assert_eq!(read(200, Some(large.clone()), true, true), unreadable(200));
+        // Unread, the 401's detail is gone: generic words, and it counts as an ended session.
+        assert_eq!(
+            read(401, Some(large), true, true),
+            (
+                Outcome::Failed {
+                    status: 401,
+                    message: super::super::words::SIGN_IN_AGAIN.into()
+                },
+                true
+            )
+        );
+        // `{"pad":""}` is 10 bytes: the limit itself is read, a byte more is not.
+        let at_limit = json!({ "pad": "x".repeat(MAX_ANSWER_BYTES - 10) });
+        assert_eq!(serialized_len(&at_limit), MAX_ANSWER_BYTES);
+        assert!(matches!(
+            read(200, Some(at_limit), true, true).0,
+            Outcome::Ok { .. }
+        ));
+        let over = json!({ "pad": "x".repeat(MAX_ANSWER_BYTES - 9) });
+        assert_eq!(read(200, Some(over), true, true), unreadable(200));
+    }
+
+    #[test]
+    fn no_answer_at_all_fails_with_the_could_not_reach_words_even_on_a_200() {
+        assert_eq!(
+            read(200, Some(json!({})), false, true),
+            (
+                Outcome::Failed {
+                    status: 200,
+                    message: error_words(200, None).into()
+                },
+                false
+            )
+        );
+        assert_eq!(
+            read(0, None, false, true).0,
+            Outcome::Failed {
+                status: 0,
+                message: error_words(0, None).into()
+            }
+        );
+    }
 }

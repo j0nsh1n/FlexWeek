@@ -4,7 +4,8 @@
 //!
 //! - `send(command)`: `{"cmd": ...}`; answers `{"ok": true, ...}` or `{"ok": false, "error": ...}`;
 //! - `view(name)`: what one part of the session holds now;
-//! - `take_events()`: what happened since the last call, in order.
+//! - `take_event()`: the next thing that happened, or `null`; one at a time, so what the window does with
+//!   one (signing out, say) counts before the next is read.
 //!
 //! So far: the frame (group 1), which sends requests and takes their answers back.
 
@@ -82,8 +83,8 @@ impl Session {
         }
     }
 
-    /// One view as JSON text. `frame`: the account, the epoch, whether a session is held, and how many
-    /// requests wait.
+    /// One view as JSON text. `frame`: the account, the epoch, the session token held (or null), how many
+    /// requests wait, and when on the steady clock the next one reaches its limit (or null).
     pub fn view(&self, name: &str) -> String {
         match name {
             "frame" => {
@@ -96,6 +97,7 @@ impl Session {
                     "epoch": self.frame.epoch(),
                     "token": self.frame.token(),
                     "waiting": self.frame.waiting(),
+                    "next_deadline": self.frame.next_deadline(),
                 })
                 .to_string()
             }
@@ -103,15 +105,11 @@ impl Session {
         }
     }
 
-    /// The events since the last call, as a JSON array.
-    pub fn take_events(&mut self) -> String {
-        Value::Array(
-            self.frame
-                .take_events()
-                .iter()
-                .map(Event::to_json)
-                .collect(),
-        )
-        .to_string()
+    /// The next event as JSON text, or `null` when nothing more has happened.
+    pub fn take_event(&mut self) -> String {
+        self.frame
+            .take_event()
+            .map_or(Value::Null, |event| event.to_json())
+            .to_string()
     }
 }
