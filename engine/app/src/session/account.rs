@@ -50,6 +50,15 @@ fn identity(body: &Value) -> Option<Identity> {
     (id > 0 && !username.is_empty()).then_some(Identity { id, username })
 }
 
+/// How many recovery codes are left after replacing them, as the window read the answer: a count of 0 or
+/// none falls back to the number of codes handed out.
+fn remaining_codes(body: &Value, handed_out: usize) -> u64 {
+    body.get("remaining")
+        .and_then(Value::as_u64)
+        .filter(|remaining| *remaining > 0)
+        .unwrap_or(handed_out as u64)
+}
+
 fn account_json(identity: &Identity) -> Value {
     json!({ "id": identity.id, "username": identity.username })
 }
@@ -342,12 +351,7 @@ impl Session {
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        // As the window read it: a remaining count of 0 or none falls back to the codes handed out.
-        let remaining = body
-            .get("remaining")
-            .and_then(Value::as_u64)
-            .filter(|remaining| *remaining > 0)
-            .unwrap_or(codes.len() as u64);
+        let remaining = remaining_codes(&body, codes.len());
         self.status.say("Save these replacement recovery codes.");
         Some(json!({ "kind": "codes_replaced", "codes": codes, "remaining": remaining }))
     }
@@ -369,5 +373,18 @@ impl Session {
         self.status.set_busy(false);
         self.status.say("Account deleted.");
         Some(json!({ "kind": "account_deleted", "owner": owner }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_remaining_count_falls_back_to_the_codes_handed_out() {
+        assert_eq!(remaining_codes(&json!({ "remaining": 5 }), 8), 5);
+        assert_eq!(remaining_codes(&json!({ "remaining": 0 }), 8), 8);
+        assert_eq!(remaining_codes(&json!({}), 8), 8);
+        assert_eq!(remaining_codes(&json!({ "remaining": "5" }), 8), 8);
     }
 }
