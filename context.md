@@ -16,10 +16,11 @@
   against the Python app; CI's `screens` job runs them (about 5 minutes). The Python files they replaced
   (`test_material_go_to_date.py`, `..._keyboard_returns_to_week.py`, `..._now_label.py`, `..._preview_dialog_keys.py`)
   are deleted with ledger rows. fwtest's flaky rerun still covers pytest only.
-- P4 has started: `flexweek-app::session` (engine/app/src/session) holds the session's frame (requests on one pool of
-  4 workers, epochs, the 30 s limit on a steady clock, the expiry rule, the window's error words), taken one event
-  at a time; nothing calls it yet (#161). Pydantic leaves in P4 (Jonathan, 2026-11-23); the sign-in timeout words
-  ("FlexWeek can't reach its server") stay until the sign-in screens move.
+- P4 has started in open PR #161 (in review, not on main yet): it adds `flexweek-app::session`
+  (engine/app/src/session) with the session's frame (requests on one pool of 4 workers, epochs, the 30 s limit on a
+  steady clock, the expiry rule, the window's error words), taken one event at a time; nothing calls it yet.
+  Pydantic leaves in P4 (Jonathan, 2026-11-23); the sign-in timeout words ("FlexWeek can't reach its server") stay
+  until P4 (Jonathan, 2026-11-23).
 - `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
   tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
   deleted.

@@ -79,7 +79,7 @@ list, all shipped).
   (Jonathan, 2026-11-23), where its adapters are deleted. P3 [x] done 2026-11-23 (#158, #160): 42 Week screen tests
   run in Rust against the app through the test door, in CI (`screens`, in parallel with the desktop shards), each
   seen red by a rule broken by hand; their four Python files are deleted with ledger rows. P4 [ ] started: the
-  session's frame in Rust (#161). P5-P8 [ ] planned.
+  session's frame in Rust (#161, open). P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
