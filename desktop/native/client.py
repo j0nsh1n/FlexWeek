@@ -269,9 +269,7 @@ class NativeClient(QObject):
         """Takes the session's next answer: each worker's wake, or the limit's timer, brings one. One per
         turn of the window's loop, as each answer landed on its own before, so what the window queues while
         handling one runs before the next is read; with it, the end of the session if that answer said so."""
-        if not isValid(self):
-            return
-        while True:
+        while isValid(self):
             event = json.loads(self._core.take_event())
             if event is None:
                 break

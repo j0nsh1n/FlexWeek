@@ -101,6 +101,9 @@ impl Entropy for NoEntropy {
 /// `wake()` is called on a worker's thread when an answer is ready, so it must only post to the window's
 /// thread. With `inline`, each request is answered as it is sent, on the caller's thread (the desktop
 /// tests' light app).
+///
+/// Lock order: every call lets go of Python's lock before it takes the session's, since the session calls
+/// back into Python (the host, `wake`) while it holds its own.
 #[pyclass(name = "NativeCore", module = "flexweek_engine")]
 pub struct NativeCore {
     session: Mutex<Session>,
@@ -144,24 +147,23 @@ impl NativeCore {
         })
     }
 
-    fn view(&self, name: &str) -> PyResult<String> {
+    fn view(&self, py: Python<'_>, name: &str) -> PyResult<String> {
         guard(|| {
-            let session = self
-                .session
-                .lock()
-                .map_err(|_| PyRuntimeError::new_err("the session failed earlier"))?;
-            Ok(session.view(name))
+            let view = py.detach(|| self.session.lock().map(|session| session.view(name)).ok());
+            view.ok_or_else(|| PyRuntimeError::new_err("the session failed earlier"))
         })
     }
 
     /// Whether the answer just taken said the session ended; told once, here or as the next event.
-    fn take_expiry(&self) -> PyResult<bool> {
+    fn take_expiry(&self, py: Python<'_>) -> PyResult<bool> {
         guard(|| {
-            let mut session = self
-                .session
-                .lock()
-                .map_err(|_| PyRuntimeError::new_err("the session failed earlier"))?;
-            Ok(session.take_expiry())
+            let expired = py.detach(|| {
+                self.session
+                    .lock()
+                    .map(|mut session| session.take_expiry())
+                    .ok()
+            });
+            expired.ok_or_else(|| PyRuntimeError::new_err("the session failed earlier"))
         })
     }
 

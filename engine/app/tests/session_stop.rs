@@ -6,13 +6,13 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use flexweek_app::session::frame::{Frame, Host, stop_workers};
+use flexweek_app::session::frame::{Frame, Host, WORKERS, stop_workers};
 use flexweek_service::accounts::Entropy;
 use flexweek_service::plans::Stopwatch;
 use flexweek_testkit::{Counting, TestDb};
 
-/// Holds the first request's work at a gate, telling the test when it got there; counts every request
-/// whose work ran.
+/// Holds every request's work at a gate, telling the test when each got there; counts every request whose
+/// work ran.
 struct GatedHost {
     entered: Mutex<Sender<()>>,
     gate: Mutex<Receiver<()>>,
@@ -30,10 +30,9 @@ impl Host for GatedHost {
         "0000000000000001".into()
     }
     fn entropy(&self) -> Box<dyn Entropy + Send> {
-        if self.ran.fetch_add(1, Ordering::SeqCst) == 0 {
-            let _ = self.entered.lock().unwrap().send(());
-            let _ = self.gate.lock().unwrap().recv();
-        }
+        self.ran.fetch_add(1, Ordering::SeqCst);
+        let _ = self.entered.lock().unwrap().send(());
+        let _ = self.gate.lock().unwrap().recv();
         Box::new(Counting(1))
     }
     fn stopwatch(&self) -> Stopwatch {
@@ -41,8 +40,10 @@ impl Host for GatedHost {
     }
 }
 
+/// Every worker busy and one more request waiting in the queue when the app stops them: the stop waits for
+/// the four, the waiting one never runs, and neither does one sent after the stop.
 #[test]
-fn stopping_waits_for_the_work_under_way_and_skips_what_comes_after() {
+fn stopping_waits_for_the_work_under_way_and_skips_what_has_not_started() {
     let db = TestDb::new("stop-workers");
     let (entered_tx, entered) = channel();
     let (release, gate) = channel();
@@ -60,10 +61,16 @@ fn stopping_waits_for_the_work_under_way_and_skips_what_comes_after() {
             let _ = woken_tx.lock().unwrap().send(());
         }),
     );
+    for _ in 0..WORKERS {
+        frame.request("GET", "/api/auth/me", None).unwrap();
+    }
+    for _ in 0..WORKERS {
+        entered
+            .recv_timeout(Duration::from_secs(20))
+            .expect("every worker to start its work");
+    }
+    // Queued behind the four.
     frame.request("GET", "/api/auth/me", None).unwrap();
-    entered
-        .recv_timeout(Duration::from_secs(20))
-        .expect("a worker to start the work");
     let stopped = Arc::new(AtomicBool::new(false));
     let stopping = {
         let stopped = Arc::clone(&stopped);
@@ -77,19 +84,27 @@ fn stopping_waits_for_the_work_under_way_and_skips_what_comes_after() {
         !stopped.load(Ordering::SeqCst),
         "stopping did not wait for the work under way"
     );
-    release.send(()).unwrap();
+    // One more opening than the work under way needs, so a queued request that wrongly ran would finish too.
+    for _ in 0..=WORKERS {
+        release.send(()).unwrap();
+    }
     stopping.join().unwrap();
-    assert!(stopped.load(Ordering::SeqCst));
-    // The held work finished and its answer came.
-    woken
-        .recv_timeout(Duration::from_secs(20))
-        .expect("the work under way to answer");
-    // Work sent after the stop never runs.
+    for _ in 0..WORKERS {
+        woken
+            .recv_timeout(Duration::from_secs(20))
+            .expect("the work under way to answer");
+    }
+    assert_eq!(
+        host.ran.load(Ordering::SeqCst),
+        WORKERS,
+        "the queued request ran"
+    );
+    // Work sent after the stop never runs either.
     frame.request("GET", "/api/auth/me", None).unwrap();
     assert!(woken.recv_timeout(Duration::from_millis(500)).is_err());
     assert_eq!(
         host.ran.load(Ordering::SeqCst),
-        1,
+        WORKERS,
         "work after the stop ran"
     );
 }

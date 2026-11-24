@@ -27,15 +27,23 @@ WORKERS = 4
 def test_a_client_freed_mid_request_gets_no_answer_and_the_app_carries_on(
     qapp: QApplication, database: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    started, go_on, finished = threading.Event(), threading.Event(), threading.Event()
+    started, go_on = threading.Event(), threading.Event()
 
     def slow() -> object:
         started.set()
         go_on.wait(10)
-        finished.set()
         return secrets
 
+    # The worker's wake for the freed client: once it has come, the answer is ready and on its way.
+    woke = threading.Event()
+    wake = client_module._wake
+
+    def watched(key: int) -> None:
+        wake(key)
+        woke.set()
+
     monkeypatch.setattr(client_module.HOST, "entropy", slow)
+    monkeypatch.setattr(client_module, "_wake", watched)
     client = client_module.NativeClient(database)
     landed: list[object] = []
     client.request("GET", "/api/health", None, landed.append, landed.append)
@@ -44,9 +52,10 @@ def test_a_client_freed_mid_request_gets_no_answer_and_the_app_carries_on(
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     assert not isValid(client)
     go_on.set()
-    assert finished.wait(5)
-    for _ in range(50):
-        qapp.processEvents()
+    assert woke.wait(5), "the worker never woke the window"
+    # The wake is a queued call on the window's thread: deliver it, then look.
+    QCoreApplication.sendPostedEvents()
+    qapp.processEvents()
     assert landed == [], "an answer reached a client that was gone"
     # The workers carry on: a new client is answered.
     monkeypatch.undo()
@@ -55,6 +64,7 @@ def test_a_client_freed_mid_request_gets_no_answer_and_the_app_carries_on(
     again.request("GET", "/api/health", None, answered.append, answered.append)
     wait_until(qapp, lambda: bool(answered))
     assert isinstance(answered[0], dict), answered
+    assert landed == []
 
 
 def test_every_client_shares_one_bounded_set_of_workers(
