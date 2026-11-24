@@ -12,6 +12,7 @@
 
 pub mod autosave;
 pub mod frame;
+pub mod leaving;
 pub mod status;
 pub mod words;
 
@@ -27,6 +28,7 @@ pub struct Session {
     frame: Frame,
     status: Status,
     autosave: autosave::Autosave,
+    leaving: leaving::Leaving,
 }
 
 impl Session {
@@ -35,6 +37,7 @@ impl Session {
             frame: Frame::new(database, host, wake),
             status: Status::default(),
             autosave: autosave::Autosave::default(),
+            leaving: leaving::Leaving::default(),
         }
     }
 
@@ -149,6 +152,30 @@ impl Session {
             Some("autosave_failed") => {
                 self.autosave.last_try_ms = self.frame.steady_ms();
                 Ok(json!({}))
+            }
+            Some("leaving_start") => {
+                let limit = command["limit_ms"]
+                    .as_i64()
+                    .ok_or("limit_ms is a whole number")?;
+                self.leaving.start(limit, text("again")?);
+                Ok(json!({}))
+            }
+            Some("leaving_poll") => {
+                let poll = command["poll_ms"]
+                    .as_i64()
+                    .ok_or("poll_ms is a whole number")?;
+                let flag = |name: &str| -> Result<bool, String> {
+                    command[name]
+                        .as_bool()
+                        .ok_or_else(|| format!("{name} is true or false"))
+                };
+                let (held, parked) = (flag("held")?, flag("parked")?);
+                let step = self.leaving.poll(poll, self.status.busy(), held, parked);
+                let mut answer = json!({ "step": step.name() });
+                if step == leaving::Step::GiveUp {
+                    answer["words"] = json!(self.leaving.gave_up_words());
+                }
+                Ok(answer)
             }
             Some("say") => {
                 self.status.say(text("text")?);

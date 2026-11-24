@@ -2208,48 +2208,39 @@ class NativeWindow(QObject):
         timer = QTimer(self)
         timer.setInterval(LEAVE_POLL_MS)
         self._leaving = timer
-        tried = {"week": False}
-        waited = 0
+        # Which step each poll takes is the session's (engine/app/src/session/leaving.rs).
+        session.client.command({"cmd": "leaving_start", "limit_ms": LEAVE_WAIT_MS, "again": again})
 
         def stop() -> None:
             timer.stop()
             timer.deleteLater()
             self._leaving = None
 
-        def give_up() -> None:
-            stop()
-            session._say(
-                "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
-                f"Choose Retry save, then {again}."
-            )
-            self.restore_window()
-
         def poll() -> None:
-            nonlocal waited
-            waited += LEAVE_POLL_MS
-            if waited > LEAVE_WAIT_MS:
-                give_up()
-                return
-            if session.busy:
-                return
-            if session._held():
-                if tried["week"]:
-                    give_up()
-                    return
-                tried["week"] = True
+            answer = session.client.command(
+                {
+                    "cmd": "leaving_poll",
+                    "poll_ms": LEAVE_POLL_MS,
+                    "held": bool(session._held()),
+                    "parked": session.parked_unsaved_week() is not None,
+                }
+            )
+            step = answer["step"]
+            if step == "give_up":
+                stop()
+                session._say(answer["words"])
+                self.restore_window()
+            elif step == "save":
                 session.save()
-                return
-            parked = session.parked_unsaved_week()
-            if parked is not None:
-                tried["week"] = False
-                session.load_week(parked)
-                return
-            stop()
-            self._saved_to_leave = True
-            try:
-                leave()
-            finally:
-                self._saved_to_leave = False
+            elif step == "load":
+                session.load_week(session.parked_unsaved_week())
+            elif step == "leave":
+                stop()
+                self._saved_to_leave = True
+                try:
+                    leave()
+                finally:
+                    self._saved_to_leave = False
 
         timer.timeout.connect(poll)
         timer.start()
