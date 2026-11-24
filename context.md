@@ -138,7 +138,8 @@ preview. Recorded `operation_id` values make a retried write return the first re
   (requests through the Rust session), #164 (status), #167 (autosave, saving before leaving), #168 (block and
   homework checks by the engine) and #169 (strip parity), each after a Gemini 4 Neon PASS and green CI. Held for
   Jonathan as auth: #165 (sign-in, sign-up, recover, resume, sign-out in Rust) and #166 (password, recovery codes,
-  account deletion), both reviewed (PASS) and kept up to date with main. Parked: the hours windows' refusal words
+  account deletion), both reviewed (Gemini PASS on 4ed0c562 and a6f95261, and on their merge with main through
+  #167); main was merged in again through #168 (a context.md conflict only, not re-reviewed); they do not have #169. Parked: the hours windows' refusal words
   (moving that check off pydantic changes what the status line says). A developer build from 635e7ba6 is in
   `~/.flexweek-ui-harness/scratch/rust-2.0.0/dev-build-p4/` (TRY-IT.md). Next: Jonathan's word on #165/#166 and the
   hours-window words; then group 2's save core with group 3 (undo), planned as one step since they share state.
