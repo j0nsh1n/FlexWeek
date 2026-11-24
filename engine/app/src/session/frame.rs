@@ -103,6 +103,9 @@ struct Waiting {
     deadline: i64,
     /// Who was signed in when it was sent: a 401 then means the session ended.
     signed_in: bool,
+    /// A session its answer starts is held for whoever sent it to accept (a sign-in the window may have moved
+    /// on from), not taken up at once.
+    hold_start: bool,
 }
 
 /// An answer made by a worker.
@@ -201,6 +204,8 @@ pub struct Frame {
     /// desktop tests' light app, whose answers come on the next turn of the window's loop (`wake` is still
     /// called, from inside [`Frame::request`]).
     inline: bool,
+    /// Sessions started by answers sent with [`Frame::hold_new_session`], by request number, until taken.
+    held: BTreeMap<u64, String>,
     /// A 401 just handed to the window that means the session ended, with the epoch it was sent in: told
     /// next, unless the window has signed out or in since.
     expiry: Option<u64>,
@@ -224,8 +229,27 @@ impl Frame {
             landed_tx,
             landed,
             inline: false,
+            held: BTreeMap::new(),
             expiry: None,
         }
+    }
+
+    /// A session the answer to request `number` starts is held, not taken up: see [`Frame::take_new_session`].
+    pub fn hold_new_session(&mut self, number: u64) {
+        if let Some(waiting) = self.waiting.get_mut(&number) {
+            waiting.hold_start = true;
+        }
+    }
+
+    /// The session held from request `number`'s answer, if it started one; taken up only by
+    /// [`Frame::use_session`], so one let go of here is never used.
+    pub fn take_new_session(&mut self, number: u64) -> Option<String> {
+        self.held.remove(&number)
+    }
+
+    /// Takes up a session a held answer started, for the account about to be signed in.
+    pub fn use_session(&mut self, token: String) {
+        self.token = token;
     }
 
     /// See the `inline` field: every request from now on is answered as it is sent.
@@ -314,6 +338,7 @@ impl Frame {
                 epoch: self.epoch,
                 deadline: self.host.steady_ms() + REQUEST_LIMIT_MS,
                 signed_in: self.account.is_some(),
+                hold_start: false,
             },
         );
         let token = self.token.clone();
@@ -411,6 +436,9 @@ impl Frame {
             session: Session::Kept,
         });
         match &answer.session {
+            Session::Started(token) if waiting.hold_start => {
+                self.held.insert(number, token.clone());
+            }
             Session::Started(token) => self.token = token.clone(),
             Session::Ended => self.token.clear(),
             Session::Kept => {}

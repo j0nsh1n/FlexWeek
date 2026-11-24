@@ -10,12 +10,14 @@
 //! So far: the frame (group 1), which sends requests and takes their answers back, and the status (which
 //! request is the latest, whether the session is busy, the status line).
 
+pub mod account;
 pub mod autosave;
 pub mod frame;
 pub mod leaving;
 pub mod status;
 pub mod words;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,6 +29,8 @@ pub use status::Status;
 pub struct Session {
     frame: Frame,
     status: Status,
+    /// Flows (signing in, up or out) waiting for their request's answer, by request number.
+    flows: BTreeMap<u64, account::Flow>,
     autosave: autosave::Autosave,
     leaving: leaving::Leaving,
 }
@@ -36,6 +40,7 @@ impl Session {
         Self {
             frame: Frame::new(database, host, wake),
             status: Status::default(),
+            flows: BTreeMap::new(),
             autosave: autosave::Autosave::default(),
             leaving: leaving::Leaving::default(),
         }
@@ -112,6 +117,20 @@ impl Session {
                 self.status.set_busy(busy);
                 Ok(json!({}))
             }
+            Some("register") => {
+                let keep = command["keep"].as_bool().ok_or("keep is true or false")?;
+                self.register(text("username")?, text("password")?, keep)
+            }
+            Some("login") => {
+                let keep = command["keep"].as_bool().ok_or("keep is true or false")?;
+                self.login(text("username")?, text("password")?, keep)
+            }
+            Some("recover") => {
+                let keep = command["keep"].as_bool().ok_or("keep is true or false")?;
+                self.recover(text("username")?, text("code")?, text("password")?, keep)
+            }
+            Some("resume") => self.resume(text("token")?),
+            Some("logout") => self.logout(command["account_id"].as_i64()),
             Some("autosave") => {
                 let flag = |name: &str| -> Result<bool, String> {
                     command[name]
@@ -231,11 +250,25 @@ impl Session {
         self.frame.take_expiry()
     }
 
-    /// The next event as JSON text, or `null` when nothing more has happened.
+    /// The next event as JSON text, or `null` when nothing more has happened. A flow's answer is read here
+    /// and told as the flow's own event (account.rs); one the window has moved on from is passed over.
     pub fn take_event(&mut self) -> String {
-        self.frame
-            .take_event()
-            .map_or(Value::Null, |event| event.to_json())
-            .to_string()
+        while let Some(event) = self.frame.take_event() {
+            let flow = match &event {
+                Event::Answered { number, .. } | Event::Dropped { number } => {
+                    self.flows.remove(number)
+                }
+                Event::Expired => None,
+            };
+            match flow {
+                Some(flow) => {
+                    if let Some(told) = self.finish_flow(flow, event) {
+                        return told.to_string();
+                    }
+                }
+                None => return event.to_json().to_string(),
+            }
+        }
+        Value::Null.to_string()
     }
 }

@@ -58,7 +58,7 @@ from desktop.native.calendar import (
     week_start_on,
     windows_on_week,
 )
-from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
+from desktop.native.client import SESSION_ENDED, ApiError, NativeClient
 from desktop.native.files import (
     export_day_payload,
     export_week_payload,
@@ -385,6 +385,7 @@ class NativeSession(QObject):
         super().__init__(parent)
         self.client = NativeClient(database, self)
         self.client.expired.connect(self._on_expired)
+        self.client.told.connect(self._told)
         self.account: dict | None = None
         # Keep me signed in: where this database's kept session lives, and the choice on the sign-in
         # card at the last sign-in. A session resumed at launch was kept, so it stays kept.
@@ -589,6 +590,11 @@ class NativeSession(QObject):
     def _idle(self, ticket: int) -> bool:
         if not self.client.command({"cmd": "idle", "ticket": ticket})["idle"]:
             return False
+        self._went_idle()
+        return True
+
+    def _went_idle(self) -> None:
+        """The session has just stopped being busy with the latest request."""
         self.busy_changed.emit(False)
         if self._credits_waiting:
             # After the reply that made this call has been put in place.
@@ -596,7 +602,6 @@ class NativeSession(QObject):
         if self._refollow_week:
             # A first day of the week picked while this request ran: its week once the reply is in place.
             QTimer.singleShot(0, self, self._follow_week)
-        return True
 
     def _credit_when_free(self) -> None:
         if self._credits_waiting and not self.busy:
@@ -1041,29 +1046,54 @@ class NativeSession(QObject):
         token = self.kept.token() if self.kept is not None else None
         if token is None or self.account is not None or self.busy:
             return
-        ticket = self._begin()
-        self._say("Signing in…")
-        self.client.adopt_session(token)
+        self._start_flow({"cmd": "resume", "token": token})
 
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
+    # Signing in, up and out run in the session (engine/app/src/session/account.rs): it sends the request,
+    # reads the answer, and says what happened; what follows here is the window's own part.
+    def _start_flow(self, command: dict) -> dict:
+        answer = self.client.command(command)
+        self.busy_changed.emit(True)
+        # The words it began with, even when it finished at once (a sign-out with no one signed in).
+        self.status.emit(answer["said"])
+        return answer
+
+    def _told(self, event: dict) -> None:
+        kind = event["kind"]
+        if kind == "signed_in":
+            data = event["account"]
             self._drop_other_setup(data["id"])
-            if not self._idle(ticket):
-                return
-            self.client.set_account(data)
+            self._went_idle()
             self.account = {"id": data["id"], "username": data["username"]}
-            self.keep_signed_in = True
+            if event["how"] == "resume":
+                self.keep_signed_in = True
+            else:
+                self._keep_session()
             self.account_changed.emit(self.account)
             self.load_week(self.week_start, discard=True)
-
-        def failed(error: ApiError) -> None:
-            if error.status == 401:
+        elif kind == "registered":
+            data = event["account"]
+            self._drop_other_setup(data["id"])
+            self.account = {"id": data["id"], "username": data["username"]}
+            self.new_account = True
+            self.busy_changed.emit(False)
+            self.account_changed.emit(self.account)
+            self.recovery_codes.emit(list(event["codes"] or []))
+            self.status.emit(self.message)
+        elif kind == "auth_failed":
+            if event["forget"]:
                 self._forget_session()
-            self.client.reset()
-            self._fail(ticket, error)
-
-        self.client.request("GET", "/api/auth/me", None, ok, failed)
+            if event["idle"]:
+                self._went_idle()
+                self.status.emit(self.message)
+        elif kind == "signed_out":
+            if event["account_id"] is not None:
+                self.focus_store.pop(event["account_id"], None)
+            self._clear_local()
+            self.busy_changed.emit(False)
+            self.account_changed.emit(None)
+            self.week_changed.emit()
+            self.focus_changed.emit()
+            self.status.emit(self.message)
 
     def _on_expired(self) -> None:
         self._forget_session()
@@ -1076,52 +1106,13 @@ class NativeSession(QObject):
         self._say(SESSION_ENDED)
 
     def register(self, username: str, password: str) -> None:
-        ticket = self._begin()
-        self._say("Creating account…")
-
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._drop_other_setup(data["id"])
-            self.client.set_account(data)
-            self.account = {"id": data["id"], "username": data["username"]}
-            self.new_account = True
-            self.busy = False
-            self.busy_changed.emit(False)
-            self.account_changed.emit(self.account)
-            self.recovery_codes.emit(list(data.get("recovery_codes") or []))
-            self._say("Save these recovery codes before continuing.")
-
-        self.client.request(
-            "POST",
-            "/api/auth/register",
-            {"username": username, "password": password, "keep": self.keep_signed_in},
-            ok,
-            lambda error: self._fail(ticket, auth_error(error, creating=True)),
+        self._start_flow(
+            {"cmd": "register", "username": username, "password": password, "keep": bool(self.keep_signed_in)}
         )
 
     def login(self, username: str, password: str) -> None:
-        ticket = self._begin()
-        self._say("Signing in…")
-
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._drop_other_setup(data["id"])
-            if not self._idle(ticket):
-                return
-            self.client.set_account(data)
-            self.account = {"id": data["id"], "username": data["username"]}
-            self._keep_session()
-            self.account_changed.emit(self.account)
-            self.load_week(self.week_start, discard=True)
-
-        self.client.request(
-            "POST",
-            "/api/auth/login",
-            {"username": username, "password": password, "keep": self.keep_signed_in},
-            ok,
-            lambda error: self._fail(ticket, auth_error(error, creating=False)),
+        self._start_flow(
+            {"cmd": "login", "username": username, "password": password, "keep": bool(self.keep_signed_in)}
         )
 
     def finish_recovery(self) -> None:
@@ -1137,27 +1128,9 @@ class NativeSession(QObject):
         # Forgotten first, so a sign-out that fails to reach the server still leaves nothing to resume.
         self._forget_session()
         account_id = None if self.account is None else self.account["id"]
-        ticket = self._begin()
-        self._say("Signing out…")
-
-        def finish() -> None:
-            if not self._alive(ticket):
-                return
-            if account_id is not None:
-                self.focus_store.pop(account_id, None)
-            self.client.reset()
-            self._clear_local()
-            self.busy = False
-            self.busy_changed.emit(False)
-            self.account_changed.emit(None)
-            self.week_changed.emit()
-            self.focus_changed.emit()
-            self._say("Signed out.")
-
-        if self.client.account is None:
-            finish()
-            return
-        self.client.request("POST", "/api/auth/logout", None, lambda _data: finish(), lambda _error: finish())
+        finished = self._start_flow({"cmd": "logout", "account_id": account_id})["finished"]
+        if finished is not None:
+            self._told(finished)
 
     def load_week(
         self, week_start: str | None = None, *, discard: bool = False, said: str = "This week."
@@ -4952,27 +4925,14 @@ class NativeSession(QObject):
         self.client.request("GET", "/api/storage-info", None, storage, lambda _error: None)
 
     def recover(self, username: str, code: str, password: str) -> None:
-        ticket = self._begin()
-        self._say("Recovering account…")
-
-        def ok(data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._drop_other_setup(data["id"])
-            if not self._idle(ticket):
-                return
-            self.client.set_account(data)
-            self.account = {"id": data["id"], "username": data["username"]}
-            self._keep_session()
-            self.account_changed.emit(self.account)
-            self.load_week(self.week_start, discard=True)
-
-        self.client.request(
-            "POST",
-            "/api/auth/recover",
-            {"username": username, "code": code, "password": password, "keep": self.keep_signed_in},
-            ok,
-            lambda error: self._fail(ticket, error),
+        self._start_flow(
+            {
+                "cmd": "recover",
+                "username": username,
+                "code": code,
+                "password": password,
+                "keep": bool(self.keep_signed_in),
+            }
         )
 
     def change_password(self, current_password: str, new_password: str) -> None:
