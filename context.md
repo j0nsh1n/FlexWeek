@@ -24,7 +24,8 @@
   answers inline (`Frame::answer_inline`). The session's busy state, latest ticket and status line are Rust's
   (`session/status.rs`, #164); when the week saves itself (`session/autosave.rs`) and the steps of saving before
   leaving (`session/leaving.rs`) are decided there too, the window running the timers. Pydantic leaves in P4
-  (Jonathan, 2026-11-23). The 30-second sign-in
+  (Jonathan, 2026-11-23); controller.py checks blocks and homework with the engine (`checked_block`,
+  `checked_homework`), and its remaining pydantic use is the hours windows (ProtectedWindow, WorkWindow). The 30-second sign-in
   words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
 - `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
   tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
