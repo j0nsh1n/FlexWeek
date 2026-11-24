@@ -646,8 +646,9 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   logic are adapters: they turn arguments into JSON text, call the engine and
   turn the answer back. New logic for them is written in Rust, not Python.
   Code that imports Qt and its tests stay Python until the full rewrite. The
-  window's requests reach the Rust service through `flexweek_engine.service_answer`
-  (P2); the local FastAPI server and `backend/app.py` are gone.
+  window's requests reach the Rust service through the session in Rust
+  (`flexweek_engine.NativeCore`, P4); the local FastAPI server and `backend/app.py`
+  are gone (P2).
 - Frameworks, pinned in `requirements.txt`: pytest 9.1.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite, in the user data folder for the app (or the file named by
   `--database`), with users,
