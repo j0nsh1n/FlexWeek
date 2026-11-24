@@ -16,8 +16,8 @@
   against the Python app; CI's `screens` job runs them (about 5 minutes). The Python files they replaced
   (`test_material_go_to_date.py`, `..._keyboard_returns_to_week.py`, `..._now_label.py`, `..._preview_dialog_keys.py`)
   are deleted with ledger rows. fwtest's flaky rerun still covers pytest only.
-- P4 has started in open PR #161 (in review, not on main yet): it adds `flexweek-app::session`
-  (engine/app/src/session) with the session's frame (requests on one pool of 4 workers, epochs, the 30 s limit on a
+- P4 has started (#161, merged a9deb612): `flexweek-app::session` (engine/app/src/session) holds the session's
+  frame (requests on one pool of 4 workers, epochs, the 30 s limit on a
   steady clock, the expiry rule, the window's error words), taken one event at a time; nothing calls it yet.
   Pydantic leaves in P4 (Jonathan, 2026-11-23); the sign-in timeout words ("FlexWeek can't reach its server") stay
   until P4 (Jonathan, 2026-11-23).
@@ -131,7 +131,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
 - 2026-11-23 (after the AFK run; run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p3-p4-run-2026-11-23.md`):
   Jonathan's answers: pydantic in P4, one CI job for the Rust screen tests, the timeout words stay until P4, then
   "Finish P3 and start on P4". P3 finished in #160 (merged 00d5b41b, Gemini 4 Neon PASS round 2). P4's first PR,
-  #161 (the frame), is in Gemini review. Next: #161, then NativeClient as a shell over the frame (the PyO3
+  #161 (the frame), merged a9deb612 after Gemini round 3. Next: #161, then NativeClient as a shell over the frame (the PyO3
   binding: one object, send/view/take_event, a Python Host), then the account flows (draft:
   `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4/slice1-draft.md`).
 - 2026-11-23 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/afk-run-2026-11-23.md`): P2 parts 1-3
