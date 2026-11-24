@@ -4,8 +4,10 @@
 use std::path::Path;
 
 use flexweek_service::accounts::Entropy;
-use flexweek_service::{ServiceError, ServiceResult, desk_requests, plans, preferences};
-use pyo3::exceptions::PyRuntimeError;
+use flexweek_service::{
+    ServiceError, ServiceResult, blocks, desk_requests, homework_saves, plans, preferences,
+};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
@@ -123,6 +125,46 @@ fn service_answer(
     })
 }
 
+/// A block as pydantic's `TimeBlock.model_validate(value).model_dump()` writes it, from JSON text to JSON text;
+/// a block it would refuse raises ValueError with why (service/blocks.rs, matched to pydantic on 2,500 blocks).
+#[pyfunction]
+fn checked_block(text: &str) -> PyResult<String> {
+    guard(|| {
+        let value: serde_json::Value =
+            serde_json::from_str(text).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        blocks::check_block(&value)
+            .map(|block| block.to_string())
+            .map_err(|refused| PyValueError::new_err(refused.0))
+    })
+}
+
+/// A homework as pydantic's `Assignment.model_validate(value).model_dump()` writes it, revision included, from
+/// JSON text to JSON text; one it would refuse raises ValueError with why (service/homework_saves.rs, matched to
+/// pydantic on 2,000 saves).
+#[pyfunction]
+fn checked_homework(text: &str) -> PyResult<String> {
+    guard(|| {
+        let value: serde_json::Value =
+            serde_json::from_str(text).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let (mut content, revision) = homework_saves::check_homework(&value)
+            .map_err(|refused| PyValueError::new_err(refused.0))?;
+        if let Some(fields) = content.as_object_mut() {
+            fields.insert("revision".into(), serde_json::Value::from(revision));
+        }
+        Ok(content.to_string())
+    })
+}
+
+/// The fields a homework save may have (`Assignment.model_fields`): its content's, then the revision.
+#[pyfunction]
+fn homework_fields() -> PyResult<Vec<&'static str>> {
+    guard(|| {
+        let mut fields = flexweek_engine::validate::ASSIGNMENT_FIELDS.to_vec();
+        fields.push("revision");
+        Ok(fields)
+    })
+}
+
 /// The preference fields an account may save, in their order.
 #[pyfunction]
 fn preference_fields() -> PyResult<Vec<&'static str>> {
@@ -130,6 +172,13 @@ fn preference_fields() -> PyResult<Vec<&'static str>> {
 }
 
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    crate::export!(module, service_answer, preference_fields);
+    crate::export!(
+        module,
+        service_answer,
+        preference_fields,
+        checked_block,
+        checked_homework,
+        homework_fields
+    );
     Ok(())
 }

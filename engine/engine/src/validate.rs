@@ -157,6 +157,27 @@ pub fn week_request(value: &Value) -> Result<WeekRequest, String> {
     Ok(WeekRequest { blocks })
 }
 
+/// The fields a homework's content may have (`AssignmentContent.model_fields`), in the model's order.
+pub const ASSIGNMENT_FIELDS: [&str; 17] = [
+    "id",
+    "title",
+    "course",
+    "category",
+    "priority",
+    "energy",
+    "spotify_url",
+    "due",
+    "estimate_min",
+    "spread",
+    "focus_minutes",
+    "focus_sessions",
+    "completed",
+    "completed_at",
+    "notes",
+    "links",
+    "checklist",
+];
+
 pub fn assignment_content(value: &Value) -> Result<AssignmentContent, String> {
     let map = object(value, "AssignmentContent")?;
     let title = req_str(map, "title", 1, 80)?;
@@ -182,28 +203,7 @@ pub fn assignment_content(value: &Value) -> Result<AssignmentContent, String> {
         links: links_of(map)?,
         checklist: checklist_of(map)?,
     };
-    forbid_extra(
-        map,
-        &[
-            "id",
-            "title",
-            "course",
-            "category",
-            "priority",
-            "energy",
-            "spotify_url",
-            "due",
-            "estimate_min",
-            "spread",
-            "focus_minutes",
-            "focus_sessions",
-            "completed",
-            "completed_at",
-            "notes",
-            "links",
-            "checklist",
-        ],
-    )?;
+    forbid_extra(map, &ASSIGNMENT_FIELDS)?;
     if item.completed && item.completed_at.is_none() {
         return Err("completed_at is required when completed".into());
     }
