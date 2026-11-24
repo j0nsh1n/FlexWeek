@@ -1,4 +1,5 @@
-//! Signing in, up and out (P4 group 1; `NativeSession.register`, `login`, `recover`, `resume` and `logout` in
+//! Signing in, up and out, and the account's own changes (P4 group 1; `NativeSession.register`, `login`,
+//! `recover`, `resume`, `logout`, `change_password`, `replace_recovery_codes` and `delete_account` in
 //! desktop/native/controller.py). The session sends each flow's request itself and reads its answer: who is
 //! signed in, whether the session is busy, and what the status line says. The window is told the outcome as
 //! one event and does what is still its own (setup answers, the kept session's file, loading the week).
@@ -16,13 +17,16 @@ use super::frame::{Event, Identity, Outcome};
 const UNDISPLAYABLE: &str = "FlexWeek could not display this response.";
 
 /// A flow waiting for its request's answer, with the ticket it began with.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(super) enum Flow {
     Register { ticket: u64 },
     Login { ticket: u64 },
     Recover { ticket: u64 },
     Resume { ticket: u64 },
     Logout { ticket: u64, account: Option<i64> },
+    Password { ticket: u64 },
+    RecoveryCodes { ticket: u64 },
+    DeleteAccount { ticket: u64, owner: Option<String> },
 }
 
 /// The words for a sign-in (`creating` false) or sign-up that failed on the way: the general ones speak of
@@ -44,6 +48,15 @@ fn identity(body: &Value) -> Option<Identity> {
     let id = body.get("id")?.as_i64()?;
     let username = body.get("username")?.as_str()?.to_string();
     (id > 0 && !username.is_empty()).then_some(Identity { id, username })
+}
+
+/// How many recovery codes are left after replacing them, as the window read the answer: a count of 0 or
+/// none falls back to the number of codes handed out.
+fn remaining_codes(body: &Value, handed_out: usize) -> u64 {
+    body.get("remaining")
+        .and_then(Value::as_u64)
+        .filter(|remaining| *remaining > 0)
+        .unwrap_or(handed_out as u64)
 }
 
 fn account_json(identity: &Identity) -> Value {
@@ -146,6 +159,44 @@ impl Session {
         Ok(json!({ "ticket": ticket, "said": "Signing out…", "finished": null }))
     }
 
+    pub(super) fn change_password(&mut self, current: &str, new: &str) -> Result<Value, String> {
+        let body = json!({ "current_password": current, "new_password": new });
+        self.begin_flow(
+            "Changing password…",
+            "POST",
+            "/api/auth/password",
+            Some(&body),
+            |ticket| Flow::Password { ticket },
+        )
+    }
+
+    pub(super) fn replace_recovery_codes(&mut self, password: &str) -> Result<Value, String> {
+        let body = json!({ "password": password });
+        self.begin_flow(
+            "Replacing recovery codes…",
+            "POST",
+            "/api/auth/recovery-codes",
+            Some(&body),
+            |ticket| Flow::RecoveryCodes { ticket },
+        )
+    }
+
+    /// Deletes the account `owner` (the window's account id as text, for its kept look) after the password.
+    pub(super) fn delete_account(
+        &mut self,
+        password: &str,
+        owner: Option<String>,
+    ) -> Result<Value, String> {
+        let body = json!({ "password": password });
+        self.begin_flow(
+            "Deleting account…",
+            "DELETE",
+            "/api/auth/account",
+            Some(&body),
+            |ticket| Flow::DeleteAccount { ticket, owner },
+        )
+    }
+
     /// What a flow makes of its request's answer, as the event the window is told; None when the window has
     /// moved on from it.
     pub(super) fn finish_flow(&mut self, flow: Flow, event: Event) -> Option<Value> {
@@ -164,6 +215,9 @@ impl Session {
             Flow::Recover { ticket } => self.signed_in(ticket, outcome, "recover", None, started),
             Flow::Resume { ticket } => self.resumed(ticket, outcome),
             Flow::Logout { ticket, account } => self.signed_out(ticket, account),
+            Flow::Password { ticket } => self.password_replaced(ticket, outcome, started),
+            Flow::RecoveryCodes { ticket } => self.codes_replaced(ticket, outcome),
+            Flow::DeleteAccount { ticket, owner } => self.account_deleted(ticket, outcome, owner),
         }
     }
 
@@ -284,5 +338,101 @@ impl Session {
         self.status.set_busy(false);
         self.status.say("Signed out.");
         Some(json!({ "kind": "signed_out", "account_id": account }))
+    }
+
+    /// A new password comes with a new session, and the service has already ended every other one, so the
+    /// answer is taken up whatever the window did meanwhile: the new session, the account signed in again (a
+    /// new epoch, so requests carrying the old session are dropped rather than signing the student out), and
+    /// the event, so the window keeps the new session in place of the dead one. Requests the window started
+    /// meanwhile stop counting, since their answers are dropped.
+    fn password_replaced(
+        &mut self,
+        ticket: u64,
+        outcome: Outcome,
+        started: Option<String>,
+    ) -> Option<Value> {
+        let (status, body) = match outcome {
+            Outcome::Ok { status, body } => (status, body),
+            Outcome::Failed { status, message } => {
+                return self.failed(ticket, status, &message, None);
+            }
+        };
+        // As the window read it: an answer naming an account must name one it can sign in as.
+        let names = body
+            .get("id")
+            .is_some_and(|id| !id.is_null() && id != &json!(0));
+        let made = identity(&body);
+        if names && made.is_none() {
+            return self.failed(ticket, status, UNDISPLAYABLE, None);
+        }
+        if !self.status.idle(ticket) {
+            self.status.cancel();
+        }
+        if let Some(token) = started {
+            self.frame.use_session(token);
+        }
+        let account = match made {
+            Some(made) => {
+                self.frame.set_account(made.clone()).ok()?;
+                Some(account_json(&made))
+            }
+            None => None,
+        };
+        self.status.say("Password replaced.");
+        Some(json!({ "kind": "password_replaced", "account": account }))
+    }
+
+    fn codes_replaced(&mut self, ticket: u64, outcome: Outcome) -> Option<Value> {
+        let body = match outcome {
+            Outcome::Ok { body, .. } => body,
+            Outcome::Failed { status, message } => {
+                return self.failed(ticket, status, &message, None);
+            }
+        };
+        if !self.status.idle(ticket) {
+            return None;
+        }
+        let codes = body
+            .get("recovery_codes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let remaining = remaining_codes(&body, codes.len());
+        self.status.say("Save these replacement recovery codes.");
+        Some(json!({ "kind": "codes_replaced", "codes": codes, "remaining": remaining }))
+    }
+
+    /// The account is gone: no account, no session, not busy; the window forgets what it kept for it. Done
+    /// whatever the window did meanwhile, since the account no longer exists; requests it started meanwhile
+    /// stop counting.
+    fn account_deleted(
+        &mut self,
+        ticket: u64,
+        outcome: Outcome,
+        owner: Option<String>,
+    ) -> Option<Value> {
+        if let Outcome::Failed { status, message } = outcome {
+            return self.failed(ticket, status, &message, None);
+        }
+        if !self.status.alive(ticket) {
+            self.status.cancel();
+        }
+        self.frame.reset();
+        self.status.set_busy(false);
+        self.status.say("Account deleted.");
+        Some(json!({ "kind": "account_deleted", "owner": owner }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_remaining_count_falls_back_to_the_codes_handed_out() {
+        assert_eq!(remaining_codes(&json!({ "remaining": 5 }), 8), 5);
+        assert_eq!(remaining_codes(&json!({ "remaining": 0 }), 8), 8);
+        assert_eq!(remaining_codes(&json!({}), 8), 8);
+        assert_eq!(remaining_codes(&json!({ "remaining": "5" }), 8), 8);
     }
 }

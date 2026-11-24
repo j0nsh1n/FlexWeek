@@ -304,6 +304,90 @@ fn the_sign_in_card_words_say_what_to_do_not_that_changes_were_lost() {
     }
 }
 
+/// A new password: signed in again with a new session (a new epoch), the old one no longer works; a wrong current
+/// password says the service's words and changes nothing.
+#[test]
+fn changing_the_password_starts_a_new_session_and_a_wrong_one_changes_nothing() {
+    let mut rig = rig("account-password");
+    let made = rig.sign_up("ana")["account"].clone();
+    let (old_token, old_epoch) = (
+        rig.view("frame")["token"].clone(),
+        rig.view("frame")["epoch"].clone(),
+    );
+    rig.send(json!({ "cmd": "change_password", "current_password": "not-the-password", "new_password": "another-long-password" }));
+    assert_eq!(rig.view("status")["message"], json!("Changing password…"));
+    let told = rig.told();
+    assert_eq!(told["kind"], json!("auth_failed"));
+    assert_eq!(told["message"], json!(words::WRONG_PASSWORD));
+    assert_eq!(rig.view("frame")["token"], old_token);
+    rig.send(json!({ "cmd": "change_password", "current_password": PASSWORD, "new_password": "another-long-password" }));
+    assert_eq!(
+        rig.told(),
+        json!({ "kind": "password_replaced", "account": made })
+    );
+    let frame = rig.view("frame");
+    assert!(frame["token"].is_string());
+    assert_ne!(frame["token"], old_token, "the old session was kept");
+    assert!(frame["epoch"].as_u64() > old_epoch.as_u64(), "no new epoch");
+    assert_eq!(
+        (
+            rig.view("status")["busy"].clone(),
+            rig.view("status")["message"].clone()
+        ),
+        (json!(false), json!("Password replaced."))
+    );
+}
+
+#[test]
+fn replacing_the_recovery_codes_hands_out_new_ones() {
+    let mut rig = rig("account-codes");
+    let first = rig.sign_up("ana")["codes"].clone();
+    rig.send(json!({ "cmd": "replace_recovery_codes", "password": PASSWORD }));
+    assert_eq!(
+        rig.view("status")["message"],
+        json!("Replacing recovery codes…")
+    );
+    let told = rig.told();
+    assert_eq!(told["kind"], json!("codes_replaced"));
+    assert_eq!(told["codes"].as_array().unwrap().len(), RECOVERY_CODE_COUNT);
+    assert_ne!(told["codes"], first);
+    assert_eq!(told["remaining"], json!(RECOVERY_CODE_COUNT));
+    assert_eq!(
+        rig.view("status")["message"],
+        json!("Save these replacement recovery codes.")
+    );
+    rig.send(json!({ "cmd": "replace_recovery_codes", "password": "not-the-password" }));
+    assert_eq!(rig.told()["message"], json!(words::WRONG_PASSWORD));
+}
+
+#[test]
+fn deleting_the_account_signs_out_and_a_wrong_password_keeps_it() {
+    let mut rig = rig("account-delete");
+    let made = rig.sign_up("ana")["account"].clone();
+    let owner = made["id"].to_string();
+    rig.send(json!({ "cmd": "delete_account", "password": "not-the-password", "owner": owner }));
+    assert_eq!(rig.told()["message"], json!(words::WRONG_PASSWORD));
+    assert_eq!(rig.view("frame")["account"], made);
+    rig.send(json!({ "cmd": "delete_account", "password": PASSWORD, "owner": owner }));
+    assert_eq!(rig.view("status")["message"], json!("Deleting account…"));
+    assert_eq!(
+        rig.told(),
+        json!({ "kind": "account_deleted", "owner": owner })
+    );
+    assert_eq!(rig.view("frame")["account"], Value::Null);
+    assert_eq!(rig.view("frame")["token"], Value::Null);
+    assert_eq!(
+        (
+            rig.view("status")["busy"].clone(),
+            rig.view("status")["message"].clone()
+        ),
+        (json!(false), json!("Account deleted."))
+    );
+    // The account is gone: signing in with it fails.
+    rig.send(json!({ "cmd": "login", "username": "ana", "password": PASSWORD, "keep": true }));
+    assert_eq!(rig.told()["message"], json!(words::SIGN_IN_WRONG));
+}
+
 /// The words when no answer comes, as the old client gave them: the sign-in card's for signing in and up, the
 /// general ones for recovering and taking up a kept session.
 const NO_ANSWER: &str =
@@ -444,4 +528,156 @@ fn keep_signed_in_must_be_said_and_either_choice_signs_in() {
     rig.send(json!({ "cmd": "login", "username": "ana", "password": PASSWORD, "keep": false }));
     assert_eq!(rig.told()["kind"], json!("signed_in"));
     assert!(rig.view("frame")["token"].is_string());
+}
+
+const NEW_PASSWORD: &str = "another-long-password";
+
+/// A wrong password on each of the account's own changes: the service's words, nothing forgotten, not busy,
+/// the session kept, and no "your session ended" after it.
+#[test]
+fn a_wrong_password_on_the_accounts_own_changes_changes_nothing() {
+    let mut rig = rig("account-own-wrong");
+    rig.sign_up("ana");
+    let token = rig.view("frame")["token"].clone();
+    for command in [
+        json!({ "cmd": "change_password", "current_password": "not-the-password", "new_password": NEW_PASSWORD }),
+        json!({ "cmd": "replace_recovery_codes", "password": "not-the-password" }),
+        json!({ "cmd": "delete_account", "password": "not-the-password", "owner": "1" }),
+    ] {
+        rig.send(command.clone());
+        assert_eq!(
+            rig.told(),
+            json!({ "kind": "auth_failed", "idle": true, "forget": false, "message": words::WRONG_PASSWORD }),
+            "{command}"
+        );
+        assert!(!rig.session.take_expiry(), "{command}");
+        assert_eq!(rig.view("status")["busy"], json!(false), "{command}");
+        assert_eq!(rig.view("frame")["token"], token, "{command}");
+    }
+}
+
+#[test]
+fn the_accounts_own_changes_with_no_answer_say_so_in_the_general_words() {
+    let mut rig = rig("account-own-unanswered");
+    rig.sign_up("ana");
+    for command in [
+        json!({ "cmd": "change_password", "current_password": PASSWORD, "new_password": NEW_PASSWORD }),
+        json!({ "cmd": "replace_recovery_codes", "password": PASSWORD }),
+        json!({ "cmd": "delete_account", "password": PASSWORD, "owner": "1" }),
+    ] {
+        let open = rig.hold_past_the_limit();
+        rig.send(command.clone());
+        assert_eq!(rig.timed_out()["message"], json!(NO_ANSWER), "{command}");
+        // Open first: the held work waits at the gate while holding it.
+        open.send(()).unwrap();
+        // The late answer changes nothing it may not (each is checked in its own test); let it land.
+        rig.woken.recv_timeout(Duration::from_secs(20)).unwrap();
+        *rig.host.gate.lock().unwrap() = None;
+        let _ = rig.session.take_event();
+        if rig.view("frame")["account"].is_null() {
+            break;
+        }
+    }
+}
+
+/// The password changed while the window had started something else: the service has already ended the old
+/// session, so the new one is taken up and the account signed in again anyway (a new epoch), the window is
+/// told so it keeps the new session, and nothing is left busy. The old session no longer works.
+#[test]
+fn a_password_change_counts_even_if_the_window_moved_on() {
+    let mut rig = rig("account-password-moved-on");
+    let made = rig.sign_up("ana")["account"].clone();
+    let (old_token, old_epoch) = (
+        rig.view("frame")["token"].clone(),
+        rig.view("frame")["epoch"].clone(),
+    );
+    rig.send(json!({ "cmd": "change_password", "current_password": PASSWORD, "new_password": NEW_PASSWORD }));
+    rig.send(json!({ "cmd": "begin" }));
+    assert_eq!(
+        rig.told(),
+        json!({ "kind": "password_replaced", "account": made })
+    );
+    let frame = rig.view("frame");
+    assert!(frame["token"].is_string());
+    assert_ne!(frame["token"], old_token);
+    assert!(frame["epoch"].as_u64() > old_epoch.as_u64());
+    assert_eq!(rig.view("status")["busy"], json!(false));
+    // A wrong password while the window moved on: nothing at all.
+    let token = frame["token"].clone();
+    rig.send(json!({ "cmd": "change_password", "current_password": "not-the-password", "new_password": PASSWORD }));
+    rig.send(json!({ "cmd": "begin" }));
+    rig.woken.recv_timeout(Duration::from_secs(20)).unwrap();
+    assert_eq!(rig.session.take_event(), "null");
+    assert_eq!(rig.view("frame")["token"], token);
+    // The old session no longer works: taking it up is refused, and forgotten.
+    rig.send(json!({ "cmd": "reset" }));
+    rig.send(json!({ "cmd": "resume", "token": old_token }));
+    let told = rig.told();
+    assert_eq!(
+        (told["kind"].clone(), told["forget"].clone()),
+        (json!("auth_failed"), json!(true))
+    );
+}
+
+/// The account deleted while the window had started something else: it is gone anyway, so the window is told
+/// and signs out; a refused deletion the window moved on from changes nothing; the deleted account's session
+/// no longer works.
+#[test]
+fn a_deleted_account_is_signed_out_of_even_if_the_window_moved_on() {
+    let mut rig = rig("account-delete-moved-on");
+    let made = rig.sign_up("ana")["account"].clone();
+    let owner = made["id"].to_string();
+    let token = rig.view("frame")["token"].clone();
+    rig.send(json!({ "cmd": "delete_account", "password": "not-the-password", "owner": owner }));
+    rig.send(json!({ "cmd": "begin" }));
+    rig.woken.recv_timeout(Duration::from_secs(20)).unwrap();
+    assert_eq!(rig.session.take_event(), "null");
+    assert_eq!(rig.view("frame")["account"], made);
+    rig.send(json!({ "cmd": "delete_account", "password": PASSWORD, "owner": owner }));
+    rig.send(json!({ "cmd": "begin" }));
+    assert_eq!(
+        rig.told(),
+        json!({ "kind": "account_deleted", "owner": owner })
+    );
+    assert_eq!(rig.view("frame")["account"], Value::Null);
+    assert_eq!(rig.view("frame")["token"], Value::Null);
+    assert_eq!(rig.view("status")["busy"], json!(false));
+    rig.send(json!({ "cmd": "resume", "token": token }));
+    assert_eq!(rig.told()["forget"], json!(true));
+}
+
+/// New recovery codes the window moved on from are not shown (as before); answers to any of the account's own
+/// changes sent before a sign-out are dropped.
+#[test]
+fn recovery_codes_the_window_moved_on_from_and_answers_from_before_a_sign_out_change_nothing() {
+    let mut rig = rig("account-own-dropped");
+    rig.sign_up("ana");
+    rig.send(json!({ "cmd": "replace_recovery_codes", "password": PASSWORD }));
+    rig.send(json!({ "cmd": "begin" }));
+    rig.woken.recv_timeout(Duration::from_secs(20)).unwrap();
+    assert_eq!(rig.session.take_event(), "null");
+    rig.send(json!({ "cmd": "set_busy", "busy": false }));
+    // The service still made each change: the window only stopped listening. After the second, the new
+    // password is the one that signs in.
+    for (command, password) in [
+        (
+            json!({ "cmd": "replace_recovery_codes", "password": PASSWORD }),
+            PASSWORD,
+        ),
+        (
+            json!({ "cmd": "change_password", "current_password": PASSWORD, "new_password": NEW_PASSWORD }),
+            NEW_PASSWORD,
+        ),
+    ] {
+        rig.send(command.clone());
+        let epoch = rig.view("frame")["epoch"].clone();
+        rig.send(json!({ "cmd": "reset" }));
+        rig.woken.recv_timeout(Duration::from_secs(20)).unwrap();
+        assert_eq!(rig.session.take_event(), "null", "{command}");
+        assert_eq!(rig.view("frame")["token"], Value::Null, "{command}");
+        assert!(rig.view("frame")["epoch"].as_u64() > epoch.as_u64());
+        assert_eq!(rig.view("frame")["account"], Value::Null, "{command}");
+        rig.send(json!({ "cmd": "login", "username": "ana", "password": password, "keep": true }));
+        assert_eq!(rig.told()["kind"], json!("signed_in"), "{command}");
+    }
 }

@@ -131,6 +131,14 @@ impl Session {
             }
             Some("resume") => self.resume(text("token")?),
             Some("logout") => self.logout(command["account_id"].as_i64()),
+            Some("change_password") => {
+                self.change_password(text("current_password")?, text("new_password")?)
+            }
+            Some("replace_recovery_codes") => self.replace_recovery_codes(text("password")?),
+            Some("delete_account") => {
+                let owner = command["owner"].as_str().map(str::to_string);
+                self.delete_account(text("password")?, owner)
+            }
             Some("autosave") => {
                 let flag = |name: &str| -> Result<bool, String> {
                     command[name]
