@@ -588,7 +588,7 @@ fn links_of(map: &Map<String, Value>) -> Result<Vec<AssignmentLink>, String> {
 fn link_of(value: &Value) -> Result<AssignmentLink, String> {
     let map = object(value, "AssignmentLink")?;
     let label = req_str(map, "label", 1, 80)?;
-    if label.trim().is_empty() {
+    if python_strip(&label).is_empty() {
         return Err("link label required".into());
     }
     let url = req_str(map, "url", 1, 500)?;
@@ -615,7 +615,7 @@ fn checklist_of(map: &Map<String, Value>) -> Result<Vec<ChecklistItem>, String> 
 fn check_item(value: &Value) -> Result<ChecklistItem, String> {
     let map = object(value, "ChecklistItem")?;
     let text = req_str(map, "text", 1, 80)?;
-    if text.trim().is_empty() {
+    if python_strip(&text).is_empty() {
         return Err("checklist text required".into());
     }
     let item = ChecklistItem {

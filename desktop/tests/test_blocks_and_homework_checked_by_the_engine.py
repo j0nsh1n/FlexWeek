@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 
 from backend.models import Assignment
@@ -28,12 +29,19 @@ def check(checker, case: dict) -> object:
 
 
 @pytest.mark.parametrize(
-    ("corpus", "checker", "least"),
-    [("block_parity.json", _checked_block, 2000), ("homework_parity.json", _checked_homework, 1500)],
+    ("corpus", "checker", "least", "kept"),
+    [
+        ("block_parity.json", _checked_block, 2000, 400),
+        ("homework_parity.json", _checked_homework, 1500, 400),
+    ],
 )
-def test_every_corpus_case_is_checked_as_pydantic_checked_it(corpus: str, checker, least: int) -> None:
+def test_every_corpus_case_is_checked_as_pydantic_checked_it(
+    corpus: str, checker, least: int, kept: int
+) -> None:
     every = cases(corpus)
     assert len(every) >= least, f"{corpus} shrank to {len(every)}"
+    accepted = sum(1 for case in every if case["written"] is not None)
+    assert accepted >= kept, f"only {accepted} cases of {corpus} are accepted"
     wrong = [case for case in every if json.dumps(check(checker, case)) != json.dumps(case["written"])]
     assert not wrong, f"{len(wrong)} differ, first: {wrong[0]}"
 
@@ -45,5 +53,6 @@ def test_a_refused_block_or_homework_raises_value_error() -> None:
         _checked_homework({"id": "essay", "title": "Essay", "revision": 0})
 
 
-def test_the_homework_fields_are_the_models() -> None:
+def test_the_homework_fields_are_the_models_in_its_order() -> None:
+    assert flexweek_engine.homework_fields() == list(Assignment.model_fields)
     assert set(HOMEWORK_FIELDS) == set(Assignment.model_fields)
