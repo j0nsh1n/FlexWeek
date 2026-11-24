@@ -202,6 +202,15 @@ class NativeClient(QObject):
     def _frame(self) -> dict:
         return json.loads(self._core.view("frame"))
 
+    def command(self, command: dict) -> dict:
+        """One command to the session (engine/app/src/session/mod.rs); a refusal raises ValueError."""
+        self._check_thread()
+        return self._send(command)
+
+    def view(self, name: str) -> dict:
+        """One of the session's views (engine/app/src/session/mod.rs)."""
+        return json.loads(self._core.view(name))
+
     @property
     def account(self) -> dict | None:
         return self._frame()["account"]

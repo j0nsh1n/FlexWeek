@@ -389,8 +389,6 @@ class NativeSession(QObject):
         self.conflict = False
         self.pending_save: dict | None = None
         self._save_status: str | None = None
-        self.busy = False
-        self.message = ""
         self.planner_view = "week"
         self.selected_day = wall_clock.today().isoformat()
         self.day_data: dict | None = None
@@ -406,8 +404,6 @@ class NativeSession(QObject):
         self.armed_category: str | None = None
         self.selected_block_id: str | None = None
         self.selected_occurrence_day: int | None = None
-        self._ticket = 0
-        self._plan_ticket: int | None = None
         self._day_ticket = 0
         self._month_ticket = 0
         self._month_cache: dict[tuple[str, str], dict] = {}
@@ -535,29 +531,51 @@ class NativeSession(QObject):
         self._reminder_blocks: list[dict] = []
         self._reminder_trace: dict | None = None
 
+    # Which request is the latest, whether the session is busy, and the status line live in the session in
+    # Rust (engine/app/src/session/status.rs); the signals stay here.
+    def _status(self) -> dict:
+        return self.client.view("status")
+
+    @property
+    def busy(self) -> bool:
+        return bool(self._status()["busy"])
+
+    @busy.setter
+    def busy(self, value: bool) -> None:
+        self.client.command({"cmd": "set_busy", "busy": bool(value)})
+
+    @property
+    def message(self) -> str:
+        return str(self._status()["message"])
+
+    @message.setter
+    def message(self, text: str) -> None:
+        self.client.command({"cmd": "say", "text": text})
+
+    @property
+    def _ticket(self) -> int:
+        return int(self._status()["ticket"])
+
     def _say(self, text: str) -> None:
         self.message = text
         self.status.emit(text)
 
     def _begin(self, planning: bool = False) -> int:
-        self._ticket += 1
-        self._plan_ticket = self._ticket if planning else None
-        self.busy = True
+        ticket = int(self.client.command({"cmd": "begin", "planning": planning})["ticket"])
         self.busy_changed.emit(True)
-        return self._ticket
+        return ticket
 
     @property
     def planning(self) -> bool:
         """A plan was asked for and its result is not back yet."""
-        return self.busy and self._plan_ticket == self._ticket
+        return bool(self._status()["planning"])
 
     def _alive(self, ticket: int) -> bool:
         return ticket == self._ticket
 
     def _idle(self, ticket: int) -> bool:
-        if not self._alive(ticket):
+        if not self.client.command({"cmd": "idle", "ticket": ticket})["idle"]:
             return False
-        self.busy = False
         self.busy_changed.emit(False)
         if self._credits_waiting:
             # After the reply that made this call has been put in place.
@@ -1036,8 +1054,7 @@ class NativeSession(QObject):
 
     def _on_expired(self) -> None:
         self._forget_session()
-        self._ticket += 1
-        self.busy = False
+        self.client.command({"cmd": "cancel"})
         self.busy_changed.emit(False)
         self.client.reset()
         self._clear_local()
