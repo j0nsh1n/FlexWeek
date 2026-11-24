@@ -104,7 +104,8 @@ fn escape_closes_and_adds_nothing(screen: Screen, opened: Opened, name: &str) {
     app.key("Escape");
     app.wait_until("Esc to close the preview", |app| sheet(app) == json!(""));
     app.wait_until("the session to settle", |app| {
-        app.app()["busy"] == json!(false)
+        let state = app.app();
+        state["busy"] == json!(false) && state["dirty"] == json!(false)
     });
     assert_eq!(clubs(&mut app), 1);
 }

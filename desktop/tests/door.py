@@ -9,7 +9,8 @@ Steps (each answers {"ok": true, ...} or {"ok": false, "error": "..."}):
                             after "ctrl+", "shift+" or "alt+" for a key held with them ("ctrl+N")
   type {text}               the text typed, one key at a time, into the item that has the keyboard
   focus {target}            give the item the keyboard, where a test starts keys from
-  read {target}             {found, name, text, enabled, focused, visible}
+  read {target}             {found, name, text, title, enabled, focused, visible, opacity, rect: [left, top,
+                            width, height] in the window, accessible: what a screen reader says}
   property {target, name}   {value}: one property of the item, as JSON (a QML list or object as its plain
                             values; text for anything else)
   read_all {target}         {items: [read ...]}: every item with that name or those words, shown or not
@@ -39,7 +40,8 @@ Setting up, not a student's steps (the Rust core's seeds and fake clock stand in
 A target is {"name": objectName} or {"words": the text a student reads}, optionally with "within": the
 objectName of the item to look inside (the "20" in the date picker's month, not another "20"), and with a
 name, "title": only the item of that name with that title (the week block "Club"). Names are looked for
-among painted items first, so a Repeater's rows are found too.
+among painted items first, so a Repeater's rows are found too, and the one shown wins over one on a screen
+kept hidden behind it.
 
 An error raised inside a Qt slot, at start or while the app ran between steps or during one, fails the next
 step's answer, as the Python suite fails a test on one; it is also printed, so it is never lost.
@@ -222,11 +224,15 @@ class Door(QObject):
         if root is None:
             return None
         assert isinstance(target, dict)
-        if "name" in target and "title" in target:
-            found = self._find_all(target)
-            return found[0] if found else None
         if "name" in target:
-            return _named(root, str(target["name"]))
+            if not str(target["name"]):
+                return None
+            # A screen kept but not shown (Week behind Day) holds items of the same name: the one shown wins.
+            found = self._find_all(target)
+            shown = [item for item in found if hasattr(item, "isVisible") and item.isVisible()]
+            if shown or found:
+                return (shown or found)[0]
+            return None if "title" in target else _named(root, str(target["name"]))
         words = str(target["words"])
         for item in _visuals(root):
             text = item.property("text")
@@ -361,7 +367,12 @@ class Door(QObject):
     def _drag(self, asked: dict) -> dict:
         host = self._host()
         start = self._point(asked)
+        if asked.get("by") is None:
+            raise StepRefused("a drag says how far it moves: by [dx, dy]")
         dx, dy = _pair(asked.get("by"))
+        # The pointer comes to the item first, as a hand moves it there before pressing.
+        QTest.mouseMove(host, start)
+        self._turns(4)
         QTest.mousePress(host, Qt.MouseButton.LeftButton, pos=start)
         self._turns(4)
         steps = 12
@@ -492,7 +503,8 @@ class Door(QObject):
 
     def _open_day(self, asked: dict) -> dict:
         self._window.session.open_day(str(asked["day"]))
-        self._host().bridge.showPage("day")
+        # Not showPage: the rail's Day opens on today, which would undo the day just opened.
+        self._host().bridge.open_page("day", today=False)
         self._turns(10)
         return {}
 

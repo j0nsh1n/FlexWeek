@@ -248,6 +248,7 @@ static STARTED: AtomicUsize = AtomicUsize::new(0);
 struct App {
     child: Child,
     folder: PathBuf,
+    socket: PathBuf,
 }
 
 impl Drop for App {
@@ -255,6 +256,7 @@ impl Drop for App {
         let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.folder);
+        let _ = std::fs::remove_file(&self.socket);
     }
 }
 
@@ -282,7 +284,12 @@ impl Door {
         let _ = std::fs::remove_dir_all(&folder);
         let home = folder.join("home");
         std::fs::create_dir_all(&home).expect("door folder");
-        let socket = folder.join("door.sock");
+        // A socket file's whole path must stay under about 100 bytes; a long temporary folder (a sandbox's)
+        // would leave none, so then the socket goes straight in /tmp.
+        let socket = match folder.join("door.sock") {
+            socket if socket.as_os_str().len() <= 96 => socket,
+            _ => PathBuf::from(format!("/tmp/fw-door-{}-{number}.sock", std::process::id())),
+        };
         // The real font and QML caches, so each door does not build them again in its own home.
         let cache = std::env::var_os("XDG_CACHE_HOME")
             .map(PathBuf::from)
@@ -306,7 +313,11 @@ impl Door {
             .stdout(Stdio::piped())
             .spawn()
             .unwrap_or_else(|error| panic!("starting {}: {error}", python.display()));
-        let mut app = App { child, folder };
+        let mut app = App {
+            child,
+            folder,
+            socket: socket.clone(),
+        };
         let stdout: ChildStdout = app.child.stdout.take().expect("the app's output");
         // Its output is read on a thread: the first "door ready" is passed back, and anything later is read
         // and dropped, so a full pipe never stops the app. A start that takes too long fails the test.

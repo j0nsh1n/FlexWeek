@@ -320,7 +320,15 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           FLEXWEEK_SILENT: "1"
-        run: cargo test -p flexweek-testkit --tests -- --ignored --test-threads 4
+        # A run that finds no screen test fails, as the desktop shards do with no test file.
+        run: |
+          count=$(cargo test -q -p flexweek-testkit --tests -- --ignored --list | grep -c ': test$' || true)
+          echo "$count screen tests"
+          if (( count == 0 )); then
+            echo "no screen tests were found" >&2
+            exit 1
+          fi
+          cargo test -p flexweek-testkit --tests -- --ignored --test-threads 4
 
   rig:
     needs: engine
