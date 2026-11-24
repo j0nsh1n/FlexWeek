@@ -11,11 +11,12 @@ use pyo3::types::PyModule;
 
 use crate::guard;
 
-/// Python's `secrets`, so tokens, salts and codes are made as the server made them. The service
-/// runs without the GIL; each draw takes it back only while it asks Python.
-struct Secrets {
-    module: Py<PyModule>,
-    failed: Option<PyErr>,
+/// Python's `secrets` (or an object with its `token_urlsafe`, `token_hex` and `token_bytes`), so tokens,
+/// salts and codes are made as the server made them. The service runs without the GIL; each draw takes it
+/// back only while it asks Python.
+pub(crate) struct Secrets {
+    pub(crate) module: Py<PyAny>,
+    pub(crate) failed: Option<PyErr>,
 }
 
 impl Secrets {
@@ -83,7 +84,7 @@ fn service_answer(
 ) -> PyResult<(u16, Option<String>, &'static str, String)> {
     guard(|| {
         let mut secrets = Secrets {
-            module: py.import("secrets")?.unbind(),
+            module: py.import("secrets")?.into_any().unbind(),
             failed: None,
         };
         let request = desk_requests::Request {

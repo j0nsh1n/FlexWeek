@@ -6,6 +6,8 @@ file keeps its name from when the answer came from a local server.)"""
 
 from __future__ import annotations
 
+import itertools
+import secrets
 import threading
 from pathlib import Path
 
@@ -50,28 +52,37 @@ def test_sign_in_says_when_no_answer_comes_in_time(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     signed_out_again(qapp, window)
-    stuck = threading.Event()
-    answered = threading.Event()
+    client = window.session.client
+    stuck, answered = threading.Event(), threading.Event()
 
-    def never_in_time(*_arguments: object) -> client_module.Answer:
-        # Held past the timeout, then a sign-in that would have worked: it must change nothing.
+    def never_in_time() -> object:
+        # Held past the limit, then a sign-in that works: its late answer must change nothing.
         stuck.wait(30)
         answered.set()
-        return client_module.Answer(200, b'{"id": 1, "username": "late"}', "started", "late-token")
+        return secrets
 
-    monkeypatch.setattr(client_module, "ask", never_in_time)
-    monkeypatch.setattr(client_module, "REQUEST_TIMEOUT_MS", 200)
+    # Each look at the steady clock is 31 seconds after the last, so the sign-in is past its 30-second
+    # limit as soon as the window looks again.
+    looks = itertools.count()
+    monkeypatch.setattr(client_module.HOST, "steady_ms", lambda: next(looks) * 31_000)
+    monkeypatch.setattr(client_module.HOST, "entropy", never_in_time)
     try:
         assert sign_in_again(qapp, window) == (
-            "FlexWeek can't reach its server. Close FlexWeek, open it again, then sign in."
+            "FlexWeek stopped responding. Close FlexWeek, open it again, then sign in."
         )
         assert window.session.account is None
     finally:
         stuck.set()
     assert answered.wait(5)
-    # Until the worker is done, the late answer may not be on its way to the window yet.
-    wait_until(qapp, lambda: not window.session.client._running)
-    for _ in range(20):
-        qapp.processEvents()
-    assert window.session.client.session_token() is None
+    # The late answer wakes the window when it is ready; then it is taken and dropped.
+    drains = [0]
+    drain = client._drain
+
+    def counted() -> None:
+        drains[0] += 1
+        drain()
+
+    monkeypatch.setattr(client, "_drain", counted)
+    wait_until(qapp, lambda: drains[0] > 0)
+    assert client.session_token() is None
     assert window.session.account is None

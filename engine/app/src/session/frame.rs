@@ -17,7 +17,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use flexweek_service::accounts::Entropy;
 use flexweek_service::desk_requests::{self, Answer, Session};
@@ -114,33 +114,73 @@ struct Landed {
 type Job = Box<dyn FnOnce() + Send>;
 
 /// The process's workers, started with the first frame and kept for the life of the program, as the
-/// window's pool was. A frame that goes away never waits for them.
-fn workers() -> &'static Mutex<Sender<Job>> {
-    static POOL: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
+/// window's pool was. A frame that goes away never waits for them; only [`stop_workers`] does, at quit.
+struct Pool {
+    jobs: Mutex<Sender<Job>>,
+    /// How many workers are running a job, and whether the app has stopped them (jobs taken after that
+    /// are skipped). One lock for both, so no job starts after [`stop_workers`] has counted.
+    running: Mutex<(usize, bool)>,
+    finished: Condvar,
+}
+
+fn workers() -> &'static Pool {
+    static POOL: OnceLock<Arc<Pool>> = OnceLock::new();
     POOL.get_or_init(|| {
         let (jobs, queue) = channel::<Job>();
+        let pool = Arc::new(Pool {
+            jobs: Mutex::new(jobs),
+            running: Mutex::new((0, false)),
+            finished: Condvar::new(),
+        });
         let queue = Arc::new(Mutex::new(queue));
         for _ in 0..WORKERS {
             let queue = Arc::clone(&queue);
+            let pool = Arc::clone(&pool);
             std::thread::spawn(move || {
                 loop {
                     let job = match queue.lock() {
                         Ok(queue) => queue.recv(),
                         Err(_) => return,
                     };
-                    match job {
-                        // The work catches its own failures; this also catches one in the window's `wake`,
-                        // so no worker is ever lost.
-                        Ok(job) => {
-                            let _ = catch_unwind(AssertUnwindSafe(job));
+                    let Ok(job) = job else { return };
+                    {
+                        let Ok(mut running) = pool.running.lock() else {
+                            return;
+                        };
+                        if running.1 {
+                            continue;
                         }
-                        Err(_) => return,
+                        running.0 += 1;
                     }
+                    // The work catches its own failures; this also catches one in the window's `wake`,
+                    // so no worker is ever lost.
+                    let _ = catch_unwind(AssertUnwindSafe(job));
+                    if let Ok(mut running) = pool.running.lock() {
+                        running.0 -= 1;
+                    }
+                    pool.finished.notify_all();
                 }
             });
         }
-        Mutex::new(jobs)
+        pool
     })
+}
+
+/// At quit: work not yet started is skipped from now on, and this waits for the work under way to finish,
+/// so no answer writes after the app has let go of its files. A caller holding a lock a worker's work or
+/// `wake` needs (Python's) lets go of it while this waits.
+pub fn stop_workers() {
+    let pool = workers();
+    let Ok(mut running) = pool.running.lock() else {
+        return;
+    };
+    running.1 = true;
+    while running.0 > 0 {
+        running = match pool.finished.wait(running) {
+            Ok(running) => running,
+            Err(_) => return,
+        };
+    }
 }
 
 pub struct Frame {
@@ -157,6 +197,10 @@ pub struct Frame {
     closed: Arc<AtomicBool>,
     landed_tx: Sender<Landed>,
     landed: Receiver<Landed>,
+    /// Answer each request on the window's own thread, as it is sent, instead of on a worker: for the
+    /// desktop tests' light app, whose answers come on the next turn of the window's loop (`wake` is still
+    /// called, from inside [`Frame::request`]).
+    inline: bool,
     /// A 401 just handed to the window that means the session ended, with the epoch it was sent in: told
     /// next, unless the window has signed out or in since.
     expiry: Option<u64>,
@@ -179,8 +223,14 @@ impl Frame {
             closed: Arc::new(AtomicBool::new(false)),
             landed_tx,
             landed,
+            inline: false,
             expiry: None,
         }
+    }
+
+    /// See the `inline` field: every request from now on is answered as it is sent.
+    pub fn answer_inline(&mut self) {
+        self.inline = true;
     }
 
     pub fn account(&self) -> Option<&Identity> {
@@ -305,8 +355,10 @@ impl Frame {
                 wake();
             }
         });
+        if self.inline {
+            job();
         // If no worker could take it, it fails at its limit like any unanswered request.
-        if let Ok(jobs) = workers().lock() {
+        } else if let Ok(jobs) = workers().jobs.lock() {
             let _ = jobs.send(job);
         }
         Ok(number)
@@ -316,9 +368,7 @@ impl Frame {
     /// past its limit, or an ended session. Taken one at a time, so whatever the window does with one
     /// (signing out, say) counts before the next is read.
     pub fn take_event(&mut self) -> Option<Event> {
-        if let Some(epoch) = self.expiry.take()
-            && epoch == self.epoch
-        {
+        if self.take_expiry() {
             return Some(Event::Expired);
         }
         while let Ok(Landed { number, answer }) = self.landed.try_recv() {
@@ -336,6 +386,13 @@ impl Frame {
             .map(|(number, _)| *number)?;
         let waiting = self.waiting.remove(&late)?;
         Some(self.finish(late, &waiting, None))
+    }
+
+    /// Whether the answer just taken said the session ended, and the window has not signed out or in since:
+    /// for a window that takes one answer per turn of its loop and hears of the end with that answer. Told
+    /// once, here or as the next event.
+    pub fn take_expiry(&mut self) -> bool {
+        self.expiry.take().is_some_and(|epoch| epoch == self.epoch)
     }
 
     fn finish(&mut self, number: u64, waiting: &Waiting, answer: Option<Answer>) -> Event {

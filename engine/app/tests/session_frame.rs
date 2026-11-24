@@ -26,6 +26,8 @@ struct TestHost {
     /// Told when a worker has started this host's work (just before the gate).
     entered: Option<Mutex<Sender<()>>>,
     broken: AtomicBool,
+    /// The thread each request was answered on.
+    answered_on: Mutex<Vec<std::thread::ThreadId>>,
 }
 
 impl Host for TestHost {
@@ -39,6 +41,10 @@ impl Host for TestHost {
         format!("{:016x}", self.draws.fetch_add(1, Ordering::SeqCst))
     }
     fn entropy(&self) -> Box<dyn Entropy + Send> {
+        self.answered_on
+            .lock()
+            .unwrap()
+            .push(std::thread::current().id());
         if let Some(entered) = &self.entered {
             let _ = entered.lock().unwrap().send(());
         }
@@ -71,6 +77,7 @@ fn host(gate: Option<Receiver<()>>) -> Arc<TestHost> {
         gate: gate.map(Mutex::new),
         entered: None,
         broken: AtomicBool::new(false),
+        answered_on: Mutex::new(Vec::new()),
     })
 }
 
@@ -388,6 +395,30 @@ fn a_session_end_is_not_said_when_the_window_signed_out_on_that_answer() {
     assert_eq!(rig.frame.take_event(), None);
 }
 
+/// A window that takes one answer per turn asks right after it whether that answer ended the session: told
+/// once, and not after the window signed out on it.
+#[test]
+fn the_end_of_the_session_can_be_asked_for_with_the_answer_that_said_it() {
+    let mut rig = rig("frame-expiry-asked", false);
+    let made = rig.sign_up("ana");
+    rig.frame.reset();
+    rig.sign_in_as(&made);
+    for sign_out_first in [false, true] {
+        rig.frame.request("POST", "/api/auth/logout", None).unwrap();
+        rig.woken.recv_timeout(Duration::from_secs(20)).unwrap();
+        assert_eq!(failed(&rig.frame.take_event().unwrap()).0, 401);
+        if sign_out_first {
+            rig.frame.reset();
+            assert!(!rig.frame.take_expiry());
+        } else {
+            assert!(rig.frame.take_expiry());
+            assert!(!rig.frame.take_expiry(), "told twice");
+        }
+        assert_eq!(rig.frame.take_event(), None, "told again as an event");
+        rig.sign_in_as(&made);
+    }
+}
+
 #[test]
 fn a_failure_inside_a_worker_is_a_server_error_and_the_workers_carry_on() {
     let mut rig = rig("frame-panic", false);
@@ -421,6 +452,7 @@ fn a_frame_that_goes_away_while_its_work_is_under_way_wakes_no_one() {
         gate: Some(Mutex::new(gate)),
         entered: Some(Mutex::new(entered_tx)),
         broken: AtomicBool::new(false),
+        answered_on: Mutex::new(Vec::new()),
     });
     let (wake, woken) = waker();
     let mut frame = Frame::new(db.path.clone(), host, wake);
@@ -734,4 +766,35 @@ fn the_session_answers_in_json_text() {
     );
     let unknown: Value = serde_json::from_str(&session.view("moon")).unwrap();
     assert_eq!(unknown, json!({ "error": "no view called \"moon\"" }));
+}
+
+/// The light app's frame answers each request on the thread that sends it, and still wakes the window (which
+/// then takes the answer on its next turn); a worker answers the same request otherwise.
+#[test]
+fn an_inline_frame_answers_on_the_senders_thread_and_still_wakes() {
+    let mut inline = rig("frame-inline", false);
+    inline.frame.answer_inline();
+    let number = inline
+        .frame
+        .request(
+            "POST",
+            "/api/auth/register",
+            Some(&json!({ "username": "ana", "password": PASSWORD })),
+        )
+        .unwrap();
+    assert_eq!(
+        *inline.host.answered_on.lock().unwrap(),
+        vec![std::thread::current().id()]
+    );
+    assert!(inline.woken.try_recv().is_ok(), "the window was not woken");
+    assert!(matches!(
+        inline.frame.take_event(),
+        Some(Event::Answered { number: answered, outcome: Outcome::Ok { status: 201, .. } }) if answered == number
+    ));
+    let mut pooled = rig("frame-not-inline", false);
+    pooled.sign_up("ana");
+    assert_ne!(
+        *pooled.host.answered_on.lock().unwrap(),
+        vec![std::thread::current().id()]
+    );
 }
