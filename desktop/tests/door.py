@@ -247,6 +247,8 @@ class Door(QObject):
         assert isinstance(target, dict)
         if "name" in target:
             name = str(target["name"])
+            if not name:
+                return []
             found = [item for item in _visuals(root) if str(item.objectName() or "") == name]
             if "title" in target:
                 found = [item for item in found if item.property("title") == target["title"]]

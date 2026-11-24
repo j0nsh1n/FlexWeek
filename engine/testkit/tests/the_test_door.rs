@@ -70,6 +70,9 @@ fn a_step_the_door_cannot_do_is_refused_with_its_reason_not_left_unanswered() {
         let error = answer["error"].as_str().unwrap_or_default();
         assert!(error.contains(said), "{asked} -> {error}");
     }
+    // An empty name names nothing, alone or as a list.
+    let all = app.ask(&json!({ "step": "read_all", "target": { "name": "" } }));
+    assert_eq!(all["items"], json!([]), "{all}");
     // Still answering after all that.
     assert_eq!(app.app()["week_start"], json!("2026-11-02"));
 }
