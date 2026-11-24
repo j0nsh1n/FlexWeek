@@ -246,6 +246,11 @@ impl Frame {
         (!self.token.is_empty()).then_some(self.token.as_str())
     }
 
+    /// Now on the host's steady clock.
+    pub fn steady_ms(&self) -> i64 {
+        self.host.steady_ms()
+    }
+
     /// Requests sent and not yet answered or timed out.
     pub fn waiting(&self) -> usize {
         self.waiting.len()
