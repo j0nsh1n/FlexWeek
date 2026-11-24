@@ -105,6 +105,11 @@ impl Session {
         }
     }
 
+    /// Whether the answer just taken said the session ended (see [`Frame::take_expiry`]).
+    pub fn take_expiry(&mut self) -> bool {
+        self.frame.take_expiry()
+    }
+
     /// The next event as JSON text, or `null` when nothing more has happened.
     pub fn take_event(&mut self) -> String {
         self.frame

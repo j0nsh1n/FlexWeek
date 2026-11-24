@@ -20,7 +20,7 @@ from shiboken6 import isValid
 from backend.storage import connect, create_session, initialize
 from backend.tests.fake_clock import CLOCK
 from desktop.native import controller as controller_module
-from desktop.native.client import Answer, NativeClient, ask
+from desktop.native.client import NativeClient
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
@@ -46,40 +46,30 @@ class LightClient(NativeClient):
     test that needs an answer to stay on its way holds them (`hold`) and lets them land (`release`)."""
 
     def __init__(self, parent: QObject | None, api: InProcessApi) -> None:
-        super().__init__(api.database, parent)
+        super().__init__(api.database, parent, inline=True)
         self.api = api
-        # Answers made and not yet handed to the window.
-        self.pending = 0
-        self._held: list[Callable[[], None]] | None = None
+        # While answers are held: how many were ready to land.
+        self._held: int | None = None
+
+    @property
+    def pending(self) -> int:
+        """Answers made and not yet handed to the window."""
+        return len(self._waiting)
 
     def hold(self) -> None:
-        self._held = []
+        self._held = 0
 
     def release(self) -> None:
-        held, self._held = self._held or [], None
-        for answer in held:
-            QTimer.singleShot(0, self, answer)
+        """Each answer held lands on its own turn of the loop, as it would have."""
+        held, self._held = self._held or 0, None
+        for _ in range(held):
+            QTimer.singleShot(0, self, self._drain)
 
-    def _send(
-        self,
-        method: str,
-        path: str,
-        encoded: str,
-        account_id: int | None,
-        finish: Callable[[Answer, bool], None],
-    ) -> None:
-        seconds, now, restore = self._clock()
-        answered = ask(self.database, method, path, encoded, self._token, account_id, seconds, now, restore)
-
-        def answer() -> None:
-            self.pending -= 1
-            finish(answered, True)
-
-        self.pending += 1
+    def _drain(self) -> None:
         if self._held is not None:
-            self._held.append(answer)
+            self._held += 1
         else:
-            QTimer.singleShot(0, self, answer)
+            super()._drain()
 
 
 @dataclass(frozen=True)
