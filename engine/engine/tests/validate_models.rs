@@ -692,3 +692,39 @@ fn homework_dumps_like_model_dump() {
         "models.py:249 model_dump omits an empty notes string and the default spread"
     );
 }
+
+/// A link label or checklist line that is only blank to Python's `str.strip()` (the separators \x1c to \x1f
+/// count as blank there, not in Rust's `trim`) is refused as pydantic's `Assignment` refuses it; one with words
+/// after a separator is kept.
+#[test]
+fn a_label_or_checklist_line_blank_to_python_is_refused() {
+    let base = serde_json::json!({
+        "id": "e", "title": "Essay", "due": "2026-11-20T21:00", "estimate_min": 60
+    });
+    let with = |key: &str, value: serde_json::Value| {
+        let mut item = base.clone();
+        item[key] = value;
+        flexweek_engine::validate::assignment_content(&item)
+    };
+    assert!(
+        with(
+            "links",
+            serde_json::json!([{ "label": "\u{1f}", "url": "https://x.org" }])
+        )
+        .is_err()
+    );
+    assert!(
+        with(
+            "checklist",
+            serde_json::json!([{ "id": "c1", "text": "\u{1f}" }])
+        )
+        .is_err()
+    );
+    assert!(
+        with(
+            "checklist",
+            serde_json::json!([{ "id": "c1", "text": "\u{1c} read" }])
+        )
+        .is_ok()
+    );
+}
