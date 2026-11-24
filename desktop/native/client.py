@@ -97,17 +97,6 @@ def short_password_needed(n: int) -> str:
     return SIGN_UP_SHORT_PASSWORD.format(n=n, unit=unit)
 
 
-def auth_error(error: ApiError, *, creating: bool) -> ApiError:
-    """The words for a sign-in or sign-up that failed on the way. The general ones speak of changes
-    that may not have been saved, which a sign-in never has."""
-    then = "create your account" if creating else "sign in"
-    if error.status == 0:
-        return ApiError(0, f"FlexWeek stopped responding. Close FlexWeek, open it again, then {then}.")
-    if error.status == 503:
-        return ApiError(503, f"FlexWeek can't open its saved data right now. Wait a minute, then {then}.")
-    return error
-
-
 class _Host:
     """What the session asks of the computer (engine/py/src/session.rs), on the window's thread and on its
     workers: a clock that only moves forward, the app's clock (which tests set), the name of a restore point
@@ -172,6 +161,8 @@ class NativeClient(QObject):
     later turn of the window's loop."""
 
     expired = Signal()
+    # A flow the session ran (signing in, up or out) finished: its event (engine/app/src/session/account.rs).
+    told = Signal(dict)
 
     def __init__(self, database: str | Path, parent: QObject | None = None, *, inline: bool = False) -> None:
         super().__init__(parent)
@@ -203,9 +194,12 @@ class NativeClient(QObject):
         return json.loads(self._core.view("frame"))
 
     def command(self, command: dict) -> dict:
-        """One command to the session (engine/app/src/session/mod.rs); a refusal raises ValueError."""
+        """One command to the session (engine/app/src/session/mod.rs); a refusal raises ValueError. A command
+        may send a request of the session's own (signing in), so the limit's timer is set again."""
         self._check_thread()
-        return self._send(command)
+        answer = self._send(command)
+        self._arm()
+        return answer
 
     def view(self, name: str) -> dict:
         """One of the session's views (engine/app/src/session/mod.rs)."""
@@ -285,7 +279,10 @@ class NativeClient(QObject):
             if event["kind"] == "expired":
                 self.expired.emit()
                 continue
-            self._hand(event)
+            if event["kind"] in {"answer", "dropped"}:
+                self._hand(event)
+            else:
+                self.told.emit(event)
             if isValid(self) and self._core.take_expiry():
                 self.expired.emit()
             break
