@@ -124,8 +124,11 @@ impl Session {
                     dirty: flag("dirty")?,
                     pending: flag("pending")?,
                 };
-                let now = self.frame.steady_ms();
-                Ok(json!({ "save": self.autosave.due(week, self.status.busy(), now) }))
+                let busy = self.status.busy();
+                // The clock is read only when a save could be due, as the window did.
+                let save = !(!week.signed_in || busy || week.conflict)
+                    && self.autosave.due(week, busy, self.frame.steady_ms());
+                Ok(json!({ "save": save }))
             }
             Some("autosave_times") => {
                 let time = |name: &str| -> Result<Option<i64>, String> {
@@ -137,10 +140,11 @@ impl Session {
                             .ok_or_else(|| format!("{name} is a whole number")),
                     }
                 };
-                if let Some(changed) = time("changed_ms")? {
+                let (changed, tried) = (time("changed_ms")?, time("last_try_ms")?);
+                if let Some(changed) = changed {
                     self.autosave.changed_ms = changed;
                 }
-                if let Some(tried) = time("last_try_ms")? {
+                if let Some(tried) = tried {
                     self.autosave.last_try_ms = tried;
                 }
                 Ok(json!({}))

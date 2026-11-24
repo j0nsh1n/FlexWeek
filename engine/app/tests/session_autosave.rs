@@ -19,6 +19,12 @@ const CHANGED: Week = Week {
     pending: false,
 };
 
+/// The window's waits: a change saves 1.5 s after the last one; a failed save is tried again after 6 s.
+#[test]
+fn the_waits_are_the_windows() {
+    assert_eq!((AFTER_MS, RETRY_MS), (1_500, 6_000));
+}
+
 #[test]
 fn a_change_saves_once_the_student_has_stopped_changing_things() {
     let mut autosave = Autosave {
@@ -156,29 +162,33 @@ fn the_session_decides_on_its_steady_clock_in_json_text() {
         json!({ "ok": true, "save": false })
     );
     send(&mut session, json!({ "cmd": "set_busy", "busy": false }));
-    // A failure starts the retry wait.
+    // A failure starts the retry wait from when it failed (later than the timer's last try).
+    let failed_at = 30_000;
+    clock.0.store(failed_at, Ordering::SeqCst);
     send(&mut session, json!({ "cmd": "autosave_failed" }));
     let view: Value = serde_json::from_str(&session.view("autosave")).unwrap();
     assert_eq!(
         view,
-        json!({ "changed_ms": 0, "last_try_ms": 20_000 + AFTER_MS, "after_ms": AFTER_MS, "retry_ms": RETRY_MS })
+        json!({ "changed_ms": 0, "last_try_ms": failed_at, "after_ms": AFTER_MS, "retry_ms": RETRY_MS })
     );
     let retry = json!({ "cmd": "autosave", "signed_in": true, "conflict": false, "dirty": false, "pending": true });
-    clock
-        .0
-        .store(20_000 + AFTER_MS + RETRY_MS - 1, Ordering::SeqCst);
+    clock.0.store(failed_at + RETRY_MS - 1, Ordering::SeqCst);
     assert_eq!(
         send(&mut session, retry.clone()),
         json!({ "ok": true, "save": false })
     );
-    send(
-        &mut session,
-        json!({ "cmd": "autosave_times", "last_try_ms": 0 }),
-    );
+    clock.0.store(failed_at + RETRY_MS, Ordering::SeqCst);
     assert_eq!(
         send(&mut session, retry),
         json!({ "ok": true, "save": true })
     );
+    // A refused pair of times changes neither.
+    send(
+        &mut session,
+        json!({ "cmd": "autosave_times", "changed_ms": 123, "last_try_ms": "bad" }),
+    );
+    let view: Value = serde_json::from_str(&session.view("autosave")).unwrap();
+    assert_eq!(view["changed_ms"], json!(0));
     for (command, error) in [
         (
             json!({ "cmd": "autosave", "signed_in": true }),
@@ -199,4 +209,49 @@ fn the_session_decides_on_its_steady_clock_in_json_text() {
             "{command}"
         );
     }
+}
+
+/// Host whose steady clock counts how often it is read.
+struct Counted(AtomicI64);
+
+impl Host for Counted {
+    fn steady_ms(&self) -> i64 {
+        self.0.fetch_add(1, Ordering::SeqCst)
+    }
+    fn request_clock(&self) -> (i64, String) {
+        (1_793_905_200, "2026-11-05T19:00".into())
+    }
+    fn restore_token(&self) -> String {
+        "0000000000000001".into()
+    }
+    fn entropy(&self) -> Box<dyn Entropy + Send> {
+        Box::new(Counting(1))
+    }
+    fn stopwatch(&self) -> Stopwatch {
+        Box::new(|| 0.0)
+    }
+}
+
+/// Signed out, busy or after a 409, the tick does not even look at the clock, as the window did not.
+#[test]
+fn a_tick_that_cannot_save_does_not_read_the_clock() {
+    let db = TestDb::new("autosave-clock");
+    let clock = Arc::new(Counted(AtomicI64::new(0)));
+    let mut session = Session::new(db.path.clone(), clock.clone(), Arc::new(|| {}));
+    for tick in [
+        json!({ "cmd": "autosave", "signed_in": false, "conflict": false, "dirty": true, "pending": false }),
+        json!({ "cmd": "autosave", "signed_in": true, "conflict": true, "dirty": true, "pending": false }),
+    ] {
+        assert_eq!(
+            send(&mut session, tick),
+            json!({ "ok": true, "save": false })
+        );
+    }
+    send(&mut session, json!({ "cmd": "begin" }));
+    let busy = json!({ "cmd": "autosave", "signed_in": true, "conflict": false, "dirty": true, "pending": false });
+    assert_eq!(
+        send(&mut session, busy),
+        json!({ "ok": true, "save": false })
+    );
+    assert_eq!(clock.0.load(Ordering::SeqCst), 0, "the clock was read");
 }

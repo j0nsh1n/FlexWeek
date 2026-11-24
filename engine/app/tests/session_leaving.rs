@@ -106,6 +106,40 @@ fn the_session_decides_each_poll_in_json_text_with_its_own_busy_state() {
             "words": "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. Choose Retry save, then sign out again."
         })
     );
+    // Every step the window acts on, by its name.
+    send(
+        &mut session,
+        json!({ "cmd": "leaving_start", "limit_ms": 300, "again": "close FlexWeek again" }),
+    );
+    let step = |session: &mut Session, held: bool, parked: bool| {
+        send(
+            session,
+            json!({ "cmd": "leaving_poll", "poll_ms": 100, "held": held, "parked": parked }),
+        )["step"]
+            .clone()
+    };
+    assert_eq!(step(&mut session, false, true), json!("load"));
+    assert_eq!(step(&mut session, false, false), json!("leave"));
+    // The wait runs out: 300 ms is three polls, the fourth gives up.
+    send(
+        &mut session,
+        json!({ "cmd": "leaving_start", "limit_ms": 300, "again": "close FlexWeek again" }),
+    );
+    send(&mut session, json!({ "cmd": "begin" }));
+    for _ in 0..3 {
+        assert_eq!(step(&mut session, true, false), json!("wait"));
+    }
+    let gave_up = send(
+        &mut session,
+        json!({ "cmd": "leaving_poll", "poll_ms": 100, "held": true, "parked": false }),
+    );
+    assert_eq!(gave_up["step"], json!("give_up"));
+    assert_eq!(
+        gave_up["words"],
+        json!(
+            "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. Choose Retry save, then close FlexWeek again."
+        )
+    );
     for (command, error) in [
         (
             json!({ "cmd": "leaving_start", "again": "x" }),
