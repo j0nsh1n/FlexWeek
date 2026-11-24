@@ -27,7 +27,9 @@
   window running the timers (#167). Signing in, up and out run in Rust (`session/account.rs`): the session sends the
   request and reads the answer, and the window gets one event per flow (`signed_in`, `registered`, `auth_failed`,
   `signed_out`) for its own part (setup answers, the kept file, the focus store, loading the week). Pydantic leaves
-  in P4 (Jonathan, 2026-11-23). The 30-second sign-in
+  in P4 (Jonathan, 2026-11-23); controller.py checks blocks and homework with the engine (`checked_block`,
+  `checked_homework`, #168), and its remaining pydantic use is the hours windows (ProtectedWindow, WorkWindow). The
+  30-second sign-in
   words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
 - `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
   tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
