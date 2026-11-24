@@ -38,6 +38,28 @@ fn a_step_the_door_cannot_do_is_refused_with_its_reason_not_left_unanswered() {
             json!({ "step": "click", "target": { "name": "noSuchItem" } }),
             "nothing on screen is",
         ),
+        // The setting-up steps refuse what they cannot set up.
+        (json!({ "step": "seed", "name": "moon" }), "no seed called"),
+        (
+            json!({ "step": "block", "block": 3 }),
+            "a block is a JSON object",
+        ),
+        (
+            json!({ "step": "preferences", "values": [] }),
+            "preferences are a JSON object",
+        ),
+        (
+            json!({ "step": "drag", "target": { "name": "materialTitle" }, "by": [1] }),
+            "a move is [dx, dy]",
+        ),
+        (
+            json!({ "step": "wheel", "target": { "name": "materialTitle" }, "dy": 1, "key": "hyper" }),
+            "no modifier called",
+        ),
+        (
+            json!({ "step": "reveal", "target": { "name": "materialTitle" } }),
+            "is not in a scrolling list",
+        ),
     ] {
         let answer = app.ask(&asked);
         assert_eq!(answer["ok"], false, "{asked} -> {answer}");

@@ -24,6 +24,17 @@ pub enum Target {
     Words(String),
     WordsWithin(String, String),
     NameWithin(String, String),
+    NameTitled(String, String),
+}
+
+/// The item with test id `id` whose title is `title` (the week block "Club").
+pub fn titled(id: &str, title: &str) -> Target {
+    Target::NameTitled(id.to_string(), title.to_string())
+}
+
+/// The week block (on Week or Day) whose title is `title`.
+pub fn block(title: &str) -> Target {
+    titled("weekBlock", title)
 }
 
 /// The item whose test id is `id`.
@@ -53,19 +64,109 @@ impl Target {
             Self::Words(words) => json!({ "words": words }),
             Self::WordsWithin(words, id) => json!({ "words": words, "within": id }),
             Self::NameWithin(id, within) => json!({ "name": id, "within": within }),
+            Self::NameTitled(id, title) => json!({ "name": id, "title": title }),
         }
     }
 }
 
 /// What a student could tell about one item.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Seen {
     pub found: bool,
     pub name: String,
     pub text: String,
+    /// A block's or a sheet's title, where the item has one.
+    pub title: String,
     pub enabled: bool,
     pub focused: bool,
     pub visible: bool,
+    pub opacity: f64,
+    /// Where it is drawn in the window: left, top, width, height.
+    pub rect: Rect,
+    /// What a screen reader says for it.
+    pub accessible: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Rect {
+    pub left: f64,
+    pub top: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Rect {
+    pub fn right(&self) -> f64 {
+        self.left + self.width
+    }
+
+    pub fn bottom(&self) -> f64 {
+        self.top + self.height
+    }
+
+    pub fn middle_y(&self) -> f64 {
+        self.top + self.height / 2.0
+    }
+
+    /// Whether the two share any area (touching edges do not count).
+    pub fn overlaps(&self, other: &Rect) -> bool {
+        !(self.right() <= other.left
+            || other.right() <= self.left
+            || self.bottom() <= other.top
+            || other.bottom() <= self.top)
+    }
+
+    /// Grown by `by` on every side.
+    pub fn grown(&self, by: f64) -> Rect {
+        Rect {
+            left: self.left - by,
+            top: self.top - by,
+            width: self.width + 2.0 * by,
+            height: self.height + 2.0 * by,
+        }
+    }
+}
+
+/// The item that has the keyboard.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Focus {
+    pub seen: Seen,
+    /// The item and the items holding it, outwards: (test id, title).
+    pub chain: Vec<(String, String)>,
+    /// Its focus ring is showing.
+    pub ring: bool,
+    /// It is wholly inside the scroller holding it, or inside the window.
+    pub in_view: bool,
+}
+
+impl Focus {
+    /// Whether the item with the keyboard is, or sits inside, the item with test id `id`.
+    pub fn inside(&self, id: &str) -> bool {
+        self.chain.iter().any(|(name, _)| name == id)
+    }
+
+    /// The title of the nearest item with test id `id` holding the keyboard, if any.
+    pub fn title_of(&self, id: &str) -> Option<&str> {
+        self.chain
+            .iter()
+            .find(|(name, _)| name == id)
+            .map(|(_, title)| title.as_str())
+    }
+
+    /// The chain's test ids, for a failure message.
+    pub fn path(&self) -> String {
+        let names: Vec<&str> = self
+            .chain
+            .iter()
+            .take(4)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if names.is_empty() {
+            "nothing".to_string()
+        } else {
+            names.join(" < ")
+        }
+    }
 }
 
 /// The steps of a screen test, as the rig's play steps (docs/tooling/fwtest.md) are function calls.
@@ -79,10 +180,39 @@ pub trait Driver {
     fn read(&mut self, target: &Target) -> Seen;
     /// One property of an item, for what the screen holds but does not print (a picker being open).
     fn property(&mut self, target: &Target, name: &str) -> Value;
+    /// Every item with that test id or those words, shown or not, in drawing order.
+    fn read_all(&mut self, target: &Target) -> Vec<Seen>;
+    /// The item with the keyboard.
+    fn focused(&mut self) -> Focus;
+    /// Press at the middle of an item, moved by `at`, move by `by` and let go, as the pointer does it.
+    fn drag(&mut self, target: &Target, at: (i32, i32), by: (i32, i32));
+    /// The mouse wheel over an item: `notches` up (positive) or down, with `held` ("ctrl", "" for none).
+    fn wheel(&mut self, target: &Target, notches: i32, held: &str);
     /// Let the app run `turns` turns of its event loop; time moves only when a test moves it.
     fn pump(&mut self, turns: u32);
-    /// The session's state the window was built from: week_start, selected_month, screen.
+    /// The session's state the window was built from: week_start, selected_month, screen, busy, dirty,
+    /// snack (the notice's words), sheet (the open sheet's kind), window_has_keyboard, blocks and homework.
     fn app(&mut self) -> Value;
+
+    // Setting up (not a student's steps; the Rust core's seeds and fake clock stand in for these later).
+
+    /// "material_week": School Monday to Friday 08:00-14:30, the History essay planned for Thursday 18:45,
+    /// weekends shown, the 24-hour clock, the clock at Thursday 19:00.
+    fn seed(&mut self, name: &str);
+    /// Homework added and saved.
+    fn homework(&mut self, id: &str, title: &str, minutes: u32, due: &str);
+    /// A block added (or replaced, by id) and saved.
+    fn block(&mut self, block: Value);
+    /// The fake clock held at `at` (ISO local time), and the window's clock tick run.
+    fn clock(&mut self, at: &str);
+    /// Preferences changed as Settings would change them.
+    fn preferences(&mut self, values: Value);
+    /// The Day screen on `day` (ISO date).
+    fn open_day(&mut self, day: &str);
+    /// One property of an item set (a scroller's contentY).
+    fn set_property(&mut self, target: &Target, name: &str, value: Value);
+    /// The scroller holding the item scrolled so it shows with room around it (a drag must start on screen).
+    fn reveal(&mut self, target: &Target);
 
     /// Run the app until `holds` is true, or fail naming `what`. No sleeps: the app runs its queued work.
     fn wait_until(&mut self, what: &str, mut holds: impl FnMut(&mut Self) -> bool)
@@ -143,6 +273,8 @@ impl Door {
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join(".venv/bin/python"));
         let number = STARTED.fetch_add(1, Ordering::Relaxed);
+        // A socket file's path is limited to about 100 bytes, so a long test name is cut.
+        let name: String = name.chars().take(32).collect();
         let folder = std::env::temp_dir().join(format!(
             "flexweek-door-{name}-{}-{number}",
             std::process::id()
@@ -260,16 +392,51 @@ impl Driver for Door {
 
     fn read(&mut self, target: &Target) -> Seen {
         let seen = self.step(json!({ "step": "read", "target": target.to_json() }));
-        let text = |field: &str| seen[field].as_str().unwrap_or_default().to_string();
-        let flag = |field: &str| seen[field].as_bool().unwrap_or(false);
-        Seen {
-            found: flag("found"),
-            name: text("name"),
-            text: text("text"),
-            enabled: flag("enabled"),
-            focused: flag("focused"),
-            visible: flag("visible"),
+        seen_from(&seen)
+    }
+
+    fn read_all(&mut self, target: &Target) -> Vec<Seen> {
+        let answer = self.step(json!({ "step": "read_all", "target": target.to_json() }));
+        answer["items"]
+            .as_array()
+            .map(|items| items.iter().map(seen_from).collect())
+            .unwrap_or_default()
+    }
+
+    fn focused(&mut self) -> Focus {
+        let answer = self.step(json!({ "step": "focused" }));
+        let chain = answer["chain"]
+            .as_array()
+            .map(|chain| {
+                chain
+                    .iter()
+                    .map(|link| {
+                        (
+                            link["name"].as_str().unwrap_or_default().to_string(),
+                            link["title"].as_str().unwrap_or_default().to_string(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Focus {
+            seen: seen_from(&answer),
+            chain,
+            ring: answer["ring"].as_bool().unwrap_or(false),
+            in_view: answer["in_view"].as_bool().unwrap_or(false),
         }
+    }
+
+    fn drag(&mut self, target: &Target, at: (i32, i32), by: (i32, i32)) {
+        self.step(json!({
+            "step": "drag", "target": target.to_json(), "at": [at.0, at.1], "by": [by.0, by.1]
+        }));
+    }
+
+    fn wheel(&mut self, target: &Target, notches: i32, held: &str) {
+        self.step(
+            json!({ "step": "wheel", "target": target.to_json(), "dy": notches, "key": held }),
+        );
     }
 
     fn property(&mut self, target: &Target, name: &str) -> Value {
@@ -288,5 +455,64 @@ impl Driver for Door {
             fields.shift_remove("ok");
         }
         answer
+    }
+
+    fn seed(&mut self, name: &str) {
+        self.step(json!({ "step": "seed", "name": name }));
+    }
+
+    fn homework(&mut self, id: &str, title: &str, minutes: u32, due: &str) {
+        self.step(json!({
+            "step": "homework", "id": id, "title": title, "minutes": minutes, "due": due
+        }));
+    }
+
+    fn block(&mut self, block: Value) {
+        self.step(json!({ "step": "block", "block": block }));
+    }
+
+    fn clock(&mut self, at: &str) {
+        self.step(json!({ "step": "clock", "at": at }));
+    }
+
+    fn preferences(&mut self, values: Value) {
+        self.step(json!({ "step": "preferences", "values": values }));
+    }
+
+    fn open_day(&mut self, day: &str) {
+        self.step(json!({ "step": "open_day", "day": day }));
+    }
+
+    fn set_property(&mut self, target: &Target, name: &str, value: Value) {
+        self.step(json!({
+            "step": "set_property", "target": target.to_json(), "name": name, "value": value
+        }));
+    }
+
+    fn reveal(&mut self, target: &Target) {
+        self.step(json!({ "step": "reveal", "target": target.to_json() }));
+    }
+}
+
+fn seen_from(seen: &Value) -> Seen {
+    let text = |field: &str| seen[field].as_str().unwrap_or_default().to_string();
+    let flag = |field: &str| seen[field].as_bool().unwrap_or(false);
+    let number = |index: usize| seen["rect"][index].as_f64().unwrap_or(0.0);
+    Seen {
+        found: flag("found"),
+        name: text("name"),
+        text: text("text"),
+        title: text("title"),
+        enabled: flag("enabled"),
+        focused: flag("focused"),
+        visible: flag("visible"),
+        opacity: seen["opacity"].as_f64().unwrap_or(1.0),
+        rect: Rect {
+            left: number(0),
+            top: number(1),
+            width: number(2),
+            height: number(3),
+        },
+        accessible: text("accessible"),
     }
 }
