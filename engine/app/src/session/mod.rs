@@ -109,15 +109,15 @@ impl Session {
                 Ok(json!({}))
             }
             Some("register") => {
-                let keep = command["keep"].as_bool().unwrap_or(true);
+                let keep = command["keep"].as_bool().ok_or("keep is true or false")?;
                 self.register(text("username")?, text("password")?, keep)
             }
             Some("login") => {
-                let keep = command["keep"].as_bool().unwrap_or(true);
+                let keep = command["keep"].as_bool().ok_or("keep is true or false")?;
                 self.login(text("username")?, text("password")?, keep)
             }
             Some("recover") => {
-                let keep = command["keep"].as_bool().unwrap_or(true);
+                let keep = command["keep"].as_bool().ok_or("keep is true or false")?;
                 self.recover(text("username")?, text("code")?, text("password")?, keep)
             }
             Some("resume") => self.resume(text("token")?),
