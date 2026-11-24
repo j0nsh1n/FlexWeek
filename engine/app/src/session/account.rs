@@ -63,8 +63,10 @@ impl Session {
         let ticket = self.status.begin(false);
         self.status.say(words);
         let number = self.frame.request(method, path, body)?;
+        // A session it starts counts only once the flow accepts the answer.
+        self.frame.hold_new_session(number);
         self.flows.insert(number, flow(ticket));
-        Ok(json!({ "ticket": ticket }))
+        Ok(json!({ "ticket": ticket, "said": words }))
     }
 
     pub(super) fn register(
@@ -127,7 +129,7 @@ impl Session {
         self.frame.adopt_session(token);
         let number = self.frame.request("GET", "/api/auth/me", None)?;
         self.flows.insert(number, Flow::Resume { ticket });
-        Ok(json!({ "ticket": ticket }))
+        Ok(json!({ "ticket": ticket, "said": "Signing in…" }))
     }
 
     /// Signs out of `account` (the window's; None when no one is). With no session to end it finishes at once,
@@ -137,25 +139,29 @@ impl Session {
         self.status.say("Signing out…");
         if self.frame.account().is_none() {
             let finished = self.signed_out(ticket, account);
-            return Ok(json!({ "ticket": ticket, "finished": finished }));
+            return Ok(json!({ "ticket": ticket, "said": "Signing out…", "finished": finished }));
         }
         let number = self.frame.request("POST", "/api/auth/logout", None)?;
         self.flows.insert(number, Flow::Logout { ticket, account });
-        Ok(json!({ "ticket": ticket, "finished": null }))
+        Ok(json!({ "ticket": ticket, "said": "Signing out…", "finished": null }))
     }
 
     /// What a flow makes of its request's answer, as the event the window is told; None when the window has
     /// moved on from it.
     pub(super) fn finish_flow(&mut self, flow: Flow, event: Event) -> Option<Value> {
-        let outcome = match event {
-            Event::Answered { outcome, .. } => outcome,
+        let (number, outcome) = match event {
+            Event::Answered { number, outcome } => (number, outcome),
             // Sent before a sign-in or sign-out: it changes nothing, as its callbacks were never called.
             Event::Dropped { .. } | Event::Expired => return None,
         };
+        // Taken up below only if the flow accepts the answer; otherwise let go of and never used.
+        let started = self.frame.take_new_session(number);
         match flow {
-            Flow::Register { ticket } => self.registered(ticket, outcome),
-            Flow::Login { ticket } => self.signed_in(ticket, outcome, "login", Some(false)),
-            Flow::Recover { ticket } => self.signed_in(ticket, outcome, "recover", None),
+            Flow::Register { ticket } => self.registered(ticket, outcome, started),
+            Flow::Login { ticket } => {
+                self.signed_in(ticket, outcome, "login", Some(false), started)
+            }
+            Flow::Recover { ticket } => self.signed_in(ticket, outcome, "recover", None, started),
             Flow::Resume { ticket } => self.resumed(ticket, outcome),
             Flow::Logout { ticket, account } => self.signed_out(ticket, account),
         }
@@ -169,6 +175,7 @@ impl Session {
         outcome: Outcome,
         how: &str,
         auth: Option<bool>,
+        started: Option<String>,
     ) -> Option<Value> {
         if !self.status.alive(ticket) {
             return None;
@@ -183,11 +190,19 @@ impl Session {
             return self.failed(ticket, status, UNDISPLAYABLE, auth);
         };
         self.status.idle(ticket);
+        if let Some(token) = started {
+            self.frame.use_session(token);
+        }
         self.frame.set_account(made.clone()).ok()?;
         Some(json!({ "kind": "signed_in", "how": how, "account": account_json(&made) }))
     }
 
-    fn registered(&mut self, ticket: u64, outcome: Outcome) -> Option<Value> {
+    fn registered(
+        &mut self,
+        ticket: u64,
+        outcome: Outcome,
+        started: Option<String>,
+    ) -> Option<Value> {
         if !self.status.alive(ticket) {
             return None;
         }
@@ -200,6 +215,9 @@ impl Session {
         let Some(made) = identity(&body) else {
             return self.failed(ticket, status, UNDISPLAYABLE, Some(true));
         };
+        if let Some(token) = started {
+            self.frame.use_session(token);
+        }
         self.frame.set_account(made.clone()).ok()?;
         self.status.set_busy(false);
         self.status
@@ -215,12 +233,18 @@ impl Session {
     /// service said it no longer works (401); the words follow only if the window is still waiting on it.
     fn resumed(&mut self, ticket: u64, outcome: Outcome) -> Option<Value> {
         let (status, message) = match outcome {
-            Outcome::Ok { status, body } => match identity(&body) {
-                Some(_) => {
-                    return self.signed_in(ticket, Outcome::Ok { status, body }, "resume", None);
+            Outcome::Ok { status, body } => {
+                if !self.status.alive(ticket) {
+                    return None;
                 }
-                None => (status, UNDISPLAYABLE.to_string()),
-            },
+                match identity(&body) {
+                    Some(_) => {
+                        let ok = Outcome::Ok { status, body };
+                        return self.signed_in(ticket, ok, "resume", None, None);
+                    }
+                    None => (status, UNDISPLAYABLE.to_string()),
+                }
+            }
             Outcome::Failed { status, message } => (status, message),
         };
         self.frame.reset();

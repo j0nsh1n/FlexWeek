@@ -1040,7 +1040,8 @@ class NativeSession(QObject):
     def _start_flow(self, command: dict) -> dict:
         answer = self.client.command(command)
         self.busy_changed.emit(True)
-        self.status.emit(self.message)
+        # The words it began with, even when it finished at once (a sign-out with no one signed in).
+        self.status.emit(answer["said"])
         return answer
 
     def _told(self, event: dict) -> None:
@@ -1093,12 +1094,12 @@ class NativeSession(QObject):
 
     def register(self, username: str, password: str) -> None:
         self._start_flow(
-            {"cmd": "register", "username": username, "password": password, "keep": self.keep_signed_in}
+            {"cmd": "register", "username": username, "password": password, "keep": bool(self.keep_signed_in)}
         )
 
     def login(self, username: str, password: str) -> None:
         self._start_flow(
-            {"cmd": "login", "username": username, "password": password, "keep": self.keep_signed_in}
+            {"cmd": "login", "username": username, "password": password, "keep": bool(self.keep_signed_in)}
         )
 
     def finish_recovery(self) -> None:
@@ -4920,7 +4921,7 @@ class NativeSession(QObject):
                 "username": username,
                 "code": code,
                 "password": password,
-                "keep": self.keep_signed_in,
+                "keep": bool(self.keep_signed_in),
             }
         )
 
