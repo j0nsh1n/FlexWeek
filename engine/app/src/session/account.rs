@@ -1,4 +1,5 @@
-//! Signing in, up and out (P4 group 1; `NativeSession.register`, `login`, `recover`, `resume` and `logout` in
+//! Signing in, up and out, and the account's own changes (P4 group 1; `NativeSession.register`, `login`,
+//! `recover`, `resume`, `logout`, `change_password`, `replace_recovery_codes` and `delete_account` in
 //! desktop/native/controller.py). The session sends each flow's request itself and reads its answer: who is
 //! signed in, whether the session is busy, and what the status line says. The window is told the outcome as
 //! one event and does what is still its own (setup answers, the kept session's file, loading the week).
@@ -16,13 +17,16 @@ use super::frame::{Event, Identity, Outcome};
 const UNDISPLAYABLE: &str = "FlexWeek could not display this response.";
 
 /// A flow waiting for its request's answer, with the ticket it began with.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(super) enum Flow {
     Register { ticket: u64 },
     Login { ticket: u64 },
     Recover { ticket: u64 },
     Resume { ticket: u64 },
     Logout { ticket: u64, account: Option<i64> },
+    Password { ticket: u64 },
+    RecoveryCodes { ticket: u64 },
+    DeleteAccount { ticket: u64, owner: Option<String> },
 }
 
 /// The words for a sign-in (`creating` false) or sign-up that failed on the way: the general ones speak of
@@ -144,6 +148,44 @@ impl Session {
         Ok(json!({ "ticket": ticket, "finished": null }))
     }
 
+    pub(super) fn change_password(&mut self, current: &str, new: &str) -> Result<Value, String> {
+        let body = json!({ "current_password": current, "new_password": new });
+        self.begin_flow(
+            "Changing password…",
+            "POST",
+            "/api/auth/password",
+            Some(&body),
+            |ticket| Flow::Password { ticket },
+        )
+    }
+
+    pub(super) fn replace_recovery_codes(&mut self, password: &str) -> Result<Value, String> {
+        let body = json!({ "password": password });
+        self.begin_flow(
+            "Replacing recovery codes…",
+            "POST",
+            "/api/auth/recovery-codes",
+            Some(&body),
+            |ticket| Flow::RecoveryCodes { ticket },
+        )
+    }
+
+    /// Deletes the account `owner` (the window's account id as text, for its kept look) after the password.
+    pub(super) fn delete_account(
+        &mut self,
+        password: &str,
+        owner: Option<String>,
+    ) -> Result<Value, String> {
+        let body = json!({ "password": password });
+        self.begin_flow(
+            "Deleting account…",
+            "DELETE",
+            "/api/auth/account",
+            Some(&body),
+            |ticket| Flow::DeleteAccount { ticket, owner },
+        )
+    }
+
     /// What a flow makes of its request's answer, as the event the window is told; None when the window has
     /// moved on from it.
     pub(super) fn finish_flow(&mut self, flow: Flow, event: Event) -> Option<Value> {
@@ -158,6 +200,9 @@ impl Session {
             Flow::Recover { ticket } => self.signed_in(ticket, outcome, "recover", None),
             Flow::Resume { ticket } => self.resumed(ticket, outcome),
             Flow::Logout { ticket, account } => self.signed_out(ticket, account),
+            Flow::Password { ticket } => self.password_replaced(ticket, outcome),
+            Flow::RecoveryCodes { ticket } => self.codes_replaced(ticket, outcome),
+            Flow::DeleteAccount { ticket, owner } => self.account_deleted(ticket, outcome, owner),
         }
     }
 
@@ -260,5 +305,69 @@ impl Session {
         self.status.set_busy(false);
         self.status.say("Signed out.");
         Some(json!({ "kind": "signed_out", "account_id": account }))
+    }
+
+    /// A new password comes with a new session: signed in again as the answer's account (a new epoch), which
+    /// the window keeps in place of the old kept session.
+    fn password_replaced(&mut self, ticket: u64, outcome: Outcome) -> Option<Value> {
+        let body = match outcome {
+            Outcome::Ok { body, .. } => body,
+            Outcome::Failed { status, message } => {
+                return self.failed(ticket, status, &message, None);
+            }
+        };
+        if !self.status.idle(ticket) {
+            return None;
+        }
+        let account = identity(&body).and_then(|made| {
+            self.frame.set_account(made.clone()).ok()?;
+            Some(account_json(&made))
+        });
+        self.status.say("Password replaced.");
+        Some(json!({ "kind": "password_replaced", "account": account }))
+    }
+
+    fn codes_replaced(&mut self, ticket: u64, outcome: Outcome) -> Option<Value> {
+        let body = match outcome {
+            Outcome::Ok { body, .. } => body,
+            Outcome::Failed { status, message } => {
+                return self.failed(ticket, status, &message, None);
+            }
+        };
+        if !self.status.idle(ticket) {
+            return None;
+        }
+        let codes = body
+            .get("recovery_codes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        // As the window read it: a remaining count of 0 or none falls back to the codes handed out.
+        let remaining = body
+            .get("remaining")
+            .and_then(Value::as_u64)
+            .filter(|remaining| *remaining > 0)
+            .unwrap_or(codes.len() as u64);
+        self.status.say("Save these replacement recovery codes.");
+        Some(json!({ "kind": "codes_replaced", "codes": codes, "remaining": remaining }))
+    }
+
+    /// The account is gone: no account, no session, not busy; the window forgets what it kept for it.
+    fn account_deleted(
+        &mut self,
+        ticket: u64,
+        outcome: Outcome,
+        owner: Option<String>,
+    ) -> Option<Value> {
+        if let Outcome::Failed { status, message } = outcome {
+            return self.failed(ticket, status, &message, None);
+        }
+        if !self.status.alive(ticket) {
+            return None;
+        }
+        self.frame.reset();
+        self.status.set_busy(false);
+        self.status.say("Account deleted.");
+        Some(json!({ "kind": "account_deleted", "owner": owner }))
     }
 }

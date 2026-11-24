@@ -1035,7 +1035,8 @@ class NativeSession(QObject):
             return
         self._start_flow({"cmd": "resume", "token": token})
 
-    # Signing in, up and out run in the session (engine/app/src/session/account.rs): it sends the request,
+    # Signing in, up and out, and the account's own changes, run in the session
+    # (engine/app/src/session/account.rs): it sends the request,
     # reads the answer, and says what happened; what follows here is the window's own part.
     def _start_flow(self, command: dict) -> dict:
         answer = self.client.command(command)
@@ -1071,6 +1072,29 @@ class NativeSession(QObject):
             if event["idle"]:
                 self._went_idle()
                 self.status.emit(self.message)
+        elif kind == "password_replaced":
+            self._went_idle()
+            if event["account"] is not None:
+                data = event["account"]
+                self.account = {"id": data["id"], "username": data["username"]}
+                # The new password came with a new session, and the kept one no longer works.
+                self._keep_session()
+            self.status.emit(self.message)
+            self.week_changed.emit()
+        elif kind == "codes_replaced":
+            self._went_idle()
+            self.recovery_remaining = int(event["remaining"])
+            self.recovery_codes.emit(list(event["codes"]))
+            self.status.emit(self.message)
+        elif kind == "account_deleted":
+            self._forget_session()
+            if self.kept is not None and event["owner"] is not None:
+                self.kept.forget_look(event["owner"])
+            self._clear_local()
+            self.busy_changed.emit(False)
+            self.account_changed.emit(None)
+            self.week_changed.emit()
+            self.status.emit(self.message)
         elif kind == "signed_out":
             if event["account_id"] is not None:
                 self.focus_store.pop(event["account_id"], None)
@@ -4925,74 +4949,16 @@ class NativeSession(QObject):
         )
 
     def change_password(self, current_password: str, new_password: str) -> None:
-        ticket = self._begin()
-        self._say("Changing password…")
-
-        def ok(data: dict) -> None:
-            if not self._idle(ticket):
-                return
-            if data.get("id"):
-                self.client.set_account(data)
-                self.account = {"id": data["id"], "username": data["username"]}
-                # The new password came with a new session, and the kept one no longer works.
-                self._keep_session()
-            self._say("Password replaced.")
-            self.week_changed.emit()
-
-        self.client.request(
-            "POST",
-            "/api/auth/password",
-            {"current_password": current_password, "new_password": new_password},
-            ok,
-            lambda error: self._fail(ticket, error),
+        self._start_flow(
+            {"cmd": "change_password", "current_password": current_password, "new_password": new_password}
         )
 
     def replace_recovery_codes(self, password: str) -> None:
-        ticket = self._begin()
-        self._say("Replacing recovery codes…")
-
-        def ok(data: dict) -> None:
-            if not self._idle(ticket):
-                return
-            codes = list(data.get("recovery_codes") or [])
-            self.recovery_remaining = int(data.get("remaining") or len(codes))
-            self.recovery_codes.emit(codes)
-            self._say("Save these replacement recovery codes.")
-
-        self.client.request(
-            "POST",
-            "/api/auth/recovery-codes",
-            {"password": password},
-            ok,
-            lambda error: self._fail(ticket, error),
-        )
+        self._start_flow({"cmd": "replace_recovery_codes", "password": password})
 
     def delete_account(self, password: str) -> None:
-        ticket = self._begin()
-        self._say("Deleting account…")
         owner = str(self.account["id"]) if self.account else None
-
-        def ok(_data: dict) -> None:
-            if not self._alive(ticket):
-                return
-            self._forget_session()
-            if self.kept is not None and owner is not None:
-                self.kept.forget_look(owner)
-            self.client.reset()
-            self._clear_local()
-            self.busy = False
-            self.busy_changed.emit(False)
-            self.account_changed.emit(None)
-            self.week_changed.emit()
-            self._say("Account deleted.")
-
-        self.client.request(
-            "DELETE",
-            "/api/auth/account",
-            {"password": password},
-            ok,
-            lambda error: self._fail(ticket, error),
-        )
+        self._start_flow({"cmd": "delete_account", "password": password, "owner": owner})
 
     def _fetch_restore_points(self) -> None:
         if self.account is None:
