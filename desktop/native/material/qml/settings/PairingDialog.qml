@@ -38,7 +38,10 @@ FocusScope {
     readonly property int focusMargin: 6
 
     function ensureVisible(item) {
-        if (!item)
+        var inside = item
+        while (inside && inside !== dialogFlick.contentItem)
+            inside = inside.parent
+        if (!inside)
             return
         var pos = item.mapToItem(dialogFlick.contentItem, 0, 0)
         var top = pos.y - focusMargin
@@ -107,7 +110,7 @@ FocusScope {
         objectName: "pairingCard"
         z: 1
         width: root.phone ? Math.max(240, root.width - 24) : Math.min(540, Math.max(320, root.width - 48))
-        height: Math.min(root.height - 32, inner.implicitHeight + 48)
+        height: Math.min(root.height - 32, inner.implicitHeight + 8 + foot.height + 64)
         anchors.centerIn: parent
         radius: pal.cornerFor(24)
         color: pal.dialogSurface
@@ -119,8 +122,14 @@ FocusScope {
         Flickable {
             id: dialogFlick
             objectName: "pairingScroll"
-            anchors.fill: parent
-            anchors.margins: 24
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: foot.top
+            anchors.leftMargin: 24
+            anchors.rightMargin: 24
+            anchors.topMargin: 24
+            anchors.bottomMargin: 16
             contentWidth: width
             contentHeight: inner.implicitHeight + 8
             clip: true
@@ -473,51 +482,55 @@ FocusScope {
                         }
                     }
                 }
+            }
+        }
 
-                // Footer
-                Item {
-                    width: parent.width
-                    implicitHeight: Math.max(waitRow.implicitHeight, closeBtn.implicitHeight)
-                    height: implicitHeight
-                    Row {
-                        id: waitRow
-                        anchors.left: parent.left
-                        anchors.right: closeBtn.left
-                        anchors.rightMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 8
-                        Rectangle {
-                            width: 8
-                            height: 8
-                            radius: 4
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: pal.primary
-                        }
-                        Text {
-                            width: Math.max(0, parent.width - 16)
-                            wrapMode: Text.WordWrap
-                            text: "Waiting for your phone…"
-                            color: pal.inkMuted
-                            font.family: M3Font.family
-                            font.pixelSize: M3Font.px(13)
-                        }
-                    }
-                    Button {
-                        id: closeBtn
-                        objectName: "pairClose"
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        theme: root.theme
-                        density: root.density
-                        reduceMotion: root.reduceMotion
-                        highContrast: root.highContrast
-                        kind: "text"
-                        text: "Close"
-                        accessName: "Close pairing dialog"
-                        onClicked: root.dismissed()
-                        onActiveFocusChanged: if (activeFocus) root.ensureVisible(this)
-                    }
+        // Footer: outside the scrolling area, so the status and Close stay on screen when the card is capped
+        Item {
+            id: foot
+            objectName: "pairingFoot"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 24
+            implicitHeight: Math.max(waitRow.implicitHeight, closeBtn.implicitHeight)
+            height: implicitHeight
+            Row {
+                id: waitRow
+                anchors.left: parent.left
+                anchors.right: closeBtn.left
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                Rectangle {
+                    width: 8
+                    height: 8
+                    radius: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: pal.primary
                 }
+                Text {
+                    width: Math.max(0, parent.width - 16)
+                    wrapMode: Text.WordWrap
+                    text: "Waiting for your phone…"
+                    color: pal.inkMuted
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(13)
+                }
+            }
+            Button {
+                id: closeBtn
+                objectName: "pairClose"
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                kind: "text"
+                text: "Close"
+                accessName: "Close pairing dialog"
+                onClicked: root.dismissed()
             }
         }
     }
