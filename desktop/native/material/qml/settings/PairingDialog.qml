@@ -69,6 +69,21 @@ FocusScope {
         }
     }
 
+    onStartingChanged: {
+        if (!root.open)
+            return
+        if (starting) {
+            // The two action buttons disable while the new offer is pending; a keyboard
+            // user focused on either would lose focus, so park it on Close meanwhile.
+            var held = Window.activeFocusItem
+            if (held === copyBtn || held === newCodeBtn || held === root || held === null)
+                closeBtn.forceActiveFocus()
+        } else if (code !== "" && Window.activeFocusItem === closeBtn) {
+            // The new offer landed: hand focus back to Copy code.
+            copyBtn.forceActiveFocus()
+        }
+    }
+
     Accessible.role: Accessible.Dialog
     Accessible.name: "Pair a phone"
     Keys.priority: Keys.BeforeItem

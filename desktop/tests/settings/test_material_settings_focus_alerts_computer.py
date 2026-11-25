@@ -621,3 +621,49 @@ def test_a_pairing_start_that_never_answers_times_out(
     pending[0]({"display_code": "0000 9999"}, None)  # type: ignore[index]
     _pump(qapp, 10)
     assert _panel(window).property("state")["pairCode"] == "8888 9999"
+
+
+def test_restarting_a_code_by_keyboard_keeps_focus_in_the_dialog(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX-LIST-4 item 4: keyboard-activating Start a new code disables the focused button;
+    focus must stay inside the dialog and land back on Copy code when the offer lands."""
+    pending: list[object] = []
+    monkeypatch.setattr(window.session, "begin_pairing", lambda done: pending.append(done) or True)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    quick = quick_of(window)
+    scene = quick_window_of(window)
+    assert quick is not None and scene is not None
+
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 1
+    pending.pop()({"display_code": "1234 5678"}, None)  # type: ignore[operator]
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "1234 5678")
+    # Let the dialog's deferred focus on Copy code land before moving focus for the test.
+    _pump(qapp, 10)
+    assert scene.activeFocusItem().objectName() == "pairCopy"
+
+    # Keyboard-activate Start a new code while it is focused.
+    _named(root, "pairNewCode")[0].forceActiveFocus()
+    _pump(qapp)
+    assert scene.activeFocusItem().objectName() == "pairNewCode"
+    QTest.keyClick(quick, Qt.Key.Key_Space)
+    _pump(qapp, 10)
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is True)
+
+    # The focused button disabled itself: focus must still be inside the dialog.
+    held = scene.activeFocusItem()
+    assert held is not None
+    assert held.objectName() in ("pairClose", "pairingScroll", "pairCopy", "pairNewCode"), held.objectName()
+
+    # When the new offer lands, focus is back on Copy code.
+    pending.pop()({"display_code": "9012 3456"}, None)  # type: ignore[operator]
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "9012 3456")
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is False)
+    _pump(qapp, 5)
+    assert scene.activeFocusItem().objectName() == "pairCopy"
