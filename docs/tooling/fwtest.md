@@ -242,6 +242,7 @@ the log cannot name the tests that shared its worker.
 | `rig` | the real-pointer rig playing Material, Day (`material-day-light.json`) and Week (`material-light.json`), under Xvfb; a step that is NOT DONE fails the job | 2 |
 | `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |
 | `mutate-python` | every other mutation case (pull requests and by hand) | 6 |
+| `android` | the phone app's unit tests (`./gradlew testDebugUnitTest`), after cargo-ndk builds the engine's phone library | 1 |
 
 The desktop shards deal the sorted test files out in turn. Each test-running job sets
 `FLEXWEEK_SILENT=1`, and the Python jobs upload their flaky log as an artifact (`flaky-*`, kept 30
