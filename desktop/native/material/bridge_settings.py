@@ -1021,12 +1021,19 @@ class SettingsBridge(QObject):
         self._cancel_pairing_ui()
 
     def _cancel_pairing_ui(self) -> None:
+        """Leaving Settings hides the pop-up and clears the published code and countdown,
+        like dismissing it, so the row cannot show a frozen code."""
         self._pair_gen += 1
-        was_open = self._pair_open
+        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status)
         self._pair_open = False
+        self._pair_code = ""
+        self._pair_status = ""
+        self._pair_seconds = 0
+        self._pair_tries = 0
+        self._pair_copied = False
         if self._pair_watch.isActive():
             self._pair_watch.stop()
-        if was_open:
+        if changed:
             self._publish()
 
     def _clear_pair_copied(self) -> None:

@@ -301,12 +301,13 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
         window.resize(1280, 800)
         _pump(qapp, 10)
 
-    # Escape closes the dialog and restores keyboard focus to Pair a phone.
+    # Escape closes the dialog, clears the code and restores keyboard focus to Pair a phone.
     _named(root, "pairCopy")[0].forceActiveFocus()
     _pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     _pump(qapp, 10)
     assert dialog.property("visible") is False
+    assert _panel(window).property("state")["pairCode"] == ""
     assert scene.activeFocusItem().objectName() == "row_pair"
 
     # Clicking the scrim outside the dialog card also closes it and restores focus to Pair a phone.
@@ -319,6 +320,8 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     _pump(qapp, 10)
     assert dialog.property("visible") is False
     assert _panel(window).property("state")["pairOpen"] is False
+    assert _panel(window).property("state")["pairCode"] == ""
+    assert subtitle() == "Show a code to link a phone."
     assert scene.activeFocusItem().objectName() == "row_pair"
 
     # Close via the real UI button closes the dialog, clears the code and restores focus.
@@ -397,6 +400,32 @@ def test_a_second_pairing_start_waits_until_the_first_offer_is_ready(
     assert _panel(window).property("state").get("pairStarting") is False
     assert _named(root, "pairCopy")[0].property("enabled") is True
     assert _named(root, "pairNewCode")[0].property("enabled") is True
+
+
+def test_leaving_settings_clears_a_shown_pairing_code(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """New 2: leaving Settings clears a shown code and countdown like dismissing does,
+    so the row cannot show a frozen code."""
+    monkeypatch.setattr(
+        window.session, "begin_pairing", lambda done: done({"display_code": "1234 5678"}, None) or True
+    )
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "1234 5678")
+    _bridge(window).showPage("week")
+    _pump(qapp)
+    assert _panel(window).property("state")["pairCode"] == ""
+    assert _panel(window).property("state")["pairStatus"] == ""
+    assert _panel(window).property("state")["pairOpen"] is False
+    root = _open_settings(qapp, window, "sync")
+    _pump(qapp)
+    assert str(_named(root, "row_pair")[0].property("subtitle")) == "Show a code to link a phone."
 
 
 def test_dismissing_or_leaving_settings_cancels_a_pending_pairing_callback(
