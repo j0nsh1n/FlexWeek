@@ -15,12 +15,7 @@ import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
-from backend.assignments import (
-    done_minutes_by_id,
-    planned_minutes_by_id,
-    planned_minutes_from_day,
-    unplanned_minutes,
-)
+from backend.assignments import unplanned_minutes
 from backend.models import parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
@@ -257,20 +252,6 @@ def _request_without_homework(
         )
     )
     return rebuilt
-
-
-def _keep_stored_weeks(step: dict, before: list[dict], after: list[dict]) -> None:
-    """A week on screen from another day than Monday is saved in two Monday weeks; the step keeps each one
-    the save changed, as it was and is (desk/history.rs `keep_stored_weeks`)."""
-    step["weeks"] = json.loads(
-        flexweek_engine.history_keep_stored_weeks(json.dumps(step), json.dumps(before), json.dumps(after))
-    )
-
-
-def _keep_step_revisions(step: dict, data: dict) -> None:
-    step["weeks"] = json.loads(
-        flexweek_engine.history_keep_step_revisions(json.dumps(step), json.dumps(data))
-    )
 
 
 # What the status line says when a save or a week load goes as expected. A reminder on the status line
@@ -1695,15 +1676,6 @@ class NativeSession(QObject):
         held = [item for item in (self._repeat_send or []) if item.get("id") not in ids]
         self._repeat_send = held + changes
 
-    def _acknowledge_repeats(self) -> None:
-        """The server took the intents this save carried. A choice made since is still waiting."""
-        sent = {item["id"]: item for item in (self._repeat_ack or [])}
-        self._repeat_ack = None
-        if not sent:
-            return
-        left = [item for item in (self._repeat_send or []) if sent.get(item["id"]) != item]
-        self._repeat_send = left or None
-
     def repeat_diff(self, after: list[dict]) -> list[dict]:
         """The repeat changes from what stands now to `after`, as the save would send them."""
         return repeat_changes(self.repeats, after, self.week_start)
@@ -2330,39 +2302,26 @@ class NativeSession(QObject):
             self._redo.pop()
 
     def _apply_side(self, step: dict, side: str) -> None:
-        for week in step.get("weeks") or []:
-            if week["week_start"] == self.week_start:
-                self.blocks = deepcopy(week[side])
-        for entry in step.get("assignments") or []:
-            target = entry[side]
-            if target is None:
-                self.assignments.pop(entry["id"], None)
+        applied = json.loads(
+            flexweek_engine.save_travel_side(
+                json.dumps(step),
+                side,
+                self.week_start,
+                json.dumps(self.blocks),
+                json.dumps(self.assignments),
+                json.dumps(self._assignments_basis),
+            )
+        )
+        if applied["blocks"] is not None:
+            self.blocks = applied["blocks"]
+        for item_id, row in applied["assignments"]:
+            if row is None:
+                self.assignments.pop(item_id, None)
             else:
-                live = self.assignments.get(entry["id"])
-                restored = deepcopy(target)
-                restored["revision"] = int((live or {}).get("revision") or 0)
-                if live is None:
-                    # Its numbers were read before the delete, with its sessions as this side has them.
-                    homework = entry["id"]
-                    paired = entry.get("basis")
-                    self._assignments_basis = [
-                        block for block in self._assignments_basis if block.get("assignment_id") != homework
-                    ] + [
-                        deepcopy(block)
-                        for block in (
-                            paired
-                            if paired is not None
-                            else [b for b in self.blocks if b.get("assignment_id") == homework]
-                        )
-                    ]
-                else:
-                    for key in ("unplanned_min", "planned_min", "done_min"):
-                        if key in live:
-                            restored[key] = live[key]
-                    restored["focus_minutes"] = live.get("focus_minutes") or 0
-                    restored["focus_sessions"] = live.get("focus_sessions") or 0
-                self.assignments[entry["id"]] = restored
-            self.dirty_assignments.add(entry["id"])
+                self.assignments[item_id] = row
+        if applied["basis"] is not None:
+            self._assignments_basis = applied["basis"]
+        self.dirty_assignments.update(applied["dirty"])
         self._touch(step["label"])
 
     def undo(self) -> None:
@@ -2416,22 +2375,24 @@ class NativeSession(QObject):
         if status is not None:
             self._save_status = status
         if self.pending_save is None:
-            draft = {
-                "blocks": self.blocks,
-                "revision": self.revision,
-                "committed_blocks": self._committed_blocks,
-                "assignments": self.assignments,
-                "committed_assignments": self._committed_assignments,
-                "travel_step": self._travel_step,
-                "stored_parts": self._stored_parts,
-                "saved_repeats": self._saved_repeats,
-                "repeats": self.repeats,
-                "queued_repeats": self._repeat_send,
-            }
+            draft = json.dumps(
+                {
+                    "blocks": self.blocks,
+                    "revision": self.revision,
+                    "committed_blocks": self._committed_blocks,
+                    "assignments": self.assignments,
+                    "committed_assignments": self._committed_assignments,
+                    "travel_step": self._travel_step,
+                    "stored_parts": self._stored_parts,
+                    "saved_repeats": self._saved_repeats,
+                    "repeats": self.repeats,
+                    "queued_repeats": self._repeat_send,
+                }
+            )
             self.pending_save = json.loads(
                 flexweek_engine.freeze_save(
                     self.week_start,
-                    json.dumps(draft),
+                    draft,
                     list(self.dirty_assignments),
                     self._traveling,
                     operation_id,
@@ -2445,64 +2406,13 @@ class NativeSession(QObject):
             # Kept until this save is acknowledged, so a failure and a later edit still send them.
             self._repeat_ack = list(self._repeat_send) if self._repeat_send else None
             if self._traveling is None and record_history:
-                self._pending_step = capture_step(
-                    self._history_label,
-                    self.week_start,
-                    self._committed_blocks,
-                    self.blocks,
-                    self._committed_assignments,
-                    self.assignments,
-                    set(self.dirty_assignments),
+                step = flexweek_engine.save_history_step(
+                    self.week_start, draft, list(self.dirty_assignments), self._history_label, uuid4
                 )
-                if self._pending_step is not None:
-                    self._pending_step["id"] = str(uuid4())
-                    if plan:
-                        self._plan_step_id = self._pending_step["id"]
+                self._pending_step = None if step is None else json.loads(step)
+                if plan and self._pending_step is not None:
+                    self._plan_step_id = self._pending_step["id"]
         self._post_pending()
-
-    def _shift_held_numbers(self, data: dict) -> None:
-        """A save that moved sessions into or out of a week other than the open one changes what the held
-        `planned_min` and `done_min` count, which were read with the open week as saved. Those weeks' change
-        is put on the held numbers now, so every count is right before the server's next read lands. Planned
-        minutes are counted as the server counts them: from the open week on, and in an earlier week the
-        sessions whose time is still ahead of now; done minutes are counted in every week."""
-        step = self._travel_step if self._traveling else self._pending_step
-        if step is None:
-            return
-        old_side, new_side = ("after", "before") if self._traveling == "undo" else ("before", "after")
-        # A homework Undo or Redo brought back from a delete step has the numbers that step kept, read with
-        # its sessions in every week as they come back; shifting them again would count those twice.
-        restored = {
-            entry["id"]
-            for entry in step.get("assignments") or []
-            if self._traveling and "basis" in entry and entry[new_side] is not None
-        }
-        stored = {week["week_start"]: week for week in data.get("weeks") or []}
-        # The open week's own change is already in the basis; a week from another day is two stored Mondays.
-        open_weeks = {self.week_start, *(stored_weeks_of(self.week_start) if self.first_weekday else ())}
-        old_weeks: list[tuple[str, list[dict]]] = []
-        new_weeks: list[tuple[str, list[dict]]] = []
-        for entry in step.get("weeks") or []:
-            week_start = entry["week_start"]
-            if week_start in open_weeks or week_start not in stored:
-                continue
-            old_weeks.append((week_start, entry[old_side]))
-            new_weeks.append((week_start, stored[week_start].get("blocks") or []))
-        if not old_weeks:
-            return
-        now = datetime.fromtimestamp(self.now_ms() / 1000).strftime("%Y-%m-%dT%H:%M")
-        if not self.first_weekday:
-            count_planned = lambda weeks: planned_minutes_by_id(weeks, self.week_start, now)  # noqa: E731
-        else:
-            count_planned = lambda weeks: planned_minutes_from_day(weeks, self.week_start, now)  # noqa: E731
-        for key, count in (("planned_min", count_planned), ("done_min", done_minutes_by_id)):
-            gone = count(old_weeks)
-            came = count(new_weeks)
-            for homework in (gone.keys() | came.keys()) - restored:
-                for held in (self.assignments, self._committed_assignments):
-                    item = held.get(homework)
-                    if item is not None and item.get(key) is not None:
-                        item[key] = int(item[key]) + came.get(homework, 0) - gone.get(homework, 0)
 
     def _post_pending(self, ticket: int | None = None) -> None:
         if self.pending_save is None:
@@ -2520,92 +2430,68 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            session_weeks_by_id: dict[str, set[str]] = {}
-            changed_weeks = set()
-            for week in data.get("weeks") or []:
-                week_start = week["week_start"]
-                changed_weeks.add(week_start)
-                for block in week.get("blocks") or []:
-                    assignment_id = block.get("assignment_id")
-                    if assignment_id:
-                        session_weeks_by_id.setdefault(assignment_id, set()).add(week_start)
-            for assignment_id, assignment in self.assignments.items():
-                weeks = set(assignment.get("session_weeks") or []) - changed_weeks
-                weeks.update(session_weeks_by_id.get(assignment_id, set()))
-                assignment["session_weeks"] = sorted(weeks)
-            self._shift_held_numbers(data)
-            current = next(
-                (week for week in data.get("weeks") or [] if week["week_start"] == self.week_start),
-                None,
-            )
-            stored_before = self._stored_parts
+            state = {
+                "week_start": self.week_start,
+                "shifted_week": bool(self.first_weekday),
+                "now": datetime.fromtimestamp(self.now_ms() / 1000).strftime("%Y-%m-%dT%H:%M"),
+                "sent_repeats": "repeats" in payload,
+                "assignments": self.assignments,
+                "committed_assignments": self._committed_assignments,
+                "stored_parts": self._stored_parts,
+                "traveling": self._traveling,
+                "travel_step": self._travel_step,
+                "pending_step": self._pending_step,
+                "plan_step_id": self._plan_step_id,
+                "join": self._join_step,
+                "held": held,
+                "sent_intents": self._repeat_ack,
+                "waiting_intents": self._repeat_send,
+            }
+            answer = json.loads(flexweek_engine.save_answer(json.dumps(data), json.dumps(state)))
+            for assignment_id, weeks in answer["session_weeks"].items():
+                self.assignments[assignment_id]["session_weeks"] = weeks
+            for assignment_id, counts in answer["live_counts"].items():
+                self.assignments[assignment_id].update(counts)
+            for assignment_id, counts in answer["saved_counts"].items():
+                self._committed_assignments[assignment_id].update(counts)
+            current = answer["open_week"]
             if current is not None:
-                self.blocks = list(current["blocks"])
+                self.blocks = current["blocks"]
                 self.revision = current["revision"]
-                self._stored_parts = list(current.get("stored") or [])
+                self._stored_parts = current["stored"]
                 self.dirty = False
                 self.conflict = False
-                if "repeats" in payload:
-                    self.repeats = list(current.get("repeats") or [])
+                if current["repeats"] is not None:
+                    self.repeats = current["repeats"]
                     self._saved_repeats = deepcopy(self.repeats)
-            for result in data.get("assignments", []):
-                self.dirty_assignments.discard(result["id"])
-                if result.get("assignment"):
-                    stored = dict(result["assignment"])
-                    stored["revision"] = result["revision"]
-                    held_copy = self.assignments.get(result["id"], {})
-                    stored["session_weeks"] = list(held_copy.get("session_weeks") or [])
-                    # The save's echo has no server numbers; the held ones still match the saved-week copy.
-                    for key in ("unplanned_min", "planned_min", "done_min"):
-                        if key in held_copy:
-                            stored[key] = held_copy[key]
-                    self.assignments[result["id"]] = stored
+            for assignment_id, stored in answer["homework"]:
+                self.dirty_assignments.discard(assignment_id)
+                if stored is None:
+                    self.assignments.pop(assignment_id, None)
                 else:
-                    self.assignments.pop(result["id"], None)
-            planned = False
-            if self._traveling == "undo" and self._travel_step is not None:
-                _keep_step_revisions(self._travel_step, data)
-                push_step(self._redo, self._travel_step)
-                self._say("Undid " + self._travel_step["label"] + ".")
-            elif self._traveling == "redo" and self._travel_step is not None:
-                _keep_step_revisions(self._travel_step, data)
-                push_step(self._undo, self._travel_step)
-                self._say("Redid " + self._travel_step["label"] + ".")
+                    self.assignments[assignment_id] = stored
+            planned = answer["planned"]
+            if answer["place"] == "redo":
+                push_step(self._redo, answer["step"])
+            elif answer["place"] == "undo":
+                push_step(self._undo, answer["step"])
+            elif answer["place"] == "join":
+                join_step(self._undo, answer["step"])
+            if answer["clear_redo"]:
+                self._redo.clear()
+            if planned:
+                # `planned` says it, with Undo.
+                self.message = answer["words"]
             else:
-                # Steps built by hand, such as a move to another date, carry no id, so no id never matches.
-                planned = (
-                    self._pending_step is not None
-                    and self._plan_step_id is not None
-                    and self._pending_step.get("id") == self._plan_step_id
-                )
-                if self._pending_step is not None:
-                    stored_weeks = {week["week_start"]: week for week in data.get("weeks") or []}
-                    for entry in self._pending_step["weeks"]:
-                        stored = stored_weeks.get(entry["week_start"])
-                        if stored is not None:
-                            entry["after"] = deepcopy(stored["blocks"])
-                    _keep_step_revisions(self._pending_step, data)
-                    _keep_stored_weeks(self._pending_step, stored_before, self._stored_parts)
-                    for entry in self._pending_step["assignments"]:
-                        stored = self.assignments.get(entry["id"])
-                        entry["after"] = None if stored is None else deepcopy(stored)
-                    if self._join_step:
-                        join_step(self._undo, self._pending_step)
-                    else:
-                        push_step(self._undo, self._pending_step)
-                    self._redo.clear()
-                if planned:
-                    # `planned` says it, with Undo.
-                    self.message = held or "Saved."
-                else:
-                    self._say(held if held is not None else "Saved.")
+                self._say(answer["words"])
             self._traveling = None
             self._travel_step = None
             self._pending_step = None
             self._plan_step_id = None
             self._join_step = False
             self.pending_save = None
-            self._acknowledge_repeats()
+            self._repeat_send = answer["waiting_intents"]
+            self._repeat_ack = None
             self._save_status = None
             self._month_cache.clear()
             self._month_gen += 1
@@ -2689,47 +2575,47 @@ class NativeSession(QObject):
             self._spread_after_save = None
             self._allow_split_pending = None
             self._join_step = False
-            refused_travel = bool(self._traveling) and error.status == 409
-            if self._traveling and self._travel_step is not None:
-                if error.status != 409:
-                    self.blocks = deepcopy(self._committed_blocks)
-                    self.assignments = deepcopy(self._committed_assignments)
-                    self.dirty_assignments.clear()
-                    self.dirty = False
-                    self.pending_save = None
-                    self.conflict = False
-                if self._traveling == "undo":
-                    self._undo.append(self._travel_step)
-                else:
-                    self._redo.append(self._travel_step)
+            refusal = json.loads(
+                flexweek_engine.save_refusal(
+                    error.status, error.message, self._traveling, self._travel_step is not None
+                )
+            )
+            if refusal["roll_back"]:
+                self.blocks = deepcopy(self._committed_blocks)
+                self.assignments = deepcopy(self._committed_assignments)
+                self.dirty_assignments.clear()
+                self.dirty = False
+                self.pending_save = None
+                self.conflict = False
+            if refusal["step_back"] == "undo":
+                self._undo.append(self._travel_step)
+            elif refusal["step_back"] == "redo":
+                self._redo.append(self._travel_step)
+            if refusal["step_back"] is not None:
                 self._traveling = None
                 self._travel_step = None
-            self.conflict = error.status == 409
-            if error.status == 409 and self._preview_attempt:
+            self.conflict = refusal["conflict"]
+            if refusal["conflict"] and self._preview_attempt:
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
-            if error.status == 409 and self._move_attempt:
+            if refusal["conflict"] and self._move_attempt:
                 self._attempts.pop(self._move_attempt, None)
                 self._move_attempt = None
             self._save_status = None
             # A save the server read and refused (not a lost connection or another window's change) will be
             # refused again as it is: `drop_refused_save` lets a sheet take it back and try a corrected one.
-            self.last_save_refused, words = flexweek_engine.save_failure(error.status, error.message)
-            self._say(words)
+            self.last_save_refused = refusal["refused"]
+            self._say(refusal["words"])
             self.save_finished.emit(False, self.message)
             self.week_changed.emit()
-            if refused_travel:
+            if refusal["reload_words"] is not None:
                 # The week on screen is the undone one, which the server never stored. Showing it
                 # would leave Undo greyed over a week that is not the saved one.
                 self.pending_save = None
                 self.dirty = False
                 self.conflict = False
                 self.dirty_assignments.clear()
-                self.load_week(
-                    self.week_start,
-                    discard=True,
-                    said="Undo did not go through. Your week was reloaded as it's saved.",
-                )
+                self.load_week(self.week_start, discard=True, said=refusal["reload_words"])
 
         self.client.request("POST", "/api/changes", deepcopy(payload), ok, err)
 
