@@ -235,6 +235,13 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert _named(root, "pairingDialog")[0].property("visible") is True
     assert "3 tries left." in str(_named(root, "pairingStatus")[0].property("text"))
 
+    # The code tiles use the bundled mono family: one loaded name, never a fallback list.
+    tile = _named(root, "pairingTileFirst")[0]
+    digits = next(child for child in tile.childItems() if child.property("text"))
+    family = str(digits.property("font").family())
+    assert "," not in family, family
+    assert "JetBrains" in family, family
+
     # The steps name the phone's real screen, not a desktop pointer to it.
     shown = [str(item.property("text")) for item in _texts(root)]
     assert any("Pair with your computer" in line for line in shown)

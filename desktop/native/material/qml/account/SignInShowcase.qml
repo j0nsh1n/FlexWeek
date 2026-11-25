@@ -567,7 +567,7 @@ Item {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         text: "24:18"
                                         color: pal.inkSurface
-                                        font.family: "JetBrains Mono, monospace"
+                                        font.family: M3Font.monoFamily
                                         font.pixelSize: M3Font.px(26, 26)
                                         font.weight: 700
                                     }

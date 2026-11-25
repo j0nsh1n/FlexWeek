@@ -324,7 +324,7 @@ FocusScope {
                                 anchors.centerIn: parent
                                 text: root.firstHalf
                                 color: pal.inkSurface
-                                font.family: "JetBrains Mono, monospace"
+                                font.family: M3Font.monoFamily
                                 font.pixelSize: M3Font.px(inner.compact ? 22 : 28, inner.digitCap)
                                 font.weight: 700
                                 font.letterSpacing: inner.compact ? 1.5 : 3
@@ -355,7 +355,7 @@ FocusScope {
                                 anchors.centerIn: parent
                                 text: root.secondHalf
                                 color: pal.inkSurface
-                                font.family: "JetBrains Mono, monospace"
+                                font.family: M3Font.monoFamily
                                 font.pixelSize: M3Font.px(inner.compact ? 22 : 28, inner.digitCap)
                                 font.weight: 700
                                 font.letterSpacing: inner.compact ? 1.5 : 3
