@@ -12,7 +12,7 @@ from desktop.tests.grid_support import WEDNESDAY, hold_clock
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
 
-PLACED = "Placed 1 homework block."
+PLACED = "Placed 1 homework session."
 
 
 def add_essay(qapp: QApplication, window: NativeWindow) -> None:
@@ -54,7 +54,7 @@ def undo_still_offered(window: NativeWindow) -> tuple[bool, str, bool, str]:
     return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.accessibleName()
 
 
-MATERIAL_PLACED = "Placed 1 of 1"
+MATERIAL_PLACED = "Placed 1 of 1 homework sessions"
 
 
 def planned_in_material(qapp: QApplication, window: NativeWindow) -> QObject:

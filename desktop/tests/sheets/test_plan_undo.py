@@ -73,10 +73,10 @@ def test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back(
     monkeypatch.setattr(bridge, "note", recorded)
     _press_plan(qapp, window, root)
     monkeypatch.undo()
-    assert shown == [("Placed 3 of 3", "UNDO")], "said once, with its Undo"
+    assert shown == [("Placed 3 of 3 homework sessions", "UNDO")], "said once, with its Undo"
     planned = stored_blocks(window)
     assert planned != before
-    assert _snack(window) == "Placed 3 of 3" and _action(window) == "UNDO"
+    assert _snack(window) == "Placed 3 of 3 homework sessions" and _action(window) == "UNDO"
 
     _undo_on_the_snackbar(qapp, window, root)
     assert stored_blocks(window) == before, "one Undo takes back every block the plan placed"
@@ -217,5 +217,5 @@ def test_plan_waits_for_a_failed_save_before_offering_undo(
     _bridge(window).week.plan()
     pump(qapp, 5)
     assert stored_blocks(window) == before
-    assert session.message == "Saving your last change… Plan will work in a moment."
+    assert session.message == "Saving your last change… Try Plan again in a moment."
     assert not (_snack(window).startswith("Placed") and _action(window) == "UNDO")

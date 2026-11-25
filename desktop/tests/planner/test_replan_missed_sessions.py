@@ -94,7 +94,7 @@ def test_replan_all_moves_the_missed_essay_to_a_time_ahead_by_the_planners_usual
     assert not moved.get("pinned")
     assert session.homework_time_needed() == []
     assert _sentence(session) == EVERYTHING
-    assert session.message == "Placed 1 homework block."
+    assert session.message == "Placed 1 homework session."
     fresh = {key: value for key, value in moved.items() if key != "start"}
     fresh["days"] = [0, 1, 2, 3, 4, 5]
     session.add_block(fresh)
@@ -118,7 +118,7 @@ def test_replan_all_leaves_the_essay_with_no_time_when_none_fits_before_it_is_du
     assert left["duration_min"] == 60
     assert [item["minutes"] for item in session.homework_time_needed()] == [60]
     assert _sentence(session) == "1 h still needs a time"
-    assert session.message == "Nothing placed. 1 with no time yet."
+    assert session.message == "No homework was placed. 1 still needs a time."
 
 
 def test_plan_moves_the_missed_essay_to_a_time_ahead_as_replan_all_does(
@@ -135,7 +135,7 @@ def test_plan_moves_the_missed_essay_to_a_time_ahead_as_replan_all_does(
     assert moved["duration_min"] == 60
     assert session.homework_time_needed() == []
     assert _sentence(session) == EVERYTHING
-    assert session.message == "Placed 1 homework block."
+    assert session.message == "Placed 1 homework session."
 
 
 def test_plan_leaves_a_passed_session_with_no_time_when_none_fits_before_it_is_due(
@@ -529,7 +529,7 @@ def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_ti
     assert session.minutes_left_for("essay") == 5
     assert session.remaining_for("essay") == 0
     assert session.plan_unfinished("essay") is None
-    assert session.message == "History essay has 5 min left, less than the 15 minutes Plan places."
+    assert session.message == "History essay has 5 min left. Plan needs at least 15 minutes."
 
 
 def test_replan_all_counts_a_missed_session_again_when_another_homework_gets_a_fair_share(
@@ -579,4 +579,4 @@ def test_plan_places_a_missed_session_together_with_new_homework(
     _settle(qapp, session)
     assert session.plan_counts == (2, 0)
     assert session.plan_open == 0
-    assert session.message == "Placed 2 homework blocks."
+    assert session.message == "Placed 2 homework sessions."

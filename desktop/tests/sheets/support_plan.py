@@ -22,7 +22,7 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 TOO_LATE = "That due time has passed. Choose a later one."
-PAST_WEEK = "This week is over, so nothing was planned. Plan this week or a later one."
+PAST_WEEK = "That week is over. Open this week or a later one, then plan again."
 THURSDAY_AT_TEN = datetime.combine(START_MONDAY + timedelta(days=3), time(10, 0))
 
 

@@ -603,14 +603,14 @@ def test_make_a_copy_lists_it_with_its_time_and_the_name_box_empties(
     # The week the seed saved is the one week the copy holds.
     assert _labels(shell) == [f"Before term 2 · {point['created_at']} · 1 week"]
     assert _text(shell, "restoreLabel") == "", "ready for the next name"
-    assert shell.session.message == "Saved restore point Before term 2."
+    assert shell.session.message == "Saved copy Before term 2."
 
 
 def test_a_copy_needs_a_name(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     _open_restore(qapp, shell, sheets)
     _click(shell, "restoreCreate")
     assert shell.session.restore_points == []
-    assert _text(shell, "restoreNote") == "Give the restore point a name."
+    assert _text(shell, "restoreNote") == "Name the saved copy."
 
 
 def test_the_sheet_says_where_copies_are_kept(qapp: QApplication, shell: NativeWindow, sheets) -> None:
