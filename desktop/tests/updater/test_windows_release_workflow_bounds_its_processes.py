@@ -4,13 +4,12 @@ smoke report when the process fails."""
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-WORKFLOW = Path(__file__).resolve().parents[3] / ".github/workflows/release-windows.yml"
+from desktop.tests.updater.release_workflows import release_text
 
 
 def workflow_step(name: str) -> str:
-    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    lines = release_text().splitlines()
     marker = f"      - name: {name}"
     start = lines.index(marker)
     run_line = next(
@@ -35,7 +34,7 @@ def assert_bounded_process(script: str, context: str) -> None:
 
 
 def test_both_release_jobs_have_runner_timeouts() -> None:
-    content = WORKFLOW.read_text(encoding="utf-8")
+    content = release_text()
     for job in ("windows", "linux"):
         assert re.search(
             rf"(?m)^  {job}:\n(?:    [^\n]*\n|\n)*?    timeout-minutes: 120$", content

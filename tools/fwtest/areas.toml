@@ -374,7 +374,8 @@ paths = [
   "desktop/check_bundle.py", "desktop/finish_linux_bundle.sh", "desktop/package_linux.sh",
   "desktop/smoke_linux_containers.sh", "desktop/smoke_mcp.py", "desktop/readme.py",
   "packaging/", "README.md", "scripts/dev-release.sh",
-  ".github/workflows/dev-build.yml", ".github/workflows/release-windows.yml",
+  ".depot/workflows/dev-build.yml", ".github/workflows/release-windows.yml",
+  ".depot/workflows/release-linux.yml", "desktop/tests/updater/release_workflows.py",
 ]
 areas = ["updater"]
 
@@ -448,7 +449,7 @@ paths = ["scripts/rig/"]
 areas = ["rig"]
 
 [[rule]]
-paths = ["tools/fwtest/", ".github/workflows/verify.yml"]
+paths = ["tools/fwtest/", ".depot/workflows/verify.yml"]
 areas = ["fwtest"]
 
 # A mutation spec's cases are selected through the spec itself (see the docs); no pytest area.
