@@ -664,7 +664,7 @@ fn the_words_for_each_failure_are_the_windows() {
         (
             401,
             json!("Please sign in"),
-            "Your session ended. Sign in again.",
+            "Sign in again. If you were signing in, check your username and password.",
         ),
         (
             422,
