@@ -11,10 +11,12 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from desktop.tests.updater.release_workflows import release_text
+
 ROOT = Path(__file__).resolve().parents[3]
 ISS = (ROOT / "packaging/windows/flexweek.iss").read_text(encoding="utf-8")
 WXS = ET.parse(ROOT / "packaging/windows/flexweek.wxs").getroot()
-WORKFLOW = (ROOT / ".github/workflows/release-windows.yml").read_text(encoding="utf-8")
+WORKFLOW = release_text()
 NS = {"wix": "http://wixtoolset.org/schemas/v4/wxs"}
 SETUP_EXE = "FlexWeek-Windows-x64-Setup.exe"
 MSI = "FlexWeek-Windows-x64.msi"

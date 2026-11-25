@@ -191,7 +191,7 @@ scripts/build-linux-local.sh          # -> dist/release/FlexWeek-Linux-x86_64.ta
 scripts/build-linux-local.sh --smoke  # and run the Developer build workflow's smoke tests
 ```
 
-It runs the build and smoke steps of `.github/workflows/dev-build.yml` with the same
+It runs the build and smoke steps of `.depot/workflows/dev-build.yml` with the same
 CPython build the runner gets (`desktop/linux/build-container/Containerfile`; keep
 its `PYTHON_VERSION` in step with what the workflow's `3.14` resolves to). Like the
 workflow it stamps a developer version and channel (`1.2.0.YYYYMMDDHHMM`, `dev`) into
@@ -402,8 +402,8 @@ Distribute it as a release asset instead. GitHub Releases allow 2 GB per file.
 ```
 
 This machine's Fedora Python needs glibc 2.42 (`GLIBC_ABI_GNU2_TLS`). A
-release Linux build has to be made on Ubuntu 24.04 (the GitHub Actions
-`linux` job), not on this host. `desktop/check_bundle.py` fails the Fedora
+release Linux build has to be made on Ubuntu 24.04 (the `linux` job of
+`.depot/workflows/release-linux.yml` on Depot CI), not on this host. `desktop/check_bundle.py` fails the Fedora
 bundle on purpose.
 
 The archive holds one `FlexWeek/` folder with the app, `README.txt`,
