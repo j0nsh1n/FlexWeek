@@ -17,6 +17,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
@@ -28,7 +30,7 @@ from desktop.tests.day.support_material_day import (  # noqa: E402
     seed_thursday,
 )
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, show_material, visuals  # noqa: E402
+from desktop.tests.material_support import pump, quick_of, show_material, visuals  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
 
@@ -142,5 +144,59 @@ def test_the_day_screen_has_the_named_controls(qapp: QApplication, window: Nativ
         "dayMiniMonth",
         "dayNowLabel",
         "dayScroller",
+        "dayHoursCard",
+        "daySideDivider",
+        "dayRightPanel",
     ):
         assert name in names, name
+
+
+def test_dragging_the_day_divider_resizes_the_right_panel_and_remembers_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = show_material(qapp, window)
+    bridge = bridge_of(window)
+    bridge.showPage("day")
+    pump(qapp)
+
+    by_name = {str(item.objectName()): item for item in visuals(root) if item.objectName()}
+    panel = by_name["dayRightPanel"]
+    divider = by_name["daySideDivider"]
+    start_width = int(round(panel.width()))
+    assert start_width == 312
+
+    quick = quick_of(window)
+    assert quick is not None
+    centre = divider.mapToScene(QPointF(divider.width() / 2, divider.height() / 2))
+    start_pt = centre.toPoint()
+    # Dragging the divider left widens the right panel by 72 px.
+    end_pt = (centre - QPointF(72, 0)).toPoint()
+    QTest.mousePress(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start_pt)
+    pump(qapp)
+    QTest.mouseMove(quick, end_pt)
+    pump(qapp)
+    QTest.mouseRelease(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, end_pt)
+    pump(qapp)
+
+    resized = int(round(panel.width()))
+    assert resized == start_width + 72
+    assert int(bridge.property("daySideWidth")) == resized
+
+    # Saving another look choice keeps the remembered divider width, and a fresh read restores it.
+    bridge.settingsBridge.setDensity("compact")
+    pump(qapp)
+    bridge.set_appearance("light", "std")
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == resized
+    assert int(round(panel.width())) == resized
+
+    # Out-of-bounds values clamp to the sensible min/max range.
+    bridge.setDaySideWidth(80)
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 240
+    bridge.setDaySideWidth(900)
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 480
+    bridge.setDaySideWidth(312)
+    bridge.settingsBridge.setDensity("comfortable")
+    pump(qapp)

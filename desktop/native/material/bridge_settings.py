@@ -73,6 +73,7 @@ from desktop.native.material.theme import (
     read_look_tier,
     read_material_choice,
     read_saved_material,
+    read_settings_nav_width,
     read_shortcuts,
     reading_problems,
     resolved_mode,
@@ -143,9 +144,7 @@ AUDIO = (
     ("Spotify", "spotify"),
 )
 AUDIO_VALUES = {value for _label, value in AUDIO}
-TONES = tuple(
-    {"label": ALARM_TONE_LABELS.get(name, name.title()), "value": name} for name in SOUNDS
-)
+TONES = tuple({"label": ALARM_TONE_LABELS.get(name, name.title()), "value": name} for name in SOUNDS)
 # (key, saved field, smallest, largest) of the focus timer's lengths, in minutes. The ranges are the
 # backend's (Preferences).
 TIMER_LENGTHS = {
@@ -904,6 +903,14 @@ class PreviewBridge(QObject):
     def reduceMotion(self) -> bool:
         return True
 
+    @Property(int, notify=changed)
+    def daySideWidth(self) -> int:
+        return int(getattr(self._material, "daySideWidth", 312))
+
+    @Slot(int)
+    def setDaySideWidth(self, width: int) -> None:
+        pass
+
 
 class SettingsBridge(QObject):
     """The five sections, and the advanced page that stays a draft until Done."""
@@ -1398,6 +1405,7 @@ class SettingsBridge(QObject):
 
     def _commit(self) -> None:
         path = self._window._look_path()
+        stored = self._bridge._stored_look()  # type: ignore[attr-defined]
         material = pack_material(
             self._choice,
             self._advanced,
@@ -1406,6 +1414,8 @@ class SettingsBridge(QObject):
             self._saved,
             self._font,
             self._tier,
+            day_side_width=int(getattr(self._bridge, "daySideWidth", 312)),
+            settings_nav_width=read_settings_nav_width(stored),
         )
         store_material(path, material)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
@@ -1808,7 +1818,7 @@ class SettingsBridge(QObject):
         clock_24h = (_prefs_of(self._window)).get("clock_24h") is True
         try:
             return this_week_line(session.blocks, [school], clock_24h, session.week_start) or ""
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return ""
 
     def _redraw_study(self) -> None:
@@ -1896,9 +1906,7 @@ class SettingsBridge(QObject):
             return
         session = self._window.session
         cutoff = _prefs_of(self._window).get("day_cutoff") or None
-        if session.save_availability(
-            self._study.saved_protected(), cutoff, self._study.saved_windows()
-        ):
+        if session.save_availability(self._study.saved_protected(), cutoff, self._study.saved_windows()):
             self._study.dirty = False
             self._study.error = ""
         self._publish()
@@ -1952,12 +1960,16 @@ class SettingsBridge(QObject):
             school.dirty = False
             self._publish()
             return
-        made = copy.deepcopy(usual) if usual is not None else {
-            "id": SETUP_SCHOOL_ID,
-            "kind": "locked",
-            "title": "School",
-            "category": "class",
-        }
+        made = (
+            copy.deepcopy(usual)
+            if usual is not None
+            else {
+                "id": SETUP_SCHOOL_ID,
+                "kind": "locked",
+                "title": "School",
+                "category": "class",
+            }
+        )
         made.update(days=sorted(school.days), start=school.start, duration_min=school.minutes())
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(made)])

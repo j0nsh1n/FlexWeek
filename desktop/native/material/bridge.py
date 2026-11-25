@@ -32,6 +32,8 @@ from desktop.native.material.bridge_settings import SettingsBridge
 from desktop.native.material.bridge_sheets import SheetsBridge
 from desktop.native.material.bridge_week import WeekBridge
 from desktop.native.material.theme import (
+    DAY_SIDE_DEFAULT,
+    DAY_SIDE_RANGE,
     DEFAULT_CONTRAST,
     DEFAULT_DENSITY,
     DEFAULT_PRESET,
@@ -40,14 +42,21 @@ from desktop.native.material.theme import (
     advanced_default,
     dress_theme,
     hour_row_px,
+    kept_material,
     mode_of,
+    pack_material,
     read_accent,
     read_advanced,
+    read_day_side_width,
     read_font,
     read_letter_keys,
+    read_look_tier,
     read_material_choice,
+    read_saved_material,
+    read_settings_nav_width,
     read_shortcuts,
     scheme,
+    store_material,
     stroke_for,
     theme_object,
 )
@@ -139,6 +148,7 @@ class MaterialBridge(QObject):
         self._shortcuts = True
         self._letter_keys = False
         self._font = ""
+        self._day_side_width = DAY_SIDE_DEFAULT
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
@@ -181,6 +191,7 @@ class MaterialBridge(QObject):
         self._advanced = read_advanced(stored)
         self._shortcuts = read_shortcuts(stored)
         self._letter_keys = read_letter_keys(stored)
+        self._day_side_width = read_day_side_width(stored)
         worn_dark = mode == "dark"
         resolved = mode_of(choice, worn_dark)
         self._font = read_font(stored)
@@ -449,6 +460,38 @@ class MaterialBridge(QObject):
         """T, D, W, M, J, K, C, P, Z and F, only when Settings turned that on. It starts off."""
         return self._letter_keys
 
+    @Property(int, notify=changed)
+    def daySideWidth(self) -> int:  # noqa: N802 - the name QML reads
+        """Remembered width of the Day right sidebar (Now card + mini month)."""
+        return self._day_side_width
+
+    @Slot(int)
+    def setDaySideWidth(self, width: int) -> None:  # noqa: N802 - the name QML calls
+        low, high = DAY_SIDE_RANGE
+        clamped = max(low, min(high, int(width)))
+        if clamped == self._day_side_width:
+            return
+        self._day_side_width = clamped
+        path = self._window._look_path()
+        stored = self._stored_look()
+        kept = kept_material(path)
+        if kept is not None:
+            store_material(path, {**kept, "daySideWidth": clamped})
+        else:
+            material = pack_material(
+                read_material_choice(stored),
+                read_advanced(stored),
+                read_shortcuts(stored),
+                read_letter_keys(stored),
+                read_saved_material(stored),
+                read_font(stored),
+                read_look_tier(stored),
+                day_side_width=clamped,
+                settings_nav_width=read_settings_nav_width(stored),
+            )
+            store_material(path, material)
+        self.changed.emit()
+
     @Property(bool, constant=True)
     def later(self) -> bool:
         """Day, Month, and My day are part of this shell. The flag stays for older readers."""
@@ -661,9 +704,7 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
-    def note(
-        self, text: str, *, action: str = "UNDO", on_action: Callable[[], None] | None = None
-    ) -> None:
+    def note(self, text: str, *, action: str = "UNDO", on_action: Callable[[], None] | None = None) -> None:
         """One snackbar line. `on_action` is what its button does; Undo and Retry need none."""
         said_before = self._snack
         self._snack = text

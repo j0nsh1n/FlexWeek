@@ -31,6 +31,12 @@ Item {
     readonly property bool highContrast: bridge ? bridge.highContrast : false
     readonly property int row: bridge && bridge.dayHourRow ? bridge.dayHourRow : 56
     readonly property int dayIndex: board ? board.dayIndex : -1
+    readonly property int minSideWidth: 240
+    readonly property int maxSideWidth: Math.max(minSideWidth, Math.min(480, Math.floor(width * 0.48)))
+    readonly property int rememberedSideWidth: bridge && bridge.daySideWidth ? bridge.daySideWidth : 312
+    property int dragSideWidth: -1
+    readonly property int sideWidth: Math.max(minSideWidth, Math.min(maxSideWidth, dragSideWidth >= 0 ? dragSideWidth : rememberedSideWidth))
+    readonly property int outerPad: phone || passive ? 0 : 12
 
     // A block's menu is open on Day: the zoom keys wait, as on Week.
     readonly property bool menuOpen: hoursLoader.item ? hoursLoader.item.menuOpen : false
@@ -64,131 +70,254 @@ Item {
         Accessible.name: text
     }
 
-    MonthSide {
-        id: side
-        passive: root.passive
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        phone: root.phone
-        theme: root.theme
-        density: root.density
-        reduceMotion: root.reduceMotion
-        highContrast: root.highContrast
-        board: root.board
-        year: root.board ? root.board.year : 2026
-        month: root.board ? root.board.month : 1
-        today: root.board ? root.board.miniDay : 0
-    }
-
+    // Left (main) full-height day timeline pane
     Item {
         id: pane
-        anchors.left: side.visible ? side.right : parent.left
-        anchors.right: parent.right
+        anchors.left: parent.left
+        anchors.leftMargin: root.outerPad
+        anchors.right: root.phone ? parent.right : sideDivider.left
+        anchors.rightMargin: root.phone ? 0 : 0
         anchors.top: parent.top
+        anchors.topMargin: root.outerPad
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: root.phone ? 0 : root.outerPad
 
         Column {
             id: heading
             width: parent.width
-            spacing: 12
-            topPadding: root.phone ? 16 : 24
-            leftPadding: root.phone ? 16 : 24
-            rightPadding: root.phone ? 16 : 24
-            bottomPadding: 8
+            spacing: 10
+            topPadding: root.phone ? 12 : 0
+            leftPadding: root.phone ? 16 : 0
+            rightPadding: root.phone ? 16 : 0
+            bottomPadding: 10
 
             Row {
-                spacing: 4
-                IconButton {
-                    objectName: "dayPrevious"
-                    theme: root.theme
-                    density: root.density
-                    reduceMotion: root.reduceMotion
-                    highContrast: root.highContrast
-                    icon: "chevron_left"
-                    accessName: "Previous day"
-                    activeFocusOnTab: !root.passive
-                    onClicked: if (root.board) root.board.previousDay()
+                width: parent.width - heading.leftPadding - heading.rightPadding
+                spacing: 12
+
+                Rectangle {
+                    id: dayNavPill
+                    height: 36
+                    width: dayNavRow.implicitWidth + 8
+                    radius: palette.cornerFor(18)
+                    color: palette.cardSurface
+                    border.width: root.highContrast ? 1.5 : 1
+                    border.color: root.highContrast ? palette.outline : palette.outlineVariant
+
+                    Row {
+                        id: dayNavRow
+                        anchors.centerIn: parent
+                        spacing: 0
+                        IconButton {
+                            objectName: "dayPrevious"
+                            small: true
+                            anchors.verticalCenter: parent.verticalCenter
+                            theme: root.theme
+                            density: root.density
+                            reduceMotion: root.reduceMotion
+                            highContrast: root.highContrast
+                            icon: "chevron_left"
+                            accessName: "Previous day"
+                            activeFocusOnTab: !root.passive
+                            onClicked: if (root.board) root.board.previousDay()
+                        }
+                        IconButton {
+                            objectName: "dayNext"
+                            small: true
+                            anchors.verticalCenter: parent.verticalCenter
+                            theme: root.theme
+                            density: root.density
+                            reduceMotion: root.reduceMotion
+                            highContrast: root.highContrast
+                            icon: "chevron_right"
+                            accessName: "Next day"
+                            activeFocusOnTab: !root.passive
+                            onClicked: if (root.board) root.board.nextDay()
+                        }
+                    }
                 }
-                IconButton {
-                    objectName: "dayNext"
-                    theme: root.theme
-                    density: root.density
-                    reduceMotion: root.reduceMotion
-                    highContrast: root.highContrast
-                    icon: "chevron_right"
-                    accessName: "Next day"
-                    activeFocusOnTab: !root.passive
-                    onClicked: if (root.board) root.board.nextDay()
+
+                Text {
+                    objectName: "dayLeftLine"
+                    width: Math.max(0, parent.width - dayNavPill.width - parent.spacing)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.board ? root.board.leftLine : ""
+                    wrapMode: Text.WordWrap
+                    color: palette.inkMuted
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(15)
+                    font.weight: 500
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
                 }
             }
 
-            Text {
-                objectName: "dayLeftLine"
+            // On phone widths, NowCard stacks above the timeline; on desktop it lives in the right panel.
+            Item {
+                id: phoneNowSlot
+                visible: root.phone && nowCard.shown
                 width: heading.width - heading.leftPadding - heading.rightPadding
-                text: root.board ? root.board.leftLine : ""
-                wrapMode: Text.WordWrap
-                color: palette.inkMuted
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(16)
-                font.weight: 400
-                Accessible.role: Accessible.StaticText
-                Accessible.name: text
-            }
-
-            NowCard {
-                width: heading.width - heading.leftPadding - heading.rightPadding
-                passive: root.passive
-                shown: !!(root.board && root.board.showNow)
-                pageHeading: root.pageHeading
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
-                timerTitle: root.board ? root.board.timerTitle : ""
-                timerLine: root.board ? root.board.timerLine : ""
-                timerEnded: root.board ? root.board.timerEnded : false
-                timerCanFinish: root.board ? root.board.timerCanFinish : false
-                timerDone: root.board ? root.board.timerDone : false
-                scope: "day"
-                title: root.board ? root.board.nowTitle : ""
-                focusTitle: root.board ? root.board.focusTitle : ""
-                busy: !!(root.board && root.board.nowBusy)
-                line: root.board ? root.board.nowLine : ""
-                onStartFocus: if (root.board) root.board.startFocus()
-                onMarkFinished: if (root.board) root.board.markFinished()
-                onStartAgain: if (root.board) root.board.startAgain()
-                onDismissFinished: if (root.board) root.board.dismissFinished()
+                height: visible ? nowCard.height : 0
             }
         }
 
-        Loader {
-            id: hoursLoader
+        Rectangle {
+            id: hoursCard
+            objectName: "dayHoursCard"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: heading.bottom
             anchors.bottom: parent.bottom
-            active: root.passive || (root.bridge && root.bridge.screen === "day")
-            sourceComponent: HoursPane {
-                bridge: root.bridge
+            radius: root.phone ? 0 : palette.cornerFor(16)
+            color: palette.cardSurface
+            border.width: root.phone ? 0 : (root.highContrast ? 1.5 : 1)
+            border.color: root.highContrast ? palette.outline : palette.outlineVariant
+            clip: true
+
+            Loader {
+                id: hoursLoader
+                anchors.fill: parent
+                active: root.passive || (root.bridge && root.bridge.screen === "day")
+                sourceComponent: HoursPane {
+                    bridge: root.bridge
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    passive: root.passive
+                    phone: root.phone
+                    row: root.row
+                    columns: 1
+                    filterDay: root.dayIndex
+                    showNowLine: root.dayIndex >= 0 && root.bridge && root.bridge.nowDay === root.dayIndex
+                    showPill: true
+                    weekMode: false
+                    followOpening: true
+                    openingMinute: root.board ? root.board.openingMinute : 480
+                    scrollClearance: root.phone ? 96 : 0
+                    scrollerName: "dayScroller"
+                }
+            }
+        }
+    }
+
+    // Draggable vertical divider between Day timeline (left) and Now + Month panel (right).
+    Item {
+        id: sideDivider
+        objectName: "daySideDivider"
+        visible: !root.phone
+        anchors.right: rightPanel.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 12
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: dividerMouse.containsMouse || dividerMouse.pressed ? 4 : 2
+            height: dividerMouse.containsMouse || dividerMouse.pressed ? 48 : 32
+            radius: width / 2
+            color: dividerMouse.containsMouse || dividerMouse.pressed ? palette.primary : palette.outlineVariant
+        }
+
+        MouseArea {
+            id: dividerMouse
+            anchors.fill: parent
+            enabled: !root.passive
+            hoverEnabled: true
+            cursorShape: Qt.SplitHCursor
+            property real pressSceneX: 0
+            property int pressWidth: 312
+            onPressed: (mouse) => {
+                pressSceneX = mapToItem(root, mouse.x, 0).x
+                pressWidth = root.sideWidth
+                root.dragSideWidth = pressWidth
+            }
+            onPositionChanged: (mouse) => {
+                if (!pressed)
+                    return
+                var curX = mapToItem(root, mouse.x, 0).x
+                var delta = pressSceneX - curX
+                root.dragSideWidth = Math.max(root.minSideWidth, Math.min(root.maxSideWidth, Math.round(pressWidth + delta)))
+            }
+            onReleased: {
+                if (root.dragSideWidth >= 0 && root.bridge && root.bridge.setDaySideWidth)
+                    root.bridge.setDaySideWidth(root.dragSideWidth)
+                root.dragSideWidth = -1
+            }
+        }
+    }
+
+    // Right sidebar: Now focus card above the collapsible mini-month calendar.
+    Flickable {
+        id: rightPanel
+        objectName: "dayRightPanel"
+        visible: !root.phone
+        anchors.right: parent.right
+        anchors.rightMargin: root.outerPad
+        anchors.top: parent.top
+        anchors.topMargin: root.outerPad
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: root.outerPad
+        width: root.phone ? 0 : root.sideWidth
+        contentWidth: width
+        contentHeight: rightColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+
+        Column {
+            id: rightColumn
+            width: rightPanel.width
+            spacing: 12
+
+            Item {
+                id: desktopNowSlot
+                visible: !root.phone && nowCard.shown
+                width: parent.width
+                height: visible ? nowCard.height : 0
+            }
+
+            MonthSide {
+                id: side
+                width: parent.width
+                passive: root.passive
+                phone: root.phone
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                passive: root.passive
-                phone: root.phone
-                row: root.row
-                columns: 1
-                filterDay: root.dayIndex
-                showNowLine: root.dayIndex >= 0 && root.bridge && root.bridge.nowDay === root.dayIndex
-                showPill: true
-                weekMode: false
-                followOpening: true
-                openingMinute: root.board ? root.board.openingMinute : 480
-                scrollClearance: root.phone ? 96 : 0
-                scrollerName: "dayScroller"
+                board: root.board
+                year: root.board ? root.board.year : 2026
+                month: root.board ? root.board.month : 1
+                today: root.board ? root.board.miniDay : 0
             }
         }
+    }
+
+    NowCard {
+        id: nowCard
+        parent: root.phone ? phoneNowSlot : desktopNowSlot
+        width: parent ? parent.width : 280
+        passive: root.passive
+        shown: !!(root.board && root.board.showNow)
+        pageHeading: root.pageHeading
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        timerTitle: root.board ? root.board.timerTitle : ""
+        timerLine: root.board ? root.board.timerLine : ""
+        timerEnded: root.board ? root.board.timerEnded : false
+        timerCanFinish: root.board ? root.board.timerCanFinish : false
+        timerDone: root.board ? root.board.timerDone : false
+        scope: "day"
+        title: root.board ? root.board.nowTitle : ""
+        focusTitle: root.board ? root.board.focusTitle : ""
+        busy: !!(root.board && root.board.nowBusy)
+        line: root.board ? root.board.nowLine : ""
+        onStartFocus: if (root.board) root.board.startFocus()
+        onMarkFinished: if (root.board) root.board.markFinished()
+        onStartAgain: if (root.board) root.board.startAgain()
+        onDismissFinished: if (root.board) root.board.dismissFinished()
     }
 
     M3Palette { id: palette; theme: root.theme }
