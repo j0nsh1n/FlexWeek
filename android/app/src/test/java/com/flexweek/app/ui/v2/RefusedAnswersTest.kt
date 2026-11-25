@@ -131,8 +131,13 @@ class RefusedTicksTest {
         }
     }
 
+    // A wrapped fake is not `is FakeFlexWeekCore`, so the view model reads the real clock; pin it to the demo's
+    // afternoon, or after about 18:45 the unticked homework is the Now card instead of a row.
+    private fun today(core: FlexWeekCore) =
+        TodayViewModel(core, workerDispatcher = main.dispatcher).also { it.tick(com.flexweek.app.core.DemoSchedule.DEMO_NOW_MINUTE) }
+
     @Test fun aTickTheEngineRefusesShowsItsMessageInsteadOfCrashing() {
-        val vm = TodayViewModel(core(), workerDispatcher = main.dispatcher)
+        val vm = today(core())
         vm.toggleHomework("gone")
         assertEquals("block was not found", vm.uiState.snackbar?.message)
     }
@@ -144,7 +149,7 @@ class RefusedTicksTest {
                 if (refuseNow) throw IllegalStateException("day is not one of the block's days")
             }
         }
-        val vm = TodayViewModel(delegate, workerDispatcher = main.dispatcher)
+        val vm = today(delegate)
         val row = vm.uiState.rows.filterIsInstance<com.flexweek.app.model.AgendaRow.Item>().first { it.homework && !it.done }
         vm.toggleHomework(row.id)
         refuseNow = true
@@ -158,14 +163,14 @@ class RefusedTicksTest {
                 override fun focusFinish() = """{"ok":false,"error":"homework was not found"}"""
             }
         }
-        val vm = TodayViewModel(finished, workerDispatcher = main.dispatcher)
+        val vm = today(finished)
         vm.endFocus()
         assertNull(vm.focusState)
         assertEquals("homework was not found", vm.uiState.snackbar?.message)
     }
 
     @Test fun aTickedSessionSaysSessionMarkedDone() {
-        val vm = TodayViewModel(core(refuse = false), workerDispatcher = main.dispatcher)
+        val vm = today(core(refuse = false))
         val row = vm.uiState.rows.filterIsInstance<com.flexweek.app.model.AgendaRow.Item>().first { it.homework && !it.done }
         vm.toggleHomework(row.id)
         assertEquals("Session marked done", vm.uiState.snackbar?.message)
