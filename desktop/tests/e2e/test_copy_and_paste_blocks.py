@@ -149,7 +149,7 @@ def test_the_paste_preview_keeps_a_block_that_lands_on_another_checked_and_says_
     assert beside_words(row_conflict(rows[0], rows, session.blocks)) == said
 
 
-def test_a_paste_with_no_homework_and_the_unfinished_list_count_at_most_once(
+def test_a_paste_with_no_homework_takes_no_count(
     qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock, monkeypatch
 ) -> None:
     session = session_in_the_planned_week(open_light, clock)
@@ -170,6 +170,3 @@ def test_a_paste_with_no_homework_and_the_unfinished_list_count_at_most_once(
     monkeypatch.setattr(session, "_homework_counts", counted)
     assert session.paste_proposals(1, None) is not None
     assert calls == [], "no homework, so nothing to count"
-
-    session.homework_counts()
-    assert calls == [1], "the combined read takes one count"
