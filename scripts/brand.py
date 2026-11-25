@@ -1,11 +1,13 @@
-"""Make FlexWeek's icon files from its original logo, desktop/assets/logo.png (256 px, the green
-dumbbell on a phone).
+"""Make FlexWeek's icon files from its logo, desktop/assets/logo.png (256 px, the dumbbell on a lime
+rounded square with see-through corners), and the dumbbell alone, desktop/assets/logo-mark.png.
 
     QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/brand.py
 
 Writes desktop/assets/logo.ico (256, 128, 64, 48, 32 and 16 px) for the Windows build, and the Android
-launcher icon at each density under android/app/src/main/res/mipmap-*/ic_launcher.png. Run it again
-after logo.png changes. 1.0.0 brought the original logo back in place of the blue one 0.16 drew.
+launcher icon at each density under android/app/src/main/res/mipmap-*/ic_launcher.png, with the
+adaptive icon's dumbbell layer beside it (ic_launcher_foreground.png; its lime layer is a colour in
+values/ic_launcher_background.xml). Run it again after either picture changes. 2026-11-24: the lime
+square replaced the phone on a light grey square, which showed as a white box on dark taskbars.
 """
 
 from __future__ import annotations
@@ -20,14 +22,30 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = Path(__file__).resolve().parents[1]
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt  # noqa: E402
-from PySide6.QtGui import QGuiApplication, QImage  # noqa: E402
+from PySide6.QtGui import QGuiApplication, QImage, QPainter  # noqa: E402
 
 ASSETS = ROOT / "desktop" / "assets"
 LOGO = ASSETS / "logo.png"
+MARK = ASSETS / "logo-mark.png"
 ICO_SIZES = (256, 128, 64, 48, 32, 16)
 # Android's launcher icon at each screen density, 48 dp.
 ANDROID_RES = ROOT / "android" / "app" / "src" / "main" / "res"
 LAUNCHER_SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+# The adaptive icon's layers are 108 dp; the phone shows about the middle 72 dp in its own shape. The
+# dumbbell takes 48 dp, the share of the square it takes in logo.png, well inside the 66 dp every shape keeps.
+FOREGROUND_SIZES = {density: size * 108 // 48 for density, size in LAUNCHER_SIZES.items()}
+MARK_SHARE = 48 / 108
+
+
+def foreground(mark: QImage, size: int) -> QImage:
+    layer = QImage(size, size, QImage.Format.Format_ARGB32)
+    layer.fill(Qt.GlobalColor.transparent)
+    side = round(size * MARK_SHARE)
+    fit = scaled(mark, side)
+    painter = QPainter(layer)
+    painter.drawImage((size - fit.width()) // 2, (size - fit.height()) // 2, fit)
+    painter.end()
+    return layer
 
 
 def scaled(logo: QImage, size: int) -> QImage:
@@ -75,17 +93,23 @@ def ico_bytes(images: list[QImage]) -> bytes:
 def main() -> int:
     application = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
     logo = QImage(str(LOGO)).convertToFormat(QImage.Format.Format_ARGB32)
-    if logo.isNull():
-        print(f"Could not read {LOGO}", file=sys.stderr)
-        return 1
+    mark = QImage(str(MARK)).convertToFormat(QImage.Format.Format_ARGB32)
+    for path, image in ((LOGO, logo), (MARK, mark)):
+        if image.isNull():
+            print(f"Could not read {path}", file=sys.stderr)
+            return 1
     (ASSETS / "logo.ico").write_bytes(ico_bytes([scaled(logo, size) for size in ICO_SIZES]))
     for density, size in LAUNCHER_SIZES.items():
         folder = ANDROID_RES / f"mipmap-{density}"
         folder.mkdir(parents=True, exist_ok=True)
-        if not scaled(logo, size).save(str(folder / "ic_launcher.png"), "PNG"):
-            print(f"Could not write {folder / 'ic_launcher.png'}", file=sys.stderr)
-            return 1
-    print(f"Wrote {ASSETS / 'logo.ico'} and the Android launcher icons from {LOGO}.")
+        for name, image in (
+            ("ic_launcher.png", scaled(logo, size)),
+            ("ic_launcher_foreground.png", foreground(mark, FOREGROUND_SIZES[density])),
+        ):
+            if not image.save(str(folder / name), "PNG"):
+                print(f"Could not write {folder / name}", file=sys.stderr)
+                return 1
+    print(f"Wrote {ASSETS / 'logo.ico'} and the Android launcher icons from {LOGO} and {MARK}.")
     del application
     return 0
 
