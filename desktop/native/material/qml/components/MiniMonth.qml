@@ -10,10 +10,16 @@ Item {
     property int month: 11
     property int today: 5
     property bool showHeader: true
+    // Optional maximum width so narrow resizable panes shrink cells instead of clipping outer columns.
+    property real maxWidth: 0
     property string accessName: "Month"
     signal dayActivated(int day)
 
-    readonly property int cell: M3Font.px(28)
+    readonly property int naturalCell: M3Font.px(28)
+    readonly property int cell: maxWidth > 0
+        ? Math.max(20, Math.min(naturalCell, Math.floor((maxWidth - 12) / 7)))
+        : naturalCell
+    readonly property int cellFontPx: Math.min(M3Font.px(12), Math.max(10, Math.floor(cell * 0.48)))
     readonly property int headerOffset: showHeader ? (caption.implicitHeight + 4) : 0
     implicitWidth: 7 * cell + 12
     implicitHeight: (showHeader ? caption.implicitHeight + 8 : 4) + 7 * cell
@@ -86,7 +92,7 @@ Item {
             text: root.letters[(index + root.firstDay) % 7]
             color: root.muteInk
             font.family: M3Font.family
-            font.pixelSize: M3Font.px(12)
+            font.pixelSize: root.cellFontPx
             font.weight: 500
         }
     }
@@ -107,9 +113,9 @@ Item {
             Rectangle {
                 objectName: cell.isToday ? "todayDisc" : ""
                 visible: cell.isToday
-                width: 28
-                height: 28
-                radius: 14
+                width: Math.min(28, root.cell)
+                height: width
+                radius: width / 2
                 anchors.centerIn: parent
                 color: root.todayFill
             }
@@ -134,7 +140,7 @@ Item {
                 }
                 color: cell.isToday ? root.todayInk : root.dayInk
                 font.family: M3Font.family
-                font.pixelSize: M3Font.px(12)
+                font.pixelSize: root.cellFontPx
                 font.weight: cell.isToday ? 500 : 400
                 Accessible.role: Accessible.StaticText
                 Accessible.name: cell.inside ? String(cell.day) : ""

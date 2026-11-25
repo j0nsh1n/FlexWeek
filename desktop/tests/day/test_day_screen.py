@@ -197,6 +197,69 @@ def test_dragging_the_day_divider_resizes_the_right_panel_and_remembers_it(
     bridge.setDaySideWidth(900)
     pump(qapp)
     assert int(bridge.property("daySideWidth")) == 480
+
+    # Clicking the divider without moving must not overwrite a wider saved width when the window caps it.
+    window.resize(800, 800)
+    pump(qapp, 10)
+    capped_centre = divider.mapToScene(QPointF(divider.width() / 2, divider.height() / 2)).toPoint()
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, capped_centre)
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 480
+    window.resize(1280, 800)
+    pump(qapp, 10)
+
+    # Keyboard arrows resize the sidebar through the same clamp and persistence path.
     bridge.setDaySideWidth(312)
+    pump(qapp)
+    assert divider.property("activeFocusOnTab") is True
+    divider.forceActiveFocus()
+    pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Left)
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 328
+    QTest.keyClick(quick, Qt.Key.Key_Right)
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 312
+
     bridge.settingsBridge.setDensity("comfortable")
+    pump(qapp)
+
+
+def test_mini_month_edge_columns_stay_clickable_at_smallest_sidebar_width_and_larger_text(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Finding 2: at 240 px sidebar width and Larger text (1.6x), both outer columns stay inside the pane."""
+    root = show_material(qapp, window)
+    bridge = bridge_of(window)
+    bridge.showPage("day")
+    bridge.settingsBridge.setTextSize("larger")
+    bridge.setDaySideWidth(240)
+    pump(qapp, 15)
+
+    by_name = {str(item.objectName()): item for item in visuals(root) if item.objectName()}
+    panel = by_name["dayRightPanel"]
+    mini = by_name["dayMiniMonth"]
+    panel_left = panel.mapToScene(QPointF(0, 0)).x()
+    panel_right = panel.mapToScene(QPointF(panel.width(), 0)).x()
+    mini_left = mini.mapToScene(QPointF(0, 0)).x()
+    mini_right = mini.mapToScene(QPointF(mini.width(), 0)).x()
+    assert mini_left >= panel_left
+    assert mini_right <= panel_right
+
+    # Pick an inside cell on column 0 (index 7 or 14) and column 6 (index 13 or 20) and click both.
+    quick = quick_of(window)
+    assert quick is not None
+    mini_items = {str(item.objectName()): item for item in visuals(mini) if item.objectName()}
+    for col_index in (14, 20):
+        cell_text = mini_items[f"cell{col_index}"]
+        wanted_day = int(str(cell_text.property("text")))
+        spot = cell_text.mapToScene(QPointF(cell_text.width() / 2, cell_text.height() / 2))
+        assert panel_left <= spot.x() <= panel_right
+        QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, spot.toPoint())
+        settled(qapp, window)
+        pump(qapp)
+        assert int(bridge.property("day").property("miniDay")) == wanted_day
+
+    bridge.settingsBridge.setTextSize("normal")
+    bridge.setDaySideWidth(312)
     pump(qapp)

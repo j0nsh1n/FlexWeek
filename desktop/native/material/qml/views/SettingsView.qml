@@ -57,7 +57,7 @@ Item {
             onPicked: (name) => root.panel.setSection(name)
         }
 
-        // Draggable vertical divider resizing the Settings section list (remembered between launches).
+        // Draggable and keyboard-operable vertical divider resizing the Settings section list.
         Item {
             id: navDivider
             objectName: "settingsNavDivider"
@@ -67,6 +67,26 @@ Item {
             anchors.bottom: parent.bottom
             width: 10
             z: 2
+            activeFocusOnTab: !root.phone
+            Accessible.role: Accessible.Slider
+            Accessible.name: "Resize settings sidebar"
+            Accessible.description: "Use Left and Right arrow keys to resize"
+
+            function stepResize(delta) {
+                if (!root.panel || !root.panel.setNavWidth)
+                    return
+                var next = Math.max(root.minNavWidth, Math.min(root.maxNavWidth, root.navWidth + delta))
+                if (next !== root.navWidth)
+                    root.panel.setNavWidth(next)
+            }
+
+            M3FocusRing {
+                anchors.centerIn: parent
+                width: 10
+                height: 52
+                ring: m3.focusRing
+                ringRadius: 5
+            }
 
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -77,11 +97,29 @@ Item {
             }
             Rectangle {
                 anchors.centerIn: parent
-                width: navDividerMouse.containsMouse || navDividerMouse.pressed ? 4 : 2
-                height: navDividerMouse.containsMouse || navDividerMouse.pressed ? 40 : 24
+                width: navDividerMouse.containsMouse || navDividerMouse.pressed || navDivider.activeFocus ? 4 : 2
+                height: navDividerMouse.containsMouse || navDividerMouse.pressed || navDivider.activeFocus ? 40 : 24
                 radius: width / 2
-                color: navDividerMouse.containsMouse || navDividerMouse.pressed ? m3.primary : m3.outlineVariant
+                color: navDividerMouse.containsMouse || navDividerMouse.pressed || navDivider.activeFocus ? m3.primary : m3.outlineVariant
             }
+
+            Keys.onPressed: (event) => {
+                var step = (event.modifiers & Qt.ShiftModifier) ? 40 : 16
+                if (event.key === Qt.Key_Right) {
+                    navDivider.stepResize(step)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Left) {
+                    navDivider.stepResize(-step)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Home) {
+                    navDivider.stepResize(root.minNavWidth - root.navWidth)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_End) {
+                    navDivider.stepResize(root.maxNavWidth - root.navWidth)
+                    event.accepted = true
+                }
+            }
+
             MouseArea {
                 id: navDividerMouse
                 anchors.fill: parent
@@ -89,21 +127,34 @@ Item {
                 cursorShape: Qt.SplitHCursor
                 property real pressSceneX: 0
                 property int pressWidth: 220
+                property bool moved: false
                 onPressed: (mouse) => {
                     pressSceneX = mapToItem(root, mouse.x, 0).x
                     pressWidth = root.navWidth
-                    root.dragNavWidth = pressWidth
+                    moved = false
                 }
                 onPositionChanged: (mouse) => {
                     if (!pressed)
                         return
                     var curX = mapToItem(root, mouse.x, 0).x
                     var delta = curX - pressSceneX
-                    root.dragNavWidth = Math.max(root.minNavWidth, Math.min(root.maxNavWidth, Math.round(pressWidth + delta)))
+                    var next = Math.max(root.minNavWidth, Math.min(root.maxNavWidth, Math.round(pressWidth + delta)))
+                    if (Math.abs(delta) >= 1 && next !== pressWidth) {
+                        moved = true
+                        root.dragNavWidth = next
+                    } else if (moved) {
+                        root.dragNavWidth = next
+                    }
                 }
                 onReleased: {
-                    if (root.dragNavWidth >= 0 && root.panel && root.panel.setNavWidth)
+                    if (moved && root.dragNavWidth >= 0 && root.dragNavWidth !== pressWidth
+                        && root.panel && root.panel.setNavWidth)
                         root.panel.setNavWidth(root.dragNavWidth)
+                    moved = false
+                    root.dragNavWidth = -1
+                }
+                onCanceled: {
+                    moved = false
                     root.dragNavWidth = -1
                 }
             }

@@ -293,5 +293,27 @@ def test_dragging_the_settings_nav_divider_resizes_collapses_and_remembers_width
     assert panel.property("state")["navWidth"] == 72
     panel.setNavWidth(500)
     assert panel.property("state")["navWidth"] == 340
+
+    # Clicking the divider without moving must not overwrite 340 px when a narrower window caps it.
+    window.resize(800, 800)
+    _pump(qapp, 10)
+    capped = divider.mapToScene(QPointF(divider.width() / 2, divider.height() / 2)).toPoint()
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, capped)
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 340
+    window.resize(1280, 800)
+    _pump(qapp, 10)
+
+    # Keyboard arrows resize the section list through the same clamp and persistence path.
     panel.setNavWidth(220)
+    _pump(qapp)
+    assert divider.property("activeFocusOnTab") is True
+    divider.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Right)
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 236
+    QTest.keyClick(quick, Qt.Key.Key_Left)
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 220
     _pump(qapp)

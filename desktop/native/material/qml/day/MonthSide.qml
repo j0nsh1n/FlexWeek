@@ -96,6 +96,7 @@ Item {
         month: root.month
         today: root.today
         showHeader: false
+        maxWidth: Math.max(152, root.width - 24)
         accessName: "Month"
         activeFocusOnTab: !root.passive
         onDayActivated: (day) => {

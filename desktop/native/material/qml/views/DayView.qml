@@ -201,7 +201,7 @@ Item {
         }
     }
 
-    // Draggable vertical divider between Day timeline (left) and Now + Month panel (right).
+    // Draggable and keyboard-operable vertical divider between Day timeline (left) and Now + Month panel (right).
     Item {
         id: sideDivider
         objectName: "daySideDivider"
@@ -210,13 +210,50 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 12
+        activeFocusOnTab: !root.phone && !root.passive
+        Accessible.role: Accessible.Slider
+        Accessible.name: "Resize day sidebar"
+        Accessible.description: "Use Left and Right arrow keys to resize"
+
+        function stepResize(delta) {
+            if (root.passive || !root.bridge || !root.bridge.setDaySideWidth)
+                return
+            var next = Math.max(root.minSideWidth, Math.min(root.maxSideWidth, root.sideWidth + delta))
+            if (next !== root.sideWidth)
+                root.bridge.setDaySideWidth(next)
+        }
+
+        M3FocusRing {
+            anchors.centerIn: parent
+            width: 10
+            height: 56
+            ring: palette.focusRing
+            ringRadius: 5
+        }
 
         Rectangle {
             anchors.centerIn: parent
-            width: dividerMouse.containsMouse || dividerMouse.pressed ? 4 : 2
-            height: dividerMouse.containsMouse || dividerMouse.pressed ? 48 : 32
+            width: dividerMouse.containsMouse || dividerMouse.pressed || sideDivider.activeFocus ? 4 : 2
+            height: dividerMouse.containsMouse || dividerMouse.pressed || sideDivider.activeFocus ? 48 : 32
             radius: width / 2
-            color: dividerMouse.containsMouse || dividerMouse.pressed ? palette.primary : palette.outlineVariant
+            color: dividerMouse.containsMouse || dividerMouse.pressed || sideDivider.activeFocus ? palette.primary : palette.outlineVariant
+        }
+
+        Keys.onPressed: (event) => {
+            var step = (event.modifiers & Qt.ShiftModifier) ? 40 : 16
+            if (event.key === Qt.Key_Left) {
+                sideDivider.stepResize(step)
+                event.accepted = true
+            } else if (event.key === Qt.Key_Right) {
+                sideDivider.stepResize(-step)
+                event.accepted = true
+            } else if (event.key === Qt.Key_Home) {
+                sideDivider.stepResize(root.minSideWidth - root.sideWidth)
+                event.accepted = true
+            } else if (event.key === Qt.Key_End) {
+                sideDivider.stepResize(root.maxSideWidth - root.sideWidth)
+                event.accepted = true
+            }
         }
 
         MouseArea {
@@ -227,21 +264,34 @@ Item {
             cursorShape: Qt.SplitHCursor
             property real pressSceneX: 0
             property int pressWidth: 312
+            property bool moved: false
             onPressed: (mouse) => {
                 pressSceneX = mapToItem(root, mouse.x, 0).x
                 pressWidth = root.sideWidth
-                root.dragSideWidth = pressWidth
+                moved = false
             }
             onPositionChanged: (mouse) => {
                 if (!pressed)
                     return
                 var curX = mapToItem(root, mouse.x, 0).x
                 var delta = pressSceneX - curX
-                root.dragSideWidth = Math.max(root.minSideWidth, Math.min(root.maxSideWidth, Math.round(pressWidth + delta)))
+                var next = Math.max(root.minSideWidth, Math.min(root.maxSideWidth, Math.round(pressWidth + delta)))
+                if (Math.abs(delta) >= 1 && next !== pressWidth) {
+                    moved = true
+                    root.dragSideWidth = next
+                } else if (moved) {
+                    root.dragSideWidth = next
+                }
             }
             onReleased: {
-                if (root.dragSideWidth >= 0 && root.bridge && root.bridge.setDaySideWidth)
+                if (moved && root.dragSideWidth >= 0 && root.dragSideWidth !== pressWidth
+                    && root.bridge && root.bridge.setDaySideWidth)
                     root.bridge.setDaySideWidth(root.dragSideWidth)
+                moved = false
+                root.dragSideWidth = -1
+            }
+            onCanceled: {
+                moved = false
                 root.dragSideWidth = -1
             }
         }
