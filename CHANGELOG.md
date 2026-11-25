@@ -13,7 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Changed
 - Material 3 desktop redesign across every main screen, using a 5-step tonal surface hierarchy, consistent rounded corners, and Material Symbols icons:
-  - Week frames the hour grid in an elevated card beside a tonal homework panel with urgency-striped cards and Place now buttons, softens the overdue banner, and shows category icons on blocks where titles fit without cutting off.
+  - Week frames the hour grid in an elevated card beside a tonal homework panel with urgency-striped cards whose menu places them now, softens the overdue banner, and shows category icons on blocks where titles fit without cutting off.
   - Day shows a full-height hour timeline on the left and the Now card above the collapsible mini-month on the right, separated by a draggable and keyboard-resizable divider whose width is remembered between launches.
   - My day combines the progress ring and Now card into a horizontal hero banner on desktop and places Up next and Done side by side in matching cards.
   - Settings adds icons to every section, group headers to every card (including This computer), and a draggable and keyboard-resizable section list that collapses to icons when narrow and is remembered between launches.
