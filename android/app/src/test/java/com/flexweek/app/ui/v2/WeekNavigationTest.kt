@@ -76,7 +76,7 @@ class WeekNavigationTest {
 
     @Test fun thePlannedAndDoneLineKeepsFinishedTimeApart() {
         assertEquals("3 h of homework planned · 1 h done", WeekRowWords.summary(180, 60))
-        assertEquals("1 h 30 of homework planned", WeekRowWords.summary(90, 0))
+        assertEquals("1 h 30 min of homework planned", WeekRowWords.summary(90, 0))
         assertEquals("No homework planned", WeekRowWords.summary(0, 0))
         assertFalse(WeekRowWords.summary(60, 60).contains("2 h"))
     }

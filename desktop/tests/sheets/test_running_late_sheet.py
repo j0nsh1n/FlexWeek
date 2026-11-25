@@ -86,7 +86,7 @@ def test_a_blocked_running_late_says_why_and_opens_nothing(
     shell.session.dirty = True
     sheets.openLate()
     assert sheets.kind == ""
-    assert sheets.notice == "Saving your last change… Running late will work in a moment."
+    assert sheets.notice == "Saving your last change… Try Running late again in a moment."
     shell.session.dirty = False
     shell.session.conflict = True
     sheets.openLate()

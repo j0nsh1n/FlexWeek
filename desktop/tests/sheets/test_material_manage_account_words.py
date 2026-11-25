@@ -108,7 +108,7 @@ def _changes(
     }
 
 
-SAFE = "\nFlexWeek saves a copy of this week first, so you can go back."
+SAFE = "\nFlexWeek saves a copy of your current weeks and homework first, so you can go back."
 
 
 @pytest.mark.parametrize(

@@ -76,7 +76,7 @@ SCREENS: list[Screen] = [
         area="sheets",
         prepare=_account,
         checks=(
-            "Manage account: who is signed in, the two password fields in dots with Show, Replace password, "
+            "Manage account: who is signed in, the two password fields in dots with Show, Change password, "
             "recovery codes left, the five file buttons, Delete account apart from them, Close."
         ),
         sources=SOURCES,

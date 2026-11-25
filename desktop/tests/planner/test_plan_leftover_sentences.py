@@ -40,11 +40,11 @@ def test_the_leftover_sentence_names_two_and_counts_the_rest() -> None:
     assert left_sentence(five).endswith("with no time. And 3 more.")
     assert "Math" not in left_sentence(five)
     assert plan_sentence(2, 0, three) == (
-        "Placed 2 homework blocks. History essay still has 10 min with no time. "
+        "Placed 2 sessions. History essay still has 10 min with no time. "
         "Science fair poster still has 9 h 55 min with no time. And 1 more."
     )
     assert plan_sentence(0, 1, one) == (
-        "Nothing placed. 1 with no time yet. History essay still has 10 min with no time."
+        "No homework was placed. 1 still needs a time. History essay still has 10 min with no time."
     )
 
 
@@ -127,7 +127,7 @@ def test_a_focus_timer_shortens_what_is_still_needed(qapp: QApplication, window:
 
 def test_what_is_too_short_for_plan_is_said_in_minutes(qapp: QApplication, window: NativeWindow) -> None:
     """Essay cut to 50 leaves 10 minutes, under the 15 Plan places: both ways of planning a homework say how
-    many minutes are left instead of "fully planned". With nothing left at all they say the old sentences."""
+    many minutes are left instead of saying there is no time left to plan."""
     session = window.session
     essay = next(item for item in session.blocks if item.get("assignment_id") == "essay")
     essay.update(duration_min=50, pinned=True)
@@ -137,9 +137,9 @@ def test_what_is_too_short_for_plan_is_said_in_minutes(qapp: QApplication, windo
     wait_until(qapp, lambda: session.assignments["essay"].get("unplanned_min") == 10)
 
     assert session.plan_unfinished("essay") is None
-    assert session.message == "History essay has 10 min left, less than the 15 minutes Plan places."
+    assert session.message == "History essay has 10 min left. Plan needs at least 15 minutes."
     session.plan_left(["essay"])
-    assert session.message == "History essay has 10 min left, less than the 15 minutes Plan places."
+    assert session.message == "History essay has 10 min left. Plan needs at least 15 minutes."
 
     next(item for item in session.blocks if item.get("assignment_id") == "essay")["duration_min"] = 60
     session._touch()
@@ -147,6 +147,6 @@ def test_what_is_too_short_for_plan_is_said_in_minutes(qapp: QApplication, windo
     settled(qapp, window)
     wait_until(qapp, lambda: session.assignments["essay"].get("unplanned_min") == 0)
     assert session.plan_unfinished("essay") is None
-    assert session.message == "That homework is already fully planned."
+    assert session.message == "There's no time left to plan for this homework."
     session.plan_left(["essay"])
-    assert session.message == "That homework already has a time."
+    assert session.message == "There's no time left to plan for this homework."

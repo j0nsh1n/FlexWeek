@@ -757,7 +757,7 @@ pub fn free_name(saved: &Value, name: &str) -> EngineResult<String> {
 pub fn rename_look(saved: &Value, old: &str, new_name: &str) -> EngineResult<Vec<Value>> {
     let Some(at) = find_index_of(saved, old)? else {
         return Err(EngineError::look_name(format!(
-            "No saved look is called {old}."
+            "There's no saved look called {old}."
         )));
     };
     let clean = name_valid(Some(new_name))?;
@@ -779,7 +779,7 @@ pub fn rename_look(saved: &Value, old: &str, new_name: &str) -> EngineResult<Vec
 pub fn duplicate_look(saved: &Value, name: &str) -> EngineResult<(Vec<Value>, String)> {
     let Some(at) = find_index_of(saved, name)? else {
         return Err(EngineError::look_name(format!(
-            "No saved look is called {name}."
+            "There's no saved look called {name}."
         )));
     };
     let held = iterate(saved)?;
@@ -801,7 +801,7 @@ pub fn duplicate_look(saved: &Value, name: &str) -> EngineResult<(Vec<Value>, St
 pub fn delete_look(saved: &Value, name: &str) -> EngineResult<Vec<Value>> {
     if find_index_of(saved, name)?.is_none() {
         return Err(EngineError::look_name(format!(
-            "No saved look is called {name}."
+            "There's no saved look called {name}."
         )));
     }
     let wanted = casefold(name);
@@ -885,7 +885,7 @@ pub fn import_look(size: usize, raw: Option<&Value>) -> ImportedLook {
         return refused("This file is too large to be a FlexWeek look.");
     }
     let Some(raw) = raw else {
-        return refused("This file isn't a FlexWeek look: it could not be read as one.");
+        return refused("FlexWeek couldn't read this file as a look.");
     };
     let Value::Object(fields) = raw else {
         return refused("This file isn't a FlexWeek look.");

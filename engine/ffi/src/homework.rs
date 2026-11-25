@@ -5,10 +5,10 @@ use crate::account::{
 };
 use crate::core::{FfiError, FlexWeek, db_lock, engine_failure, failure, require_user};
 
-const TITLE_TOO_LONG: &str = "String should have at most 80 characters";
-const TITLE_REQUIRED: &str = "title required";
-const ESTIMATE_RULE: &str = "estimate_min must be a positive multiple of 15";
-const DUE_RULE: &str = "must be YYYY-MM-DD or YYYY-MM-DDTHH:MM with no seconds or timezone";
+const TITLE_TOO_LONG: &str = "Use 80 characters or fewer for the title.";
+const TITLE_REQUIRED: &str = "Give the homework a title.";
+const ESTIMATE_RULE: &str = "Use a positive number of minutes in 15-minute steps.";
+const DUE_RULE: &str = "Enter the due date as YYYY-MM-DD or the date and time as YYYY-MM-DDTHH:MM.";
 const ID_RULE: &str = "String should have at most 80 characters";
 
 pub(crate) fn recent_titles(week: &FlexWeek) -> Result<Vec<String>, FfiError> {
@@ -71,7 +71,7 @@ fn validate_draft(draft: &Map<String, Value>, generated_id: &str) -> Result<Valu
     }
     if estimate > flexweek_engine::model::ESTIMATE_MAX_MIN {
         return Err(failure(format!(
-            "Input should be less than or equal to {}",
+            "Use {} minutes or fewer.",
             flexweek_engine::model::ESTIMATE_MAX_MIN
         )));
     }
@@ -194,7 +194,9 @@ pub(crate) fn save_homework(
                     flexweek_store::AssignmentSave::Ready(next) => next,
                     flexweek_store::AssignmentSave::Conflict => {
                         rollback(&db);
-                        return Err(failure("homework changed on another device"));
+                        return Err(failure(
+                            "This homework changed on another device. Sync, then try again.",
+                        ));
                     }
                     flexweek_store::AssignmentSave::OverLimit => {
                         rollback(&db);
@@ -203,7 +205,9 @@ pub(crate) fn save_homework(
                 }
             } else {
                 rollback(&db);
-                return Err(failure("homework changed on another device"));
+                return Err(failure(
+                    "This homework changed on another device. Sync, then try again.",
+                ));
             }
         }
         flexweek_store::AssignmentSave::OverLimit => {
@@ -343,7 +347,7 @@ mod tests {
                 )
                 .unwrap_err()
             ),
-            "title required"
+            "Give the homework a title."
         );
         assert_eq!(
             details(
@@ -353,7 +357,7 @@ mod tests {
                 )
                 .unwrap_err()
             ),
-            "title required"
+            "Give the homework a title."
         );
         assert_eq!(
             details(
@@ -363,7 +367,7 @@ mod tests {
                 )
                 .unwrap_err()
             ),
-            "must be YYYY-MM-DD or YYYY-MM-DDTHH:MM with no seconds or timezone"
+            "Enter the due date as YYYY-MM-DD or the date and time as YYYY-MM-DDTHH:MM."
         );
         assert_eq!(
             details(
@@ -373,7 +377,7 @@ mod tests {
                 )
                 .unwrap_err()
             ),
-            "estimate_min must be a positive multiple of 15"
+            "Use a positive number of minutes in 15-minute steps."
         );
     }
 

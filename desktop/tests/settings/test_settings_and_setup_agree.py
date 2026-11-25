@@ -16,7 +16,10 @@ from desktop.tests.window_support import qapp  # noqa: F401
 
 # ruff: noqa: F811
 
-HINT = "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
+HINT = (
+    "Plays when a block starts if the alarm sound is Spotify, or when focus starts if the focus sound"
+    " is Spotify."
+)
 NO_HOMEWORK_AFTER = ["No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00"]
 
 

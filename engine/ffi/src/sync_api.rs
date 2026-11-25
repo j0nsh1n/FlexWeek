@@ -145,7 +145,7 @@ impl SyncApi for NativeSync {
         {
             (
                 "unreachable",
-                "Your computer isn't reachable. Showing the last saved week.".into(),
+                "Your computer isn't reachable. Showing the last synced week.".into(),
             )
         } else if let Some(last) = last {
             let minutes = (self.host.now_unix_ms() - last).max(0) / 60_000;

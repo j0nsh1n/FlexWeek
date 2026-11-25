@@ -172,7 +172,7 @@ TIMER_CHOICES = (
     *({"label": item["label"], "value": item["id"]} for item in TIMER_PRESETS),
     {"label": "Custom", "value": "custom"},
 )
-SAVE_REFUSED = "Could not save that."
+SAVE_REFUSED = "Couldn't save that change. Try again."
 # Open on: the four screens FlexWeek can start on. Nothing saved opens on the week.
 OPEN_ON = (
     {"label": "Week", "value": "week"},
@@ -1512,12 +1512,12 @@ class SettingsBridge(QObject):
                 self._bridge.refresh()  # type: ignore[attr-defined]
                 self._notice = ""
             else:
-                self._notice = "Could not save that."
+                self._notice = "Couldn't save that change. Try again."
             self._publish()
 
         if not session.save_preferences(updates, then):
             settle()
-            self._notice = "Could not save that."
+            self._notice = "Couldn't save that change. Try again."
         self._publish()
 
     def _commit(self) -> None:
@@ -1632,7 +1632,7 @@ class SettingsBridge(QObject):
         self._draft_choice = dict(self._choice)
         self._draft = copy.deepcopy(self._advanced)
         if dropped:
-            self._notice = "Advanced changes were not applied. Done applies them."
+            self._notice = "Your advanced changes aren't applied yet. Choose Done to apply them."
         self._publish()
 
     @Slot(str)
@@ -1788,7 +1788,7 @@ class SettingsBridge(QObject):
         try:
             link = valid_spotify_url(raw)
         except ValueError:
-            self._spotify_error = "Use a link from open.spotify.com."
+            self._spotify_error = "Use a link that starts with https://open.spotify.com."
             self._publish()
             return
         self._spotify_error = ""
@@ -2376,7 +2376,7 @@ class SettingsBridge(QObject):
         self._draft_choice = dict(parsed["choice"])
         self._draft = copy.deepcopy(parsed["advanced"])
         self._import_error = ""
-        self._notice = "Imported. Done applies it."
+        self._notice = "Imported. Choose Done to apply the look."
         self._mark_draft()
 
     @Slot(str)
@@ -2416,7 +2416,7 @@ class SettingsBridge(QObject):
             self._draft_choice = dict(self._choice)
             self._draft = copy.deepcopy(self._advanced)
             self._dirty = False
-            self._notice = f"Wearing {name}."
+            self._notice = f"Applied {name}."
             self._commit()
             return
 
@@ -2585,7 +2585,7 @@ class SettingsBridge(QObject):
             self._pair_seconds = 0
             self._pair_tries = 0
             self._pair_open = False
-            self._pair_error = "Pairing needs an account on this computer."
+            self._pair_error = "Sign in on this computer before pairing a phone."
             self._publish()
 
     @Slot()

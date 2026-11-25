@@ -21,14 +21,14 @@ from desktop.tests.window_support import qapp  # noqa: F401
 @pytest.mark.parametrize(
     ("planning", "conflict", "pending", "said"),
     [
-        (True, False, False, "Planning… one moment."),
+        (True, False, False, "Already planning…"),
         (
             False,
             True,
             True,
             "This week changed in another window. Choose More > Reload this week, then try again.",
         ),
-        (False, False, True, "Saving your last change… Plan will work in a moment."),
+        (False, False, True, "Saving your last change… Try Plan again in a moment."),
     ],
 )
 def test_plan_says_planning_saving_or_out_of_step(

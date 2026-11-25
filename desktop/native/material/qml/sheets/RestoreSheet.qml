@@ -30,7 +30,7 @@ SheetFrame {
         density: root.density
         reduceMotion: root.reduceMotion
         highContrast: root.highContrast
-        label: "Copy name"
+        label: "Saved copy name"
         wanted: root.f.label ? root.f.label : ""
         onTextEdited: (value) => root.sheets.setRestoreLabel(value)
         Keys.onReturnPressed: root.sheets.createRestore()

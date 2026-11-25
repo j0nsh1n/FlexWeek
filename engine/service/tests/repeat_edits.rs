@@ -84,6 +84,6 @@ fn a_request_that_is_not_a_list_of_changes_is_refused() {
                                         "remove_days": [1, 3] }] });
     assert_eq!(
         refused(preview_repeat_edits(&db.path, ana, &no_day)),
-        "That change leaves no day, so nothing changed. Use stop to take it off the calendar."
+        "That change leaves no days, so nothing changed. To remove it, choose Delete instead."
     );
 }

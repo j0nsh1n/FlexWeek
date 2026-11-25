@@ -5,8 +5,8 @@ use flexweek_app::session::focus;
 use serde_json::{Value, json};
 
 const WEEK: &str = "2026-09-28";
-const STOPPED: &str = "Schedule restored. The previous focus timer was stopped because \
-its session no longer exists.";
+const STOPPED: &str =
+    "Schedule restored. The focus timer stopped because its homework session no longer exists.";
 
 /// A work phase of 30 minutes started at 0 on a block of the open week, and on a homework when `homework`.
 fn work_timer(homework: bool) -> Value {
@@ -142,7 +142,7 @@ fn target_args(block_id: Value, day: Value) -> Value {
     })
 }
 
-const NOTHING_TO_START: &str = "Place a work block that isn't finished before starting focus.";
+const NOTHING_TO_START: &str = "Give an unfinished homework session a time before starting focus.";
 
 #[test]
 fn a_quick_start_times_nothing_in_particular() {

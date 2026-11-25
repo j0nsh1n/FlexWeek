@@ -1183,7 +1183,7 @@ pub fn settle_placements_after_deadline(
                 .map(|(_, _, title)| title.clone())
         };
         let why = if start < DAY_START_MIN || end > DAY_END_MIN {
-            Some("that's outside the hours FlexWeek plans in".to_string())
+            Some("FlexWeek can't use that time".to_string())
         } else if due.is_some_and(|due| (int_of(&day).unwrap_or(0), end) > due)
             && !contains(after_deadline, subscript(block, "id")?)?
         {

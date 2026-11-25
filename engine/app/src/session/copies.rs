@@ -45,7 +45,7 @@ pub const NOTHING_TO_ADD: &str = "There's nothing available to add.";
 
 /// Why a start the planner cannot read or hold is refused: the same words as an hours drag.
 pub const OUTSIDE_PLANNED_HOURS: &str =
-    "That's outside the hours FlexWeek plans in, so it stayed where it was.";
+    "FlexWeek can't use that time, so the block stayed where it was.";
 
 fn rows<'a>(value: &'a Value, what: &str) -> Result<&'a Vec<Value>, EngineError> {
     value.as_array().ok_or_else(|| EngineError {

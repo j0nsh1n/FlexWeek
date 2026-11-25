@@ -147,7 +147,7 @@ from desktop.native.weekmodel import (
     moved_words,
 )
 
-WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
+WEEK_OVER = "That week is over. Open this week or a later one, then plan again."
 
 
 def first_placed(trace: dict, targets: object) -> tuple[int, int] | None:
@@ -177,14 +177,14 @@ def left_sentence(left: object) -> str:
 
 
 def plan_sentence(placed: int, waiting: int, left: object = ()) -> str:
-    """How much homework a plan placed, counting homework only. `waiting` is homework whose sessions
-    found no room; `left` is homework with minutes no session holds, by title and minutes."""
+    """How many targeted sessions a plan placed. `waiting` is homework whose sessions found no room;
+    `left` is homework with minutes no session holds, by title and minutes."""
     if placed == 0:
-        said = "Nothing placed."
+        said = "No homework was placed."
     else:
-        said = f"Placed {placed} homework block{'s' if placed != 1 else ''}."
+        said = f"Placed {placed} session{'s' if placed != 1 else ''}."
     if waiting:
-        said += f" {waiting} with no time yet."
+        said += f" {waiting} still needs a time."
     return said + left_sentence(left)
 
 
@@ -193,7 +193,7 @@ def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str
     return f"{title}: {length_label(minutes)} ready to add before {due_label(due, today)}."
 
 
-HOURS_REFUSED = "Check the days and times of your study hours and protected time."
+HOURS_REFUSED = "Check the days and times in Study hours and Protected time."
 
 
 # Blocks and homework are checked and written as the engine does it (engine/service/src/blocks.rs and
@@ -1943,7 +1943,7 @@ class NativeSession(QObject):
         if item is None or self.account is None or self.conflict:
             return False
         if self.busy or self.dirty or self.pending_save is not None:
-            self._say("Saving your last change… Delete will work in a moment.")
+            self._say("Saving your last change… Try Delete again in a moment.")
             return False
         title = str(item.get("title") or "the homework")
         before = deepcopy(self.blocks)
@@ -2643,7 +2643,7 @@ class NativeSession(QObject):
                 self.load_week(
                     self.week_start,
                     discard=True,
-                    said="Undo did not go through. Your week was reloaded as it's saved.",
+                    said="Undo didn't save. Your week was reloaded as it's saved.",
                 )
 
         self.client.request("POST", "/api/changes", deepcopy(payload), ok, err)
@@ -2684,7 +2684,7 @@ class NativeSession(QObject):
         fits all of it, instead of the planner's usual order, and says where it went in `placed_where`.
         """
         if self.planning:
-            self._say("Planning… one moment.")
+            self._say("Already planning…")
             return
         if self.conflict:
             self._say("This week changed in another window. Choose More > Reload this week, then try again.")
@@ -2692,9 +2692,9 @@ class NativeSession(QObject):
         if self.pending_save is not None:
             if everything:
                 self._replan_after_save = True
-                self._say("Saving your last change… Plan will work in a moment.")
+                self._say("Saving your last change… Try Plan again in a moment.")
                 return
-            self._say("Saving your last change… Plan will work in a moment.")
+            self._say("Saving your last change… Try Plan again in a moment.")
             return
         self.plan_asked_week = self.week_start
         self.placed_where = ""
@@ -2991,7 +2991,7 @@ class NativeSession(QObject):
         self.blocks = split
         self._history_label = "the focus split"
         self.dirty = True
-        return f" Split {count} into focus chunks."
+        return f" Split {count} into focus sessions and breaks."
 
     def _operation(self, key: str) -> str:
         if key not in self._attempts:
@@ -3451,7 +3451,7 @@ class NativeSession(QObject):
             sources = [block for block in sources if block["id"] in allowed]
         title = name.strip()
         if not title or not sources:
-            self._say("Name the routine and select at least one fixed commitment.")
+            self._say("Name the routine and select at least one fixed time.")
             return False
         templates = [routine_template(block, str(uuid4())) for block in sources]
         fingerprint = clipboard_fingerprint(
@@ -3593,14 +3593,14 @@ class NativeSession(QObject):
         if item is None or left <= 0:
             return ""
         title = item.get("title") or "This homework"
-        return f"{title} has {length_label(left)} left, less than the 15 minutes Plan places."
+        return f"{title} has {length_label(left)} left. Plan needs at least 15 minutes."
 
     def plan_unfinished(self, assignment_id: str) -> list[dict] | None:
         item = self.assignments.get(assignment_id)
         minutes = self.remaining_for(assignment_id)
         if item is None or minutes < 15:
             short = self._too_short_to_plan(item, assignment_id)
-            self._say(short or "That homework is already fully planned.")
+            self._say(short or "There's no time left to plan for this homework.")
             return None
         due_day = due_day_in_week(item.get("due"), self.week_start)
         days = days_through(due_day, first_plannable_day(self.week_start))
@@ -3677,7 +3677,7 @@ class NativeSession(QObject):
             if late:
                 late_targets.add(block["id"])
         if not targets:
-            self._say(short or "That homework already has a time.")
+            self._say(short or "There's no time left to plan for this homework.")
             return
         dirty_before = self.dirty
         if made:
@@ -3879,11 +3879,9 @@ class NativeSession(QObject):
             remaining = int(data.get("remaining_min") or 0)
             if not sessions:
                 if remaining:
-                    self._say(
-                        f"{length_label(remaining)} remains, but it doesn't fit the 15-minute planning grid."
-                    )
+                    self._say(f"{length_label(remaining)} remains. FlexWeek plans in 15-minute steps.")
                 else:
-                    self._say("All of this homework is already focused or planned.")
+                    self._say("There's no time left to plan for this homework.")
                 self.spread_preview = None
                 # Allow splitting made nothing, so a later Spread of this homework is an ordinary one.
                 self._allow_split_pending = None
@@ -3911,8 +3909,8 @@ class NativeSession(QObject):
             summary = spread_ready_sentence(item["title"], total, item["due"], self.today_iso())
             if remaining:
                 summary += (
-                    f" {length_label(remaining)} can't fit the 15-minute grid and has not been "
-                    "dropped from the homework total."
+                    f" {length_label(remaining)} is still included in the homework's total time, "
+                    "but it's less than the 15 minutes Plan can add."
                 )
             self.spread_preview = {
                 "assignment_id": assignment_id,
@@ -4187,12 +4185,12 @@ class NativeSession(QObject):
             return
         link = self.spotify_url()
         if not link:
-            self._say("Add a Spotify link in Settings, under Alerts. Focus has started.")
+            self._say("Focus started without Spotify. Add a link under Settings > Alerts.")
             return
         from desktop.native.spotify import open_in_app
 
         if not open_in_app(link):
-            self._say("Spotify didn't open. Focus has started.")
+            self._say("Focus started without Spotify because the app didn't open.")
 
     def confirm_replace_focus(self) -> bool:
         pending = self._pending_focus
@@ -4747,11 +4745,11 @@ class NativeSession(QObject):
 
     def create_restore_point(self, label: str) -> None:
         if self.account is None or not label.strip():
-            self._say("Give the restore point a name.")
+            self._say("Name the saved copy.")
             return
         key = flexweek_engine.create_restore_operation_key(self.account["id"], label.strip())
         ticket = self._begin()
-        self._say("Saving restore point…")
+        self._say("Saving a copy…")
 
         def ok(data: dict) -> None:
             # The point exists now. The same name asked for again is a new backup, not a retry.
@@ -4764,7 +4762,7 @@ class NativeSession(QObject):
                     json.dumps(self.restore_points), json.dumps(point)
                 )
             )
-            self._say("Saved restore point " + point.get("label", label) + ".")
+            self._say("Saved copy " + point.get("label", label) + ".")
             self.week_changed.emit()
 
         self.client.request(

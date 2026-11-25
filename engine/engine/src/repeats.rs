@@ -59,12 +59,12 @@ const MAX_KEPT_SAID: usize = 3;
 pub const RULE: &str = "A change to a repeating block names School, a Setup activity or a weekly fixed \
 time, a from_date written YYYY-MM-DD, and only title, category, start, duration_min and until to set";
 pub const NOTHING_LEFT: &str =
-    "That change leaves no day, so nothing changed. Use stop to take it off the calendar.";
+    "That change leaves no days, so nothing changed. To remove it, choose Delete instead.";
 /// The most repeats one account holds at once: School, Setup's activities and weekly fixed times together
 /// (Jonathan, 2026-11-20). An export keeps each repeat's place in a list the backend bounds by it.
 pub const MAX_REPEATS: usize = 200;
 pub const REPEATS_FULL: &str = "FlexWeek keeps at most 200 weekly blocks (School, activities and weekly \
-                                fixed times) in one account. Stop one before adding another.";
+                                fixed times) in one account. Delete one before adding another.";
 /// A change whose Until comes before the day the change starts would end the repeat before it begins.
 pub const UNTIL_TOO_EARLY: &str = "Until can't be before the day this change starts.";
 pub const NEW_NEEDS_ALL: &str =
