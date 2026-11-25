@@ -3,9 +3,8 @@ import QtQuick.Layouts
 import components 1.0
 import "../sheets"
 
-// First-run setup: three steps down the side (a line of text on a phone), one page at a time with the week it
-// is building beside it (under it when narrow), and Back, Skip this step, Skip setup and Next under the
-// cards. Every answer goes to the account bridge.
+// First-run setup: Option B horizontal top stepper bar (frees full width for the 2x2 choice grid
+// beside the live week preview) and a dedicated pinned bottom bar so no card is cut off above buttons.
 FocusScope {
     id: root
     objectName: "setupFlow"
@@ -16,131 +15,198 @@ FocusScope {
     property bool highContrast: false
     property bool phone: false
     readonly property int step: bridge ? bridge.setupStep : 0
-    readonly property int railWidth: phone ? 0 : 248
 
     M3Palette { id: m3Palette; theme: root.theme }
 
-    // The week and the picked list sit beside the cards, or under them when the column is narrow.
-    readonly property bool split: !phone && column.width >= 640
-    readonly property real cardsWidth: split ? Math.floor((column.width - 24) * 0.54) : column.width
+    // The week and the picked list sit beside the cards on desktop, or under them when narrow.
+    readonly property bool split: !phone && column.width >= 720
+    readonly property real cardsWidth: split ? Math.floor((column.width - 24) * 0.58) : column.width
 
     function pageFor(step) {
         // Steps 0 to 2 were the style pages; setup starts at School hours, step 3.
         return [weekPage, homeworkPage, remindersPage][step - 3]
     }
 
-    // Side rail: one row per step.
+    // Horizontal top stepper bar (Option B)
     Rectangle {
         id: rail
         objectName: "setupRail"
-        visible: !root.phone
-        width: root.railWidth
-        height: parent.height
-        color: m3Palette.surfaceContainerLow
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.phone ? 56 : 68
+        color: m3Palette.panelSurface
+        z: 2
 
-        Column {
-            x: 16
-            y: 32
-            width: parent.width - 32
-            spacing: 4
-            Text {
-                text: "Set up FlexWeek"
-                color: m3Palette.inkSurface
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(22)
-                font.weight: 500
-                bottomPadding: 16
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: m3Palette.outlineVariant
+        }
+
+        Item {
+            width: Math.min(1080, parent.width - (root.phone ? 32 : 48))
+            height: parent.height
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            // Brand lockup on left
+            Row {
+                id: topBrand
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 10
+                Rectangle {
+                    width: 32
+                    height: 32
+                    radius: m3Palette.cornerFor(10)
+                    color: m3Palette.primary
+                    anchors.verticalCenter: parent.verticalCenter
+                    M3Icon {
+                        anchors.centerIn: parent
+                        name: "school"
+                        width: 18
+                        height: 18
+                        color: m3Palette.inkPrimary
+                    }
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Set up FlexWeek"
+                    color: m3Palette.inkSurface
+                    font.family: M3Font.heading
+                    font.pixelSize: M3Font.px(17)
+                    font.weight: 600
+                }
             }
-            Repeater {
-                model: bridge ? bridge.railModel : null
-                Item {
-                    id: railRow
-                    required property var row
-                    required property int index
-                    objectName: "setupStep" + index
-                    width: parent.width
-                    height: 48
-                    activeFocusOnTab: true
-                    property bool keyDown: false
-                    readonly property bool current: row.state === "current"
-                    readonly property bool finished: row.state === "finished"
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 24
-                        color: railRow.current ? m3Palette.secondaryContainer : "transparent"
-                    }
-                    M3StateLayer {
-                        anchors.fill: parent
-                        radius: 24
-                        color: m3Palette.inkSurface
-                        hovered: railHover.hovered
-                        down: railTap.pressed || railRow.keyDown
-                        reduceMotion: root.reduceMotion
-                    }
-                    M3FocusRing {
-                        anchors.fill: parent
-                        anchors.margins: -4
-                        ring: m3Palette.focusRing
-                        ringRadius: 28
-                    }
-                    Rectangle {
-                        id: badge
-                        x: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 24
-                        height: 24
-                        radius: 12
-                        color: railRow.finished ? m3Palette.primary : "transparent"
-                        border.width: railRow.finished ? 0 : 2
-                        border.color: railRow.current ? m3Palette.primary : m3Palette.outline
-                        M3Icon {
-                            visible: railRow.finished
-                            anchors.centerIn: parent
-                            width: 16
-                            height: 16
-                            name: "check"
-                            color: m3Palette.inkPrimary
+
+            // Mobile step text
+            Text {
+                visible: root.phone
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Step " + Math.max(1, Math.min(root.step - 2, 3)) + " of 3"
+                color: m3Palette.inkMuted
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(13)
+                font.weight: 600
+            }
+
+            // Desktop horizontal step pills
+            Row {
+                visible: !root.phone
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                Repeater {
+                    model: bridge ? bridge.railModel : null
+                    Row {
+                        id: stepWrap
+                        required property var row
+                        required property int index
+                        spacing: 8
+
+                        Rectangle {
+                            visible: stepWrap.index > 0
+                            width: 18
+                            height: 2
+                            radius: 1
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: m3Palette.outlineVariant
                         }
-                        Text {
-                            visible: !railRow.finished
-                            anchors.centerIn: parent
-                            text: String(railRow.index + 1)
-                            color: railRow.current ? m3Palette.primary : m3Palette.inkMuted
-                            font.family: M3Font.family
-                            font.pixelSize: M3Font.px(12)
-                            font.weight: 500
-                        }
-                    }
-                    Text {
-                        anchors.left: badge.right
-                        anchors.leftMargin: 12
-                        anchors.right: parent.right
-                        anchors.rightMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: railRow.row.name
-                        elide: Text.ElideRight
-                        color: railRow.current ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
-                        font.family: M3Font.family
-                        font.pixelSize: M3Font.px(14)
-                        font.weight: 500
-                    }
-                    HoverHandler { id: railHover }
-                    TapHandler { id: railTap; onTapped: root.bridge.setupJump(railRow.row.step) }
-                    Accessible.role: Accessible.Button
-                    Accessible.name: railRow.row.accessName
-                    Accessible.onPressAction: root.bridge.setupJump(railRow.row.step)
-                    Keys.onPressed: (event) => {
-                        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            railRow.keyDown = true
-                            event.accepted = true
-                        }
-                    }
-                    Keys.onReleased: (event) => {
-                        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            if (railRow.keyDown)
-                                root.bridge.setupJump(railRow.row.step)
-                            railRow.keyDown = false
-                            event.accepted = true
+
+                        Item {
+                            id: railRow
+                            objectName: "setupStep" + stepWrap.index
+                            property bool keyDown: false
+                            readonly property bool current: stepWrap.row.state === "current"
+                            readonly property bool finished: stepWrap.row.state === "finished"
+                            width: stepContent.implicitWidth + 24
+                            height: 40
+                            activeFocusOnTab: true
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: m3Palette.cornerFor(20)
+                                color: railRow.current ? m3Palette.secondaryContainer : "transparent"
+                                border.width: railRow.current && root.highContrast ? 1.5 : 0
+                                border.color: m3Palette.outline
+                            }
+                            M3StateLayer {
+                                anchors.fill: parent
+                                radius: m3Palette.cornerFor(20)
+                                color: m3Palette.inkSurface
+                                hovered: railHover.hovered
+                                down: railTap.pressed || railRow.keyDown
+                                reduceMotion: root.reduceMotion
+                            }
+                            M3FocusRing {
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                ring: m3Palette.focusRing
+                                ringRadius: m3Palette.cornerFor(20) + 4
+                            }
+                            Row {
+                                id: stepContent
+                                anchors.centerIn: parent
+                                spacing: 8
+                                Rectangle {
+                                    id: badge
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 22
+                                    height: 22
+                                    radius: 11
+                                    color: railRow.finished || railRow.current ? m3Palette.primary : "transparent"
+                                    border.width: railRow.finished || railRow.current ? 0 : 1.5
+                                    border.color: m3Palette.outline
+                                    M3Icon {
+                                        visible: railRow.finished
+                                        anchors.centerIn: parent
+                                        width: 14
+                                        height: 14
+                                        name: "check"
+                                        color: m3Palette.inkPrimary
+                                    }
+                                    Text {
+                                        visible: !railRow.finished
+                                        anchors.centerIn: parent
+                                        text: String(stepWrap.index + 1)
+                                        color: railRow.current ? m3Palette.inkPrimary : m3Palette.inkMuted
+                                        font.family: M3Font.family
+                                        font.pixelSize: M3Font.px(11)
+                                        font.weight: 700
+                                    }
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: stepWrap.row.name
+                                    color: railRow.current ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
+                                    font.family: M3Font.family
+                                    font.pixelSize: M3Font.px(13)
+                                    font.weight: railRow.current ? 600 : 500
+                                }
+                            }
+                            HoverHandler { id: railHover }
+                            TapHandler { id: railTap; onTapped: root.bridge.setupJump(stepWrap.row.step) }
+                            Accessible.role: Accessible.Button
+                            Accessible.name: stepWrap.row.accessName
+                            Accessible.onPressAction: root.bridge.setupJump(stepWrap.row.step)
+                            Keys.onPressed: (event) => {
+                                if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    railRow.keyDown = true
+                                    event.accepted = true
+                                }
+                            }
+                            Keys.onReleased: (event) => {
+                                if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    if (railRow.keyDown)
+                                        root.bridge.setupJump(stepWrap.row.step)
+                                    railRow.keyDown = false
+                                    event.accepted = true
+                                }
+                            }
                         }
                     }
                 }
@@ -148,42 +214,34 @@ FocusScope {
         }
     }
 
-    // The page column.
+    // Main workspace between top stepper and pinned footer bar
     Item {
         id: stage
-        anchors.left: rail.visible ? rail.right : parent.left
+        anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
+        anchors.top: rail.bottom
+        anchors.bottom: footerBar.top
 
         Item {
             id: column
-            width: Math.min(880, parent.width - (root.phone ? 32 : 64))
+            width: Math.min(1080, parent.width - (root.phone ? 32 : 48))
             height: parent.height
             x: (parent.width - width) / 2
 
             Column {
                 id: head
-                y: root.phone ? 16 : 32
+                y: root.phone ? 14 : 20
                 width: root.cardsWidth
-                spacing: 8
-                Text {
-                    visible: root.phone
-                    text: "Step " + Math.max(1, Math.min(root.step - 2, 3)) + " of 3"
-                    color: m3Palette.inkMuted
-                    font.family: M3Font.family
-                    font.pixelSize: M3Font.px(12)
-                    font.weight: 500
-                }
+                spacing: 4
                 Text {
                     objectName: "setupTitle"
                     width: parent.width
                     text: bridge ? bridge.heading : ""
                     wrapMode: Text.WordWrap
                     color: m3Palette.inkSurface
-                    font.family: M3Font.family
-                    font.pixelSize: M3Font.px(root.phone ? 24 : 28)
-                    font.weight: 400
+                    font.family: M3Font.heading
+                    font.pixelSize: M3Font.px(root.phone ? 22 : 26)
+                    font.weight: 600
                     Accessible.role: Accessible.Heading
                     Accessible.name: text
                 }
@@ -202,12 +260,12 @@ FocusScope {
                 id: scroller
                 objectName: "setupScroll"
                 anchors.top: head.bottom
-                anchors.topMargin: 16
-                anchors.bottom: footer.top
+                anchors.topMargin: 14
+                anchors.bottom: parent.bottom
                 anchors.bottomMargin: 8
                 width: root.cardsWidth
                 contentWidth: width
-                contentHeight: pageHolder.height + 16
+                contentHeight: pageHolder.height + 24
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
@@ -239,41 +297,84 @@ FocusScope {
                 }
             }
 
-            SetupPreview {
+            Flickable {
                 visible: root.split
                 x: root.cardsWidth + 24
-                y: head.y
+                anchors.top: head.top
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 8
                 width: column.width - root.cardsWidth - 24
-                bridge: root.bridge
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
+                contentWidth: width
+                contentHeight: splitPreview.implicitHeight + 16
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                SetupPreview {
+                    id: splitPreview
+                    width: parent.width
+                    bridge: root.bridge
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                }
+            }
+        }
+    }
+
+    // Pinned bottom footer bar: separates action buttons cleanly from scrolling cards.
+    Rectangle {
+        id: footerBar
+        objectName: "setupFooterBar"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: footerCol.implicitHeight + (root.phone ? 24 : 28)
+        color: m3Palette.panelSurface
+        z: 2
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 1
+            color: m3Palette.outlineVariant
+        }
+
+        Column {
+            id: footerCol
+            width: Math.min(1080, parent.width - (root.phone ? 32 : 48))
+            anchors.centerIn: parent
+            spacing: 8
+
+            Text {
+                objectName: "setupProblem"
+                width: parent.width
+                visible: text !== ""
+                text: bridge ? bridge.setupProblem : ""
+                wrapMode: Text.WordWrap
+                color: m3Palette.error
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(14)
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
             }
 
-            Column {
-                id: footer
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: root.phone ? 16 : 24
-                width: root.cardsWidth
-                spacing: 8
+            Item {
+                width: parent.width
+                readonly property bool stackedFooter: root.phone || (leftBtns.implicitWidth + rightBtns.implicitWidth + 16 > width)
+                implicitHeight: stackedFooter
+                    ? (leftBtns.visible ? leftBtns.implicitHeight + 8 : 0) + rightBtns.implicitHeight
+                    : Math.max(leftBtns.implicitHeight, rightBtns.implicitHeight)
+                height: implicitHeight
 
-                Text {
-                    objectName: "setupProblem"
-                    width: parent.width
-                    visible: text !== ""
-                    text: bridge ? bridge.setupProblem : ""
-                    wrapMode: Text.WordWrap
-                    color: m3Palette.error
-                    font.family: M3Font.family
-                    font.pixelSize: M3Font.px(14)
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text
-                }
-                Flow {
-                    width: parent.width
+                Row {
+                    id: leftBtns
+                    visible: (bridge ? bridge.backVisible : false) || (bridge ? bridge.skipVisible : false)
+                    anchors.left: parent.left
+                    anchors.top: parent.stackedFooter ? parent.top : undefined
+                    anchors.verticalCenter: parent.stackedFooter ? undefined : parent.verticalCenter
                     spacing: 8
-                    layoutDirection: Qt.LeftToRight
                     Button {
                         objectName: "setupBack"
                         visible: bridge ? bridge.backVisible : false
@@ -286,17 +387,6 @@ FocusScope {
                         onClicked: root.bridge.setupBack()
                     }
                     Button {
-                        objectName: "setupSkip"
-                        visible: bridge ? bridge.skipStepVisible : false
-                        theme: root.theme
-                        density: root.density
-                        reduceMotion: root.reduceMotion
-                        highContrast: root.highContrast
-                        kind: "text"
-                        text: bridge ? bridge.skipLabel : "Skip this step"
-                        onClicked: root.bridge.setupSkip()
-                    }
-                    Button {
                         objectName: "setupSkipAll"
                         visible: bridge ? bridge.skipVisible : false
                         theme: root.theme
@@ -306,6 +396,25 @@ FocusScope {
                         kind: "text"
                         text: bridge ? bridge.skipAllLabel : "Skip setup"
                         onClicked: root.bridge.setupSkipAll()
+                    }
+                }
+
+                Row {
+                    id: rightBtns
+                    anchors.right: parent.right
+                    anchors.bottom: parent.stackedFooter ? parent.bottom : undefined
+                    anchors.verticalCenter: parent.stackedFooter ? undefined : parent.verticalCenter
+                    spacing: 8
+                    Button {
+                        objectName: "setupSkip"
+                        visible: bridge ? bridge.skipStepVisible : false
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        kind: "text"
+                        text: bridge ? bridge.skipLabel : "Skip this step"
+                        onClicked: root.bridge.setupSkip()
                     }
                     Button {
                         objectName: "setupNext"
