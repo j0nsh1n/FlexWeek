@@ -63,11 +63,11 @@
   "test": "desktop/tests/account/test_material_sign_in_and_create_account.py::test_empty_fields_say_what_is_missing_before_asking_the_server"
  },
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/week.rs",
   "name": "Reload says This week",
-  "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",
-  "new": "        self.load_week(self.week_start, discard=True)\n",
-  "test": "desktop/tests/week/test_material_notices.py::test_every_advanced_action_says_what_it_did_in_the_session_words"
+  "old": "    \"Reloaded this week.\"\n",
+  "new": "    \"This week.\"\n",
+  "test": "cargo:flexweek-app:session_week:reload_discards_the_parked_copy_and_says_what_happened"
  },
  {
   "file": "desktop/native/window.py",

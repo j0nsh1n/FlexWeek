@@ -20,6 +20,7 @@ pub mod preferences;
 pub mod reminders;
 pub mod status;
 pub mod transfer;
+pub mod week;
 pub mod words;
 
 use std::collections::BTreeMap;

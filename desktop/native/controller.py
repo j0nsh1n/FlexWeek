@@ -711,14 +711,20 @@ class NativeSession(QObject):
         self.selected_day = date_for_day(self.week_start, weekday)
 
     def _held(self) -> bool:
-        return bool(self.dirty or self.dirty_assignments or self.pending_save)
+        return bool(flexweek_engine.week_held(self._week_flags()))
+
+    def _week_flags(self) -> tuple[bool, bool, bool]:
+        return self.dirty, bool(self.dirty_assignments), bool(self.pending_save)
+
+    def _parked_flags(self) -> list[tuple[str, tuple[bool, bool, bool]]]:
+        return [
+            (start, (draft["dirty"], bool(draft["dirty_assignments"]), bool(draft["pending_save"])))
+            for start, draft in self._drafts.items()
+        ]
 
     def parked_unsaved_week(self) -> str | None:
         """The Monday of a week set aside with changes the server does not have yet, if any."""
-        for week_start, parked in self._drafts.items():
-            if parked["dirty"] or parked["dirty_assignments"] or parked["pending_save"]:
-                return week_start
-        return None
+        return flexweek_engine.first_held_week(self._parked_flags())
 
     def _week_snapshot(self) -> dict:
         return {
@@ -1126,38 +1132,37 @@ class NativeSession(QObject):
             self._told(finished)
 
     def load_week(
-        self, week_start: str | None = None, *, discard: bool = False, said: str = "This week."
+        self, week_start: str | None = None, *, discard: bool = False, said: str | None = None
     ) -> None:
         """Load a week from the server. `said` is what the status line says once it is loaded."""
         if self.account is None:
             return
         if self.busy:
             return
-        start = week_start or self.shown_week_of(wall_clock.today().isoformat())
-        if start not in self._drafts and start != self.week_start:
-            # Any date opens the week on screen that holds it. A week set aside unsaved keeps the day it
-            # started on, so it is found and saved as it was.
-            start = self.shown_week_of(start)
-        if discard:
-            self._drafts.pop(start, None)
-        elif start == self.week_start and self._held():
+        route = json.loads(flexweek_engine.week_select(
+            week_start or self.shown_week_of(wall_clock.today().isoformat()),
+            self.week_start,
+            self.first_weekday,
+            discard,
+            self._week_flags(),
+            self._parked_flags(),
+        ))
+        if route["action"] == "keep":
             return
-        else:
-            parked = self._drafts.get(start)
-            if parked is not None and (
-                parked["dirty"] or parked["dirty_assignments"] or parked["pending_save"]
-            ):
-                if start != self.week_start:
-                    if self._held():
-                        self._drafts[self.week_start] = self._week_snapshot()
-                    self._restore_week(parked)
-                    self._drafts.pop(start, None)
-                    self._say("This week.")
-                    self._refresh_view()
-                    self.week_changed.emit()
-                    self._restore_focus()
-                    self._drop_missing_focus()
-                return
+        start = route["start"]
+        if route["action"] == "restore":
+            if route["park_open"]:
+                self._drafts[self.week_start] = self._week_snapshot()
+            self._restore_week(self._drafts[start])
+            self._drafts.pop(start, None)
+            self._say(route["words"])
+            self._refresh_view()
+            self.week_changed.emit()
+            self._restore_focus()
+            self._drop_missing_focus()
+            return
+        if route["discard_parked"]:
+            self._drafts.pop(start, None)
         previous = self.week_start
         ticket = self._begin()
         self._say("Loading…")
@@ -1167,59 +1172,70 @@ class NativeSession(QObject):
                 return
             self._load_assignments(ticket, previous, data, said)
 
-        def failed(error: ApiError) -> None:
-            if not self._alive(ticket):
-                return
-            # The week on screen did not change, so Day view must not stay on a day outside it.
-            if self.shown_week_of(self.selected_day) != self.week_start:
-                self._ensure_selected_day()
-                self._refresh_view()
-            self._fail(ticket, error)
-            self.week_changed.emit()
+        self.client.request(
+            "GET", f"/api/week?week_start={start}", None, week_ok,
+            lambda error: self._week_read_failed(ticket, error, assignments=False),
+        )
 
-        self.client.request("GET", f"/api/week?week_start={start}", None, week_ok, failed)
+    def _week_read_failed(self, ticket: int, error: ApiError, *, assignments: bool) -> None:
+        if not self._alive(ticket):
+            return
+        clear_plan, refresh_day = flexweek_engine.week_load_failed(
+            self.week_start, assignments, self.selected_day, self.first_weekday,
+        )
+        if clear_plan:
+            self._plan_after_load = set()
+            self._replan_after_load = False
+        if refresh_day:
+            self._ensure_selected_day()
+            self._refresh_view()
+        self._fail(ticket, error)
+        self.week_changed.emit()
 
     def _assignments_url(self, week_start: str) -> str:
         return f"/api/assignments?week_start={week_start}&include_completed=true"
 
-    def _load_assignments(self, ticket: int, previous: str, week: dict, said: str = "This week.") -> None:
+    def _load_assignments(self, ticket: int, previous: str, week: dict, said: str | None) -> None:
         loaded = week["week_start"]
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            if loaded != previous:
-                if self._held():
-                    self._drafts[previous] = self._week_snapshot()
+            install = json.loads(flexweek_engine.week_install(
+                previous, self._week_flags(), json.dumps(self.revision),
+                json.dumps(week), json.dumps(data["assignments"]), said,
+            ))
+            if install["park_open"]:
+                self._drafts[previous] = self._week_snapshot()
+            if install["history"] == "clear":
                 self._undo.clear()
                 self._redo.clear()
-            elif self.revision != week["revision"]:
+            elif install["history"] == "stale":
                 mark_stale(self._undo, loaded)
                 mark_stale(self._redo, loaded)
             self._drafts.pop(loaded, None)
-            self.blocks = list(week["blocks"])
-            self.revision = week["revision"]
-            self._stored_parts = list(week.get("stored") or [])
-            # Absent when nothing repeats in that week.
-            self.repeats = list(week.get("repeats") or [])
+            self.blocks = install["blocks"]
+            self.revision = install["revision"]
+            self._stored_parts = install["stored"]
+            self.repeats = install["repeats"]
             self._saved_repeats = deepcopy(self.repeats)
             # A change still waiting stayed with the draft of the week it was made in.
             self._repeat_send = None
             self._repeat_ack = None
-            self.week_start = loaded
+            self.week_start = install["start"]
             self.dirty = False
             self.conflict = False
             self.pending_save = None
             self._pending_step = None
             self._split_planned = set()
             self.trace = None
-            self.assignments = {item["id"]: item for item in data["assignments"]}
+            self.assignments = install["assignments"]
             self.dirty_assignments.clear()
             self._committed_blocks = deepcopy(self.blocks)
             self._assignments_basis = deepcopy(self.blocks)
             self._committed_assignments = deepcopy(self.assignments)
             self._ensure_selected_day()
-            self._say(said)
+            self._say(install["words"])
             self._refresh_view()
             self.week_changed.emit()
             self._restore_focus()
@@ -1232,18 +1248,10 @@ class NativeSession(QObject):
             self._prefetch_open_week_month()
             self._plan_waiting_for_load()
 
-        def failed(error: ApiError) -> None:
-            if not self._alive(ticket):
-                return
-            self._plan_after_load = set()
-            self._replan_after_load = False
-            if self.shown_week_of(self.selected_day) != self.week_start:
-                self._ensure_selected_day()
-                self._refresh_view()
-            self._fail(ticket, error)
-            self.week_changed.emit()
-
-        self.client.request("GET", self._assignments_url(loaded), None, ok, failed)
+        self.client.request(
+            "GET", self._assignments_url(loaded), None, ok,
+            lambda error: self._week_read_failed(ticket, error, assignments=True),
+        )
 
     def _plan_waiting_for_load(self) -> None:
         planned, self._plan_after_load = self._plan_after_load, set()
@@ -1258,7 +1266,7 @@ class NativeSession(QObject):
         self.dirty = False
         self.conflict = False
         self.dirty_assignments.clear()
-        self.load_week(self.week_start, discard=True, said="Reloaded this week.")
+        self.load_week(self.week_start, discard=True, said=flexweek_engine.week_reload_words())
 
     def use_sync_host(self, host: QObject | None) -> None:
         """Use the sync host the app already started. This session does not start a second one."""
@@ -1358,16 +1366,16 @@ class NativeSession(QObject):
     def accept_remote_week(self, who: str) -> bool:
         """A linked phone's edits arrived. Unsaved edits here are kept and marked as a conflict, and
         the week is not reloaded. False while a request is in flight, so the caller can ask again."""
-        if self.account is None:
-            return True
-        if self.busy:
-            return False
-        if self.dirty or self.dirty_assignments or self.pending_save is not None:
+        accepted, conflict, words = flexweek_engine.week_remote_change(
+            self.account is not None, self.busy,
+            (self.dirty, bool(self.dirty_assignments), self.pending_save is not None), who,
+        )
+        if conflict:
             self.conflict = True
             self.week_changed.emit()
-            return True
-        self.load_week(self.week_start, discard=True, said=f"Updated from {who}.")
-        return True
+        if words is not None:
+            self.load_week(self.week_start, discard=True, said=words)
+        return bool(accepted)
 
     def _touch(self, label: str | None = None, keep: set[str] | frozenset[str] = frozenset()) -> None:
         if label:
@@ -1942,36 +1950,33 @@ class NativeSession(QObject):
     def _wrote_open_weeks(self, written: set[str]) -> bool:
         """A save that wrote a stored week the open week on screen shows, without writing the open week
         itself (an add to several weeks writes their Mondays)."""
-        if self.week_start in written or self._held():
-            return False
-        try:
-            stored = stored_weeks_of(self.week_start)
-        except ValueError:
-            return False
-        return len(stored) > 1 and any(week in written for week in stored)
+        return bool(flexweek_engine.week_wrote_open(self.week_start, self._week_flags(), written))
 
     def _week_local(self, week_start: str) -> dict | None:
-        if week_start == self.week_start:
+        parked = self._drafts.get(week_start, {})
+        source = flexweek_engine.week_local_source(week_start, self.week_start, parked.get("dirty", False))
+        if source == "open":
             return {"blocks": self.blocks, "revision": self.revision}
-        parked = self._drafts.get(week_start)
-        if parked is not None and parked["dirty"]:
+        if source == "parked":
             return {"blocks": parked["blocks"], "revision": parked["revision"]}
         return None
 
     def unsaved_weeks(self) -> dict[str, WeekModel]:
         """Weeks other than the open one that the student changed and left without saving, as they
         have them now, by their Monday."""
-        return {
-            week_start: build_week(week_start, parked["blocks"], parked["assignments"], parked["trace"])
-            for week_start, parked in self._drafts.items()
-            if parked["dirty"]
-        }
+        weeks = {}
+        for start in flexweek_engine.dirty_parked_weeks(self._parked_flags()):
+            parked = self._drafts[start]
+            weeks[start] = build_week(start, parked["blocks"], parked["assignments"], parked["trace"])
+        return weeks
 
     def _block_on_week(self, block_id: str, week_start: str) -> dict | None:
         state = self._week_local(week_start)
         if state is None:
             return None
-        return next((item for item in state["blocks"] if item["id"] == block_id), None)
+        blocks = state["blocks"]
+        index = flexweek_engine.week_block_index([item["id"] for item in blocks], block_id)
+        return None if index is None else blocks[index]
 
     def _commit_move_to_date(
         self,
@@ -3139,22 +3144,16 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if token != self._assign_ticket or self.account is None or self.week_start != asked:
                 return
+            edits = json.loads(flexweek_engine.week_refresh_assignments(
+                json.dumps(data.get("assignments")), set(self.assignments),
+                set(self._committed_assignments), self.dirty_assignments,
+            ))
             self._assignments_basis = basis
-            for item in data.get("assignments") or []:
-                # The saved copy a failed Undo or Redo goes back to must hold the numbers read with `basis`.
-                saved = self._committed_assignments.get(item["id"])
-                if saved is not None:
-                    saved["unplanned_min"] = item.get("unplanned_min")
-                    saved["planned_min"] = item.get("planned_min")
-                    saved["done_min"] = item.get("done_min")
-                if item["id"] in self.dirty_assignments:
-                    local = self.assignments.get(item["id"])
-                    if local is not None:
-                        local["unplanned_min"] = item.get("unplanned_min")
-                        local["planned_min"] = item.get("planned_min")
-                        local["done_min"] = item.get("done_min")
-                    continue
-                self.assignments[item["id"]] = item
+            for item_id, counts in edits["saved_counts"].items():
+                self._committed_assignments[item_id].update(counts)
+            for item_id, counts in edits["dirty_counts"].items():
+                self.assignments[item_id].update(counts)
+            self.assignments.update(edits["clean_rows"])
             self.week_changed.emit()
 
         self.client.request(
