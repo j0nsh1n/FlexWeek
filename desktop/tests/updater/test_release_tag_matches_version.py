@@ -12,10 +12,10 @@ from pathlib import Path
 import pytest
 
 from desktop.native.version import CHANNEL, VERSION
+from desktop.tests.updater.release_workflows import release_text
 
 ROOT = Path(__file__).resolve().parents[3]
 CHECK = ROOT / "scripts" / "check_release_tag.py"
-WORKFLOW = ROOT / ".github/workflows/release-windows.yml"
 STEP = "Check the tag matches the version"
 
 
@@ -81,7 +81,7 @@ def test_a_version_file_without_a_version_fails(tmp_path: Path) -> None:
 
 def job_steps(job: str) -> list[str]:
     """The step names of one job, in order."""
-    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    lines = release_text().splitlines()
     start = lines.index(f"  {job}:")
     names = []
     for line in lines[start + 1 :]:
@@ -104,6 +104,6 @@ def test_each_release_job_checks_the_tag_before_it_builds(job: str) -> None:
 
 
 def test_the_check_step_runs_the_script_with_the_tag_from_the_event_or_the_input() -> None:
-    text = WORKFLOW.read_text(encoding="utf-8")
+    text = release_text()
     assert text.count("scripts/check_release_tag.py") == 2
     assert '--tag="$TAG"' in text and '--tag="$env:TAG"' in text

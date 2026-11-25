@@ -1,3 +1,5 @@
+# Runs on Depot CI (moved from GitHub Actions on 2026-11-24, for its parallel runners). GitHub Actions
+# keeps only CodeQL (.github/workflows/codeql.yml) and the Windows release (release-windows.yml).
 name: Verify
 
 on:
@@ -10,7 +12,7 @@ permissions:
 
 jobs:
   engine:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -72,7 +74,7 @@ jobs:
           key: ${{ steps.engine-cache.outputs.cache-primary-key }}
 
   verify-engine:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - uses: actions/checkout@v7
         with:
@@ -136,7 +138,7 @@ jobs:
 
   verify-python:
     needs: engine
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - uses: actions/checkout@v7
         with:
@@ -189,7 +191,7 @@ jobs:
     # The whole desktop suite and the rig's own Python tests, offscreen, split by test file
     # over four jobs. About 4,800 s of test time in all: roughly 10 to 15 minutes per shard.
     needs: engine
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -268,7 +270,7 @@ jobs:
     # offscreen on a copy of the test account and steps it through the test door
     # (desktop/tests/door.py). They are ignored in a plain cargo test because each starts the app.
     needs: engine
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -332,7 +334,7 @@ jobs:
 
   rig:
     needs: engine
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -401,7 +403,7 @@ jobs:
     # The mutation cases whose rule is in the engine, on every pull request (CI is the gate,
     # spec.md Testing structure rule 7) and by hand.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -482,7 +484,7 @@ jobs:
     # one test, so roughly 10 to 15 minutes per shard.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: engine
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest # was: ubuntu-latest. Mapped standard GitHub runner to Depot equivalent.
     timeout-minutes: 60
     strategy:
       fail-fast: false
