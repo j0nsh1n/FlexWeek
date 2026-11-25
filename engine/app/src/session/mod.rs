@@ -15,6 +15,7 @@ pub mod autosave;
 pub mod frame;
 pub mod leaving;
 pub mod status;
+pub mod transfer;
 pub mod words;
 
 use std::collections::BTreeMap;

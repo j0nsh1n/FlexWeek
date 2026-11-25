@@ -7,29 +7,30 @@ from typing import cast
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-from backend.models import AssignmentContent, TimeBlock
 from desktop.native.wire import plain, restored
 
 EXPORT_FORMAT = "flexweek-week"
 DAY_FORMAT = "flexweek-day"
 EXPORT_VERSION = 2
+# The homework fields a file carries: the engine's homework save has these and the revision, which a
+# file never holds.
+_CONTENT_FIELDS = [name for name in flexweek_engine.homework_fields() if name != "revision"]
 
 
 def assignment_body(item: dict) -> dict:
-    fields = list(AssignmentContent.model_fields)
-    body = AssignmentContent.model_validate(
-        restored(flexweek_engine.files_assignment_input(plain(item), fields))
-    ).model_dump(mode="json")
+    kept = flexweek_engine.files_assignment_input(plain(item), _CONTENT_FIELDS)
+    body = cast(dict, restored(flexweek_engine.checked_homework(kept)))
+    body.pop("revision", None)
     return body
 
 
 def exportable_block(block: dict, assignments: dict) -> dict:
-    copy = json.loads(flexweek_engine.files_export_input(json.dumps(block), json.dumps(assignments)))
-    return TimeBlock.model_validate(copy).model_dump(mode="json")
+    copy = flexweek_engine.files_export_input(json.dumps(block), json.dumps(assignments))
+    return cast(dict, restored(flexweek_engine.checked_block(copy)))
 
 
 def _block_models(items: list[dict]) -> list[dict]:
-    return [TimeBlock.model_validate(item).model_dump(mode="json") for item in items]
+    return [cast(dict, restored(flexweek_engine.checked_block(plain(item)))) for item in items]
 
 
 def _bodies(ids: str, failure: Exception | None, assignments: dict) -> list[dict]:

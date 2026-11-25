@@ -62,9 +62,7 @@ from desktop.native.client import SESSION_ENDED, ApiError, NativeClient
 from desktop.native.files import (
     export_day_payload,
     export_week_payload,
-    merge_imported_blocks,
     parse_import_payload,
-    plan_imported_homework,
 )
 from desktop.native.focus import (
     FOCUS_PHASE_LABEL,
@@ -4995,7 +4993,7 @@ class NativeSession(QObject):
         if self.account is None or not label.strip():
             self._say("Give the restore point a name.")
             return
-        key = f"create-restore|{self.account['id']}|{label.strip()}"
+        key = flexweek_engine.create_restore_operation_key(self.account["id"], label.strip())
         ticket = self._begin()
         self._say("Saving restore point…")
 
@@ -5005,10 +5003,11 @@ class NativeSession(QObject):
             if not self._idle(ticket):
                 return
             point = data.get("restore_point") or data
-            self.restore_points = [point] + [
-                item for item in self.restore_points if item.get("id") != point.get("id")
-            ]
-            self.restore_points = self.restore_points[:20]
+            self.restore_points = json.loads(
+                flexweek_engine.restore_points_after_create_json(
+                    json.dumps(self.restore_points), json.dumps(point)
+                )
+            )
             self._say("Saved restore point " + point.get("label", label) + ".")
             self.week_changed.emit()
 
@@ -5052,10 +5051,14 @@ class NativeSession(QObject):
 
     def apply_restore_point(self, point_id: str) -> None:
         preview = self.restore_preview
-        if self.account is None or preview is None or preview.get("id") != point_id:
-            self._say("Preview the restore point first.")
+        words = flexweek_engine.restore_guard_words(
+            self.account is not None, None if preview is None else json.dumps(preview), point_id
+        )
+        if words is not None:
+            self._say(words)
             return
-        key = f"restore|{self.account['id']}|{point_id}"
+        assert self.account is not None and preview is not None
+        key = flexweek_engine.restore_operation_key(self.account["id"], point_id)
         ticket = self._begin()
         self._say("Restoring…")
 
@@ -5084,8 +5087,11 @@ class NativeSession(QObject):
         )
 
     def export_account(self, password: str, on_snapshot) -> None:
-        if self.account is None or self.dirty or self.dirty_assignments:
-            self._say("Save your last change first (More > Retry save), then export.")
+        words = flexweek_engine.transfer_blocked_words(
+            self.account is None or self.dirty, len(self.dirty_assignments), "export"
+        )
+        if words is not None:
+            self._say(words)
             return
         ticket = self._begin()
 
@@ -5103,8 +5109,11 @@ class NativeSession(QObject):
         )
 
     def preview_account_import(self, snapshot: dict, on_preview=None) -> None:
-        if self.account is None or self.dirty or self.dirty_assignments:
-            self._say("Save your last change first (More > Retry save), then import.")
+        words = flexweek_engine.transfer_blocked_words(
+            self.account is None or self.dirty, len(self.dirty_assignments), "import"
+        )
+        if words is not None:
+            self._say(words)
             return
         ticket = self._begin()
 
@@ -5133,10 +5142,13 @@ class NativeSession(QObject):
         preview = self.transfer_preview
         if self.account is None or preview is None:
             return
-        if self.dirty or self.dirty_assignments:
-            self._say("Save your last change first (More > Retry save), then import.")
+        words = flexweek_engine.transfer_blocked_words(self.dirty, len(self.dirty_assignments), "import")
+        if words is not None:
+            self._say(words)
             return
-        key = f"import|{self.account['id']}|{preview.get('state_token')}"
+        key = flexweek_engine.import_operation_key(
+            self.account["id"], json.dumps(preview.get("state_token"))
+        )
         ticket = self._begin()
 
         def ok(_data: dict) -> None:
@@ -5174,48 +5186,25 @@ class NativeSession(QObject):
 
     def import_week_file(self, raw: str, *, replace: bool | None = None) -> bool:
         parsed = parse_import_payload(raw)
-        if parsed.get("error"):
-            self._say(parsed["error"])
-            return False
         target = parsed.get("week_start") or self.week_start
-        if target != self.week_start:
-            self._say(
-                "Nothing imported: this file is for "
-                + week_label(target, self.today_iso())
-                + ". Go to that week, then import again."
+        decision = json.loads(
+            flexweek_engine.import_week_decision_json(
+                json.dumps(parsed),
+                self.week_start,
+                week_label(self.week_start, self.today_iso()),
+                week_label(target, self.today_iso()),
+                json.dumps(self.blocks),
+                json.dumps(self.assignments),
+                replace,
             )
-            return False
-        plan = plan_imported_homework(
-            parsed.get("assignments") or [], parsed.get("blocks") or [], self.week_start, self.assignments
         )
-        mode = "merge" if parsed.get("format") == "flexweek-day" else "replace"
-        if replace is False:
-            mode = "merge"
-        if replace is True:
-            mode = "replace"
-        if mode == "replace" and self.blocks and replace is not True:
-            self._say(
-                "Nothing imported: it would replace everything in "
-                + week_label(self.week_start, self.today_iso())
-                + ". Import again and choose Replace week."
-            )
+        if "say" in decision:
+            self._say(decision["say"])
             return False
-        try:
-            merged = merge_imported_blocks(self.blocks, plan["blocks"], mode, parsed.get("day"))
-        except ValueError as error:
-            self._say(str(error) + " Nothing was imported.")
-            return False
-        if len(merged) > MAX_WEEK_BLOCKS:
-            self._say(
-                week_label(self.week_start, self.today_iso())
-                + " would exceed 100 blocks. Uncheck an item or remove a block first."
-            )
-            return False
-        for item in plan["create"]:
-            # New to this account, so not yet saved: revision 0, as Add gives new homework.
-            self.assignments[item["id"]] = {**item, "revision": 0}
+        for item in decision["create"]:
+            self.assignments[item["id"]] = item
             self.dirty_assignments.add(item["id"])
-        self.blocks = merged
+        self.blocks = decision["blocks"]
         self._touch("the import")
         self.save()
         return True
