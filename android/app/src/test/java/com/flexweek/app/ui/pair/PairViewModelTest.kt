@@ -27,6 +27,18 @@ class PairViewModelTest {
         PairViewModel.resetPairingGateForTest()
     }
     @Test
+    fun typedDigitsStayInTheOrderTheyWereTyped() {
+        // Jonathan, 2026-11-24: typing a code after the fourth digit put digits out of order. The field holds
+        // only the digits; the space is drawn, so nothing typed lands on the wrong side of it.
+        val vm = PairViewModel(FakeFlexWeekCore(), dispatcher) {}
+        vm.showCodeEntry()
+        for (digit in "12345678") vm.onCodeChange(vm.uiState.value.code + digit)
+        assertEquals("12345678", vm.uiState.value.code)
+        vm.onCodeChange("1234 5678 9")
+        assertEquals("12345678", vm.uiState.value.code)
+    }
+
+    @Test
     fun shortCodeShowsLengthProblem() {
         val core = FakeFlexWeekCore()
         val vm = PairViewModel(core, dispatcher) {}
