@@ -6,7 +6,9 @@
 //! setup queue and save orchestration stay in Python.
 
 use flexweek_engine::desk::calendar::is_series_checked;
-use flexweek_engine::desk::grid::{apply_block_edit as grid_apply, delete_occurrence, is_standing_block};
+use flexweek_engine::desk::grid::{
+    apply_block_edit as grid_apply, delete_occurrence, is_standing_block,
+};
 use flexweek_engine::shown::{
     apply_repeats_to_shown_week, family_id, replaced_repeat_on_shown_week,
 };
@@ -88,8 +90,7 @@ fn checked_title(block: &Value) -> Result<&str, EngineError> {
 /// step: `editing ` when its id is already there, `adding ` otherwise.
 pub fn apply_block_edit(input: &BlockEditInput) -> Result<BlockEdit, EngineError> {
     let blocks = rows(input.blocks, "blocks")?;
-    let checked = check_block(input.block)
-        .map_err(|refused| EngineError::value(refused.0))?;
+    let checked = check_block(input.block).map_err(|refused| EngineError::value(refused.0))?;
     let id = checked
         .get("id")
         .and_then(Value::as_str)
@@ -106,11 +107,7 @@ pub fn apply_block_edit(input: &BlockEditInput) -> Result<BlockEdit, EngineError
     let scope = json!(input.scope);
     let day = input.day.map(Value::from).unwrap_or(Value::Null);
     let mut fresh = Some(input.new_id.to_string());
-    let mut take_fresh = || {
-        fresh
-            .take()
-            .unwrap_or_else(|| input.new_id.to_string())
-    };
+    let mut take_fresh = || fresh.take().unwrap_or_else(|| input.new_id.to_string());
     let edited = grid_apply(
         &Value::Array(blocks.clone()),
         &checked,
@@ -408,7 +405,10 @@ pub fn repeat_edit(input: &RepeatEditInput) -> Result<Option<RepeatEdit>, Engine
             .map(|change| {
                 let id = change.get("id").and_then(Value::as_str).unwrap_or_default();
                 if held.iter().any(|held| held == id) {
-                    from_saved.get(id).cloned().unwrap_or_else(|| change.clone())
+                    from_saved
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_else(|| change.clone())
                 } else {
                     change.clone()
                 }
@@ -419,7 +419,9 @@ pub fn repeat_edit(input: &RepeatEditInput) -> Result<Option<RepeatEdit>, Engine
     };
     let stamped = stamp_edited(&send, input.edited, input.today, input.first_weekday)?;
     let preview = changes;
-    let first = stamped.first().ok_or_else(|| EngineError::value("a repeat change is an object"))?;
+    let first = stamped
+        .first()
+        .ok_or_else(|| EngineError::value("a repeat change is an object"))?;
     let leaves = repeats::leaves_week(
         &repeats::parse_intent(first).map_err(EngineError::value)?,
         input.week_start,
@@ -433,7 +435,8 @@ pub fn repeat_edit(input: &RepeatEditInput) -> Result<Option<RepeatEdit>, Engine
             leaves_week: true,
         }));
     }
-    let (blocks_after, repeats_after) = if input.edited == "replace" || input.edited == "from_today" {
+    let (blocks_after, repeats_after) = if input.edited == "replace" || input.edited == "from_today"
+    {
         // Days on `after` count from Monday. The open week counts from its first day, so the engine
         // turns them. A stop has no body and comes off the week.
         let by_id: std::collections::BTreeMap<&str, &Value> = after
@@ -443,7 +446,8 @@ pub fn repeat_edit(input: &RepeatEditInput) -> Result<Option<RepeatEdit>, Engine
         let mut week = blocks;
         for change in &preview {
             let id = change.get("id").and_then(Value::as_str).unwrap_or_default();
-            week = replaced_repeat_on_shown_week(input.week_start, &week, id, by_id.get(id).copied())?;
+            week =
+                replaced_repeat_on_shown_week(input.week_start, &week, id, by_id.get(id).copied())?;
         }
         (week, after)
     } else {

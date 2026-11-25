@@ -35,7 +35,12 @@ fn activity(id: &str, days: Vec<i64>) -> Value {
     })
 }
 
-fn edit_input<'a>(blocks: &'a Value, block: &'a Value, scope: &'a str, day: Option<i64>) -> BlockEditInput<'a> {
+fn edit_input<'a>(
+    blocks: &'a Value,
+    block: &'a Value,
+    scope: &'a str,
+    day: Option<i64>,
+) -> BlockEditInput<'a> {
     BlockEditInput {
         blocks,
         block,
@@ -69,7 +74,10 @@ fn adding_a_new_block_appends_it_with_adding_words() {
     let blocks = json!([]);
     let block = school(vec![0, 1, 2, 3, 4], "08:00");
     let edit = apply_block_edit(&edit_input(&blocks, &block, "series", None)).unwrap();
-    assert_eq!(edit.blocks, vec![checked_school(vec![0, 1, 2, 3, 4], "08:00")]);
+    assert_eq!(
+        edit.blocks,
+        vec![checked_school(vec![0, 1, 2, 3, 4], "08:00")]
+    );
     assert_eq!(edit.label, "adding School");
     assert_eq!(edit.block_id, "school");
 }
@@ -79,7 +87,10 @@ fn editing_a_block_replaces_it_with_editing_words() {
     let blocks = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
     let block = school(vec![0, 1, 2, 3, 4], "09:00");
     let edit = apply_block_edit(&edit_input(&blocks, &block, "series", None)).unwrap();
-    assert_eq!(edit.blocks, vec![checked_school(vec![0, 1, 2, 3, 4], "09:00")]);
+    assert_eq!(
+        edit.blocks,
+        vec![checked_school(vec![0, 1, 2, 3, 4], "09:00")]
+    );
     assert_eq!(edit.label, "editing School");
 }
 
@@ -169,9 +180,10 @@ fn a_refused_hand_move_says_why_and_keeps_the_week() {
 
 #[test]
 fn deleting_homework_takes_the_whole_block() {
+    // On two days, so deleting only the one occurrence would leave day 2 behind.
     let session = json!({
         "id": "s1", "title": "Essay", "kind": "flexible", "duration_min": 60,
-        "days": [0], "start": "10:00", "assignment_id": "a1", "category": "assignments",
+        "days": [0, 2], "start": "10:00", "assignment_id": "a1", "category": "assignments",
     });
     let blocks = json!([session]);
     let repeats = json!([]);
@@ -215,8 +227,7 @@ fn deleting_a_school_seam_takes_every_piece_and_marks_it_missed_this_week() {
     assert_eq!(gone.blocks.len(), 2);
     for item in &gone.blocks {
         assert_eq!(
-            item["missed_days"],
-            item["days"],
+            item["missed_days"], item["days"],
             "this week keeps it missed on every day"
         );
     }
@@ -293,7 +304,9 @@ fn a_replace_change_rewrites_the_week_and_stamps_replace() {
     let week = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
     let before = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
     let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
-    let input = repeat_input(&week, &before, &after, &before, None, WEEK, "replace", TODAY);
+    let input = repeat_input(
+        &week, &before, &after, &before, None, WEEK, "replace", TODAY,
+    );
     let edit = repeat_edit(&input).unwrap().expect("the start moved");
     assert!(!edit.leaves_week);
     assert_eq!(edit.blocks, vec![school(vec![0, 1, 2, 3, 4], "08:30")]);
@@ -304,10 +317,15 @@ fn a_replace_change_rewrites_the_week_and_stamps_replace() {
 
 #[test]
 fn a_stop_takes_the_repeat_off_the_week() {
-    let week = json!([school(vec![0, 1, 2, 3, 4], "08:00"), activity("activity-1", vec![1])]);
+    let week = json!([
+        school(vec![0, 1, 2, 3, 4], "08:00"),
+        activity("activity-1", vec![1])
+    ]);
     let before = week.clone();
     let after = json!([activity("activity-1", vec![1])]);
-    let input = repeat_input(&week, &before, &after, &before, None, WEEK, "replace", TODAY);
+    let input = repeat_input(
+        &week, &before, &after, &before, None, WEEK, "replace", TODAY,
+    );
     let edit = repeat_edit(&input).unwrap().expect("school stops");
     assert!(!edit.leaves_week);
     assert_eq!(edit.stamped[0]["stop"], json!(true));
@@ -321,7 +339,16 @@ fn a_replaced_week_shown_from_wednesday_turns_the_days() {
     let week = json!([school(shown, "08:00")]);
     let before = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
     let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
-    let input = repeat_input(&week, &before, &after, &before, None, "2026-09-23", "replace", TODAY);
+    let input = repeat_input(
+        &week,
+        &before,
+        &after,
+        &before,
+        None,
+        "2026-09-23",
+        "replace",
+        TODAY,
+    );
     let edit = repeat_edit(&input).unwrap().expect("the start moved");
     assert!(!edit.leaves_week);
     // Monday days come back to the week starting Wednesday, earliest first.
@@ -404,7 +431,9 @@ fn repeat_input<'a>(
 fn no_repeat_change_is_nothing_to_send() {
     let week = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
     let standing = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
-    let input = repeat_input(&week, &standing, &standing, &standing, None, WEEK, "keep", TODAY);
+    let input = repeat_input(
+        &week, &standing, &standing, &standing, None, WEEK, "keep", TODAY,
+    );
     assert_eq!(repeat_edit(&input).unwrap(), None);
 }
 
@@ -446,7 +475,16 @@ fn a_rebased_change_carries_both_intents() {
     let after = json!([after]);
     let send = json!([{"id": "school", "scope": "from", "from_date": WEEK,
         "set": {"start": "08:30"}, "add_days": [], "remove_days": [], "stop": false}]);
-    let input = repeat_input(&week, &before, &after, &saved, Some(&send), WEEK, "keep", TODAY);
+    let input = repeat_input(
+        &week,
+        &before,
+        &after,
+        &saved,
+        Some(&send),
+        WEEK,
+        "keep",
+        TODAY,
+    );
     let edit = repeat_edit(&input).unwrap().expect("a day went");
     assert_eq!(edit.stamped.len(), 1, "one intent carries both changes");
     // The open week applies what it shows; the save carries what the server last said.
@@ -475,7 +513,16 @@ fn a_held_repeat_with_no_change_passes_through() {
     let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
     let send = json!([{"id": "activity-9", "scope": "from", "from_date": WEEK,
         "set": {}, "add_days": [], "remove_days": [], "stop": false}]);
-    let input = repeat_input(&week, &before, &after, &before, Some(&send), WEEK, "keep", TODAY);
+    let input = repeat_input(
+        &week,
+        &before,
+        &after,
+        &before,
+        Some(&send),
+        WEEK,
+        "keep",
+        TODAY,
+    );
     let edit = repeat_edit(&input).unwrap().expect("the start moved");
     assert_eq!(edit.stamped, edit.preview);
     assert_eq!(edit.stamped[0]["id"], json!("school"));

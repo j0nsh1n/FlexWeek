@@ -148,9 +148,7 @@ fn repeat_edit_json(
                 Some(Value::Array(items))
             }
             _ => {
-                return Err(PyTypeError::new_err(
-                    "the held repeats are a list or null",
-                ));
+                return Err(PyTypeError::new_err("the held repeats are a list or null"));
             }
         };
         let input = RepeatEditInput {
