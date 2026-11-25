@@ -1,9 +1,13 @@
 # The FlexWeek engine in Rust
 
-FlexWeek's planning logic and its storage move into one Rust library, the engine. The desktop app
-keeps its Material 3 Qt Quick/QML interface, Python bridges and FastAPI server, and calls the engine
-through a Python module. The Android app calls the same engine, so the week is planned and stored
-the same way on both.
+Status: E1–E7 are complete. This file keeps the original migration contract and its decisions. The
+FastAPI server and `backend/app.py` mentioned below were removed in 2.0.0 P2. The window now asks the
+Rust service in its own process. See `ARCHITECTURE.md`, `docs/engine/adapters.md` and
+`docs/engine/interface-logic.md` for the current map.
+
+FlexWeek's planning logic and its storage live in one Rust library, the engine. The desktop app keeps
+its Material 3 Qt Quick/QML interface and Python bridges, and calls the engine through a Python module.
+The Android app calls the same engine, so the week is planned and stored the same way on both.
 
 Jonathan approved this on 2026-09-29, as one part of a larger decision: the tooling (fwtest) and the
 engine move to Rust now, and the interface stays in Python and QML. The

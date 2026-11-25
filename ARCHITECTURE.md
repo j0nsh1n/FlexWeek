@@ -3,7 +3,7 @@
 | Layer | Role |
 |---|---|
 | Desktop interface | Material 3 in Qt Quick/QML, with Python bridges for account screens, the week editor, settings, sheets and save/retry state |
-| Desktop session | `NativeSession`: edits, planning calls, focus, reminders, alarms, undo and preferences |
+| Desktop session | Rust `flexweek-app::session`: requests, account flows, status, autosave and leaving decisions; Python `NativeSession`: live week state and the interface decisions still being ported |
 | Rust service | Session and ownership checks, bounded validated requests, account answers and planning, in the app's process |
 | Rust engine and store | Planning, calendar rules, Qt-free desktop logic, validated storage and SQLite migrations |
 | SQLite | Users, hashed sessions, account-owned weeks and revisions, preferences, routines, restore points and sync records |
@@ -16,11 +16,11 @@ history (`docs/cac-build-plan.md`, removed 2026-11-06).
 ## Data flow
 
 ```text
-QML control → Material bridge → NativeSession → NativeClient → Rust service → Rust store
-                                      |              (worker thread)           |
-                                      └──────────── Rust engine ←──────────────┘
+QML control → Material bridge → NativeSession → NativeClient → Rust session → Rust service → Rust store
+                                                                (four workers)        |
+                                                              Rust engine ←───────────┘
 
-Register/login → expiring session token kept by the client → authenticated account
+Register/login → Rust account flow → expiring session token → authenticated account
                                              |
 Editor → revision-checked change → account-owned SQLite row
           | 409 conflict                      |
@@ -29,6 +29,22 @@ Editor → revision-checked change → account-owned SQLite row
 Entered blocks → POST /api/solve → SolveTrace → grid + results
 Preference change → PUT /api/preferences → account preference
 ```
+
+## P4: the session in Rust (2026-11-25)
+
+On `main`, `flexweek_engine.NativeCore` exposes `flexweek-app::session` from
+`engine/app/src/session/`. `NativeClient` is the Python shell around it. Rust owns the request frame,
+its four workers and 30-second limit, account flows, busy and status state, autosave timing, and the
+steps for saving before closing or signing out. `session/account.rs` covers sign-in, sign-up, recovery,
+resuming a kept session, sign-out, password and recovery-code changes, and account deletion. The window
+still owns Qt callbacks, kept-session files and loading the week. PR #178 also moved validation of study
+and protected hours into the engine.
+
+PR #181 is **in progress**, not merged on `origin/main` at this date. Its branch,
+`feat/p4-history-reminders-transfer`, adds undo-step rules in `engine/engine/src/desk/history.rs` and
+Rust session modules for reminder cards and the alarm queue, focus-timer decisions, the setup queue and
+preference bodies, and restore/import/export decisions. The Python window still performs Qt work, file
+access and requests.
 
 Every private query derives its owner from the session. The desktop sends an
 expected account ID so a request made before an account change is rejected.
