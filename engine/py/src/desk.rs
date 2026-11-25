@@ -178,7 +178,13 @@ fn history_travel_refusal(
     open_week: &str,
     redo: bool,
 ) -> PyResult<Option<&'static str>> {
-    guard(|| Ok(history::travel_refusal(&parse(step)?, open_week, redo)))
+    guard(|| {
+        Ok(history::travel_refusal(
+            &Value::Object(object_of(step)?),
+            open_week,
+            redo,
+        ))
+    })
 }
 
 /// The revision (JSON text: a number, or a list for a week from another day) a week written with
@@ -205,7 +211,7 @@ fn history_step_without_homework(
     revisions: &str,
 ) -> PyResult<Option<String>> {
     guard(|| {
-        let step = parse(step)?;
+        let step = Value::Object(object_of(step)?);
         let cleaned = history::step_without_homework(&step, homework, &object_of(revisions)?);
         Ok(cleaned.map(|step| step.to_string()))
     })
@@ -234,8 +240,11 @@ fn history_request_without_homework(
 #[pyfunction]
 fn history_keep_stored_weeks(step: &str, before: &str, after: &str) -> PyResult<String> {
     guard(|| {
-        let weeks =
-            history::keep_stored_weeks(&parse(step)?, &array_of(before)?, &array_of(after)?);
+        let weeks = history::keep_stored_weeks(
+            &Value::Object(object_of(step)?),
+            &array_of(before)?,
+            &array_of(after)?,
+        );
         Ok(Value::Array(weeks).to_string())
     })
 }
@@ -244,7 +253,10 @@ fn history_keep_stored_weeks(step: &str, before: &str, after: &str) -> PyResult<
 #[pyfunction]
 fn history_keep_step_revisions(step: &str, data: &str) -> PyResult<String> {
     guard(|| {
-        let weeks = history::keep_step_revisions(&parse(step)?, &parse(data)?);
+        let weeks = history::keep_step_revisions(
+            &Value::Object(object_of(step)?),
+            &Value::Object(object_of(data)?),
+        );
         Ok(Value::Array(weeks).to_string())
     })
 }

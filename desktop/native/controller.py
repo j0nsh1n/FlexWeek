@@ -4388,7 +4388,7 @@ class NativeSession(QObject):
             self._credit_waiting_sessions()
             # Crediting can save, which can change or end the timer: decide again on what is left.
             step = tick_step(self.focus, credits_waiting=False, busy=self.busy, now_ms=self.now_ms())
-        if step["action"] == "ended":
+        if step["action"] == "ended" and self.focus is not None:
             self.focus["running"] = False
             self.focus["remainingMs"] = 0
             self.advance_focus(completed=True)

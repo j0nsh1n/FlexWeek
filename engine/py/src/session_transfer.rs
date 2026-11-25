@@ -84,6 +84,9 @@ fn import_week_decision_json(
 ) -> PyResult<String> {
     guard(|| {
         let (parsed, blocks, assignments) = (read(parsed)?, read(blocks)?, read(assignments)?);
+        if !parsed.is_object() {
+            return Err(PyValueError::new_err("the parsed file is a JSON object"));
+        }
         let context = ImportContext {
             week_start,
             week_words,

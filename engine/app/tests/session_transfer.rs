@@ -232,3 +232,20 @@ fn operation_keys_keep_their_shapes() {
     assert_eq!(import_key(7, &json!("tok")), "import|7|tok");
     assert_eq!(import_key(7, &Value::Null), "import|7|None");
 }
+
+#[test]
+fn a_point_with_no_id_replaces_one_whose_id_is_null() {
+    // The window compared `item.get("id") != point.get("id")`: a missing id and a null one are the same.
+    let current = [
+        json!({"id": null, "label": "old"}),
+        json!({"id": "p2", "label": "kept"}),
+    ];
+    let points = restore_points_after_create(&current, &json!({"label": "new"}));
+    assert_eq!(
+        points,
+        vec![
+            json!({"label": "new"}),
+            json!({"id": "p2", "label": "kept"})
+        ]
+    );
+}

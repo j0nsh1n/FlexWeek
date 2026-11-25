@@ -21,7 +21,9 @@ pub fn restore_points_after_create(current: &[Value], point: &Value) -> Vec<Valu
     points.extend(
         current
             .iter()
-            .filter(|item| item.get("id") != point.get("id"))
+            .filter(|item| {
+                item.get("id").unwrap_or(&Value::Null) != point.get("id").unwrap_or(&Value::Null)
+            })
             .cloned(),
     );
     points.truncate(RESTORE_POINT_LIMIT);

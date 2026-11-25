@@ -13,6 +13,27 @@ fn parse(text: &str) -> PyResult<Value> {
     serde_json::from_str(text).map_err(|error| PyValueError::new_err(format!("not JSON: {error}")))
 }
 
+fn object(text: &str, what: &str) -> PyResult<Value> {
+    let value = parse(text)?;
+    if value.is_object() {
+        Ok(value)
+    } else {
+        Err(PyValueError::new_err(format!("{what} is a JSON object")))
+    }
+}
+
+/// Today's blocks by reminder key: an object, or `null` when they are not known.
+fn rows_of(text: &str) -> PyResult<Value> {
+    let rows = parse(text)?;
+    if rows.is_null() || rows.is_object() {
+        Ok(rows)
+    } else {
+        Err(PyValueError::new_err(
+            "today's rows are a JSON object or null",
+        ))
+    }
+}
+
 /// `null` is "not known" for today's blocks, as the window passes it.
 fn known(rows: &Value) -> Option<&Value> {
     if rows.is_null() { None } else { Some(rows) }
@@ -40,7 +61,7 @@ impl PyCards {
     /// `{"kept", "changed", "said"}`.
     fn add(&mut self, notice: &str, rows: &str, now_min: i64) -> PyResult<String> {
         guard(|| {
-            let (notice, rows) = (parse(notice)?, parse(rows)?);
+            let (notice, rows) = (object(notice, "a notice")?, rows_of(rows)?);
             let added = self
                 .cards
                 .add(&notice, known(&rows), now_min)
@@ -73,7 +94,7 @@ impl PyCards {
     /// `rows` as in `add`; answers `{"changed", "said", "released"}`.
     fn sync(&mut self, rows: &str, now_min: i64) -> PyResult<String> {
         guard(|| {
-            let rows = parse(rows)?;
+            let rows = rows_of(rows)?;
             let told = self.cards.sync(known(&rows), now_min).map_err(raise)?;
             Ok(json!({
                 "changed": told.changed,
@@ -101,7 +122,7 @@ impl PyAlarmQueue {
 
     /// Whether the alarm (JSON text) rings now.
     fn enqueue(&mut self, alarm: &str) -> PyResult<bool> {
-        guard(|| Ok(self.queue.enqueue(parse(alarm)?)))
+        guard(|| Ok(self.queue.enqueue(object(alarm, "an alarm")?)))
     }
 
     /// Answers `{"snoozed": {"id", "until_ms"} or null, "next": the alarm that rings next or null}`.
