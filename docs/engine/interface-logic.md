@@ -32,11 +32,16 @@ Qt Quick paces that view's frames to the screen.
 Quick window is made. `desktop/native/cpu_drawing.py` builds the relaunch
 command for a source run, packaged executable or AppImage.
 
-## Shared session: `desktop/native/controller.py`
+## Shared session: Rust and `desktop/native/controller.py`
 
-`NativeSession` remains the interface's owner of live account and week state.
-Material bridges use this one session rather than making their own planner or
-store.
+`NativeSession` remains the interface's owner of live week state. Material bridges use this one session
+rather than making their own planner or store. The Rust session in `engine/app/src/session/` already owns
+request delivery, account flows, status, autosave and leaving decisions. `desktop/native/client.py` is its
+Python shell. PR #178 moved study- and protected-hours validation into the engine.
+
+The rows below are the decisions still in Python on `main` as of 2026-11-25. PR #181 is moving undo-step
+rules, focus decisions, reminder cards and the alarm queue, setup and preference decisions, and
+restore/import/export decisions into Rust. It is still in progress.
 
 | Decision group | What it covers | Tests |
 |---|---|---|
@@ -46,9 +51,9 @@ store.
 | Undo and redo | When history is allowed, stale steps, changes that cross stored weeks, and restore-point Undo for a change from this week on | `desktop/tests/week/`, `desktop/tests/planner/`, `desktop/tests/sheets/` |
 | Focus | Start/replace, pause, phase advance, early ending, credit and auto-completion | `desktop/tests/focus/` |
 | Alerts | Reminder and alarm queues, kept reminder cards, snooze, Spotify fallback and focus muting | `desktop/tests/planner/`, `desktop/tests/settings/` |
-| Preferences and hours | Preference merges, availability validation, week start and planning style | `desktop/tests/settings/` |
+| Preferences and hours | Preference merges, week start and planning style | `desktop/tests/settings/` |
 | Restore and transfer | Restore-point create/preview/apply and account import/export | `desktop/tests/account/`, `desktop/tests/sheets/test_material_manage_sheets.py` |
-| Session | Kept sign-in, recovery, password change, logout and expiry cleanup | `desktop/tests/account/`, `desktop/tests/e2e/` |
+| Session | Kept-session file, setup answers and loading the week after Rust account events | `desktop/tests/account/`, `desktop/tests/e2e/` |
 
 ## Material bridge modules: `desktop/native/material/`
 
@@ -91,7 +96,7 @@ files or external programs, even when their rules are plain data:
 
 | Module | Role | Tests |
 |---|---|---|
-| `client.py` | Allowed API paths, request epochs, cookies and student-facing HTTP errors | `desktop/tests/e2e/`, `desktop/tests/account/` |
+| `client.py` | Python shell around `NativeCore`: request callbacks, Qt wake-ups and host clock/randomness; Rust owns API-path checks, epochs, session tokens and error words | `desktop/tests/e2e/`, `desktop/tests/account/` |
 | `kept_alerts.py` | Kept reminder cards and the focus-notice strip, following the clock and moved, deleted or renamed blocks | `desktop/tests/planner/`, `desktop/tests/settings/` |
 | `settings_copy.py`, `account_copy.py`, `sheet_rules.py`, `setup_steps.py` | Shared wording and Qt-free setup/settings rules, kept out of the removed Widgets modules | area suites for the caller |
 | `fields.py`, `hours/scale.py`, `hours/geometry.py` | Week-start state, drag steps, zoom scales and shared time helpers | `desktop/tests/week/`, `desktop/tests/settings/` |
