@@ -11,6 +11,8 @@ from pathlib import Path
 
 import flexweek_engine  # type: ignore[import-untyped]
 import pytest
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.material import bridge_settings
@@ -18,6 +20,7 @@ from desktop.native.sheet_rules import CUTOFFS as WIDGET_CUTOFFS
 from desktop.native.weekmodel import hhmm_text, set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
     _click,
@@ -28,6 +31,7 @@ from desktop.tests.settings.support_material_settings import (
     _open_settings,
     _panel,
     _prefs,
+    _pump,
     _qml,
     _show_material,
 )
@@ -114,7 +118,7 @@ def test_every_section_opens_and_names_only_controls_with_a_real_effect(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _open_settings(qapp, window)
-    for name in ("planning", "focus", "alerts", "computer", "look"):
+    for name in ("planning", "focus", "alerts", "computer", "sync", "look"):
         _click(qapp, window, _named(root, "section_" + name)[0])
         wait_until(qapp, lambda name=name: _panel(window).property("state")["section"] == name)
         assert _named(root, name + "Section")
@@ -252,3 +256,42 @@ def test_planning_cutoff_not_on_the_list_is_shown_as_its_own_time(
     state = panel.state
     marked = [item["label"] for item in state["cutoffChoices"] if item["value"] == state["cutoff"]]
     assert marked == [hhmm_text("22:15")]
+
+
+def test_dragging_the_settings_nav_divider_resizes_collapses_and_remembers_width(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _open_settings(qapp, window, "look")
+    panel = _panel(window)
+    nav = _named(root, "sectionNav")[0]
+    divider = _named(root, "settingsNavDivider")[0]
+    assert int(round(nav.width())) == 220
+    assert nav.property("iconOnly") is False
+
+    quick = quick_of(window)
+    assert quick is not None
+    centre = divider.mapToScene(QPointF(divider.width() / 2, divider.height() / 2))
+    start_pt = centre.toPoint()
+    # Dragging the divider left by 120 px narrows the section list into icon-only mode (100 px).
+    end_pt = (centre - QPointF(120, 0)).toPoint()
+    QTest.mousePress(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start_pt)
+    _pump(qapp)
+    QTest.mouseMove(quick, end_pt)
+    _pump(qapp)
+    QTest.mouseRelease(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, end_pt)
+    _pump(qapp)
+
+    assert int(round(nav.width())) == 100
+    assert nav.property("iconOnly") is True
+    assert _material_file().get("settingsNavWidth") == 100
+
+    # Reloading appearance preserves the remembered nav width, and out-of-range values clamp to 72..340.
+    _bridge(window).set_appearance("light", "std")
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 100
+    panel.setNavWidth(40)
+    assert panel.property("state")["navWidth"] == 72
+    panel.setNavWidth(500)
+    assert panel.property("state")["navWidth"] == 340
+    panel.setNavWidth(220)
+    _pump(qapp)

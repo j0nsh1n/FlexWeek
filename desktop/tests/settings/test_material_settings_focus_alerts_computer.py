@@ -174,21 +174,29 @@ def test_this_computer_account_setup_updates_and_pairing_are_wired(
     _click(qapp, window, _named(root, "row_setup")[0])
     _click(qapp, window, _named(root, "row_updates")[0])
     assert heard == ["account", "setup", "updates"]
+    assert _named(root, "row_pair") == [], "pairing lives in Phone & sync"
+    root = _open_settings(qapp, window, "sync")
     _click(qapp, window, _named(root, "row_pair")[0])
     wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "ABCD-1234")
+    assert _panel(window).property("state")["pairOpen"] is True
+    assert _named(root, "pairingDialog")[0].property("visible") is True
+    assert str(_named(root, "pairingCodeText")[0].property("text")) == "ABCD-1234"
     assert "ABCD-1234" in str(_named(root, "row_pair")[0].property("subtitle"))
+    _panel(window).closePairing()
+    _pump(qapp)
+    assert _named(root, "pairingDialog")[0].property("visible") is False
 
 
 def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_tries_and_its_problems(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The Widgets pairing sheet said these; Material's Pair a phone row only showed the code."""
+    """Phone & sync opens the pairing dialog with countdown, tries, copy/restart and closes on problem."""
     status: dict = {}
     monkeypatch.setattr(
         window.session, "begin_pairing", lambda done: done({"display_code": "1234 5678"}, None) or True
     )
     monkeypatch.setattr(window.session, "pairing_status", lambda: dict(status))
-    root = _open_settings(qapp, window, "computer")
+    root = _open_settings(qapp, window, "sync")
     row = _named(root, "row_pair")[0]
 
     def subtitle() -> str:
@@ -200,9 +208,16 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     wait_until(qapp, lambda: "1234 5678" in subtitle())
     words = subtitle()
     assert re.search(r"Code works for (5:00|4:59)\. 3 tries left\. It works once\.", words), words
+    assert _named(root, "pairingDialog")[0].property("visible") is True
+    assert "3 tries left." in str(_named(root, "pairingStatus")[0].property("text"))
+    _panel(window).copyPairCode()
+    assert _panel(window).property("state")["pairCopied"] is True
     status.update(tries_left=1)
     _panel(window)._pair_tick()
     assert "1 try left." in subtitle()
+    _panel(window).closePairing()
+    _pump(qapp)
+    assert _named(root, "pairingDialog")[0].property("visible") is False
 
     for state, problem in (
         ("expired", "That code has expired. Start a new one."),
@@ -217,5 +232,6 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
         status.update(state=state)
         _panel(window)._pair_tick()
         assert _panel(window).property("state")["pairError"] == problem, state
+        assert _panel(window).property("state")["pairOpen"] is False, state
         assert subtitle() == "Show a code to link a phone.", state
         assert problem in str(_named(root, "row_pairError")[0].property("subtitle")), state
