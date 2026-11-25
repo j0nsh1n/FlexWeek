@@ -52,13 +52,16 @@ Column {
     // this card, so both the card and its buttons hand focus on; whichever runs second finds it done.
     function handFocusToHeading() {
         // Also when the card stays but its Start button hides, as the clock moves into a fixed block.
-        if ((!root.shown || !startButton.visible) && root.pageHeading)
+        if ((!root.shown || !root.showStart) && root.pageHeading)
             root.pageHeading.forceActiveFocus()
     }
     onShownChanged: if (startButton.activeFocus || markButton.activeFocus) handFocusToHeading()
 
     readonly property bool wideHero: root.hero && !root.narrow && card.width >= 600
-    readonly property bool hasActions: startButton.visible || markButton.visible
+    // Derived from root's own inputs (never from child .visible, which stays false while parent Flow is hidden).
+    readonly property bool showMark: root.timerEnded && root.timerCanFinish
+    readonly property bool showStart: !root.busy || root.timerTitle !== "" || root.timerEnded || root.timerDone
+    readonly property bool hasActions: root.showMark || root.showStart
 
     Rectangle {
         id: card
@@ -66,9 +69,9 @@ Column {
         width: parent.width
         readonly property int pad: root.density === "compact" ? 16 : (root.hero ? 24 : 20)
         readonly property real innerWidth: Math.max(0, width - pad * 2)
-        readonly property real actionsWidth: (markButton.visible ? markButton.implicitWidth : 0)
-            + (markButton.visible && startButton.visible ? 8 : 0)
-            + (startButton.visible ? startButton.implicitWidth : 0)
+        readonly property real actionsWidth: (root.showMark ? markButton.implicitWidth : 0)
+            + (root.showMark && root.showStart ? 8 : 0)
+            + (root.showStart ? startButton.implicitWidth : 0)
         readonly property real stackedHeight: stackColumn.implicitHeight + (root.hasActions ? 14 + actionFlow.implicitHeight : 0)
         readonly property real heroHeight: Math.max(
             root.showRing ? heroRingWrap.height : 0,
@@ -267,7 +270,7 @@ Column {
             Button {
                 id: markButton
                 objectName: root.scope + "MarkFinished"
-                visible: root.timerEnded && root.timerCanFinish
+                visible: root.showMark
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion
@@ -284,9 +287,9 @@ Column {
             }
             Button {
                 id: startButton
-                width: !root.wideHero && !(root.timerEnded && root.timerCanFinish) ? actionFlow.width : implicitWidth
+                width: !root.wideHero && !root.showMark ? actionFlow.width : implicitWidth
                 objectName: root.scope + "StartFocus"
-                visible: !root.busy || root.timerTitle !== "" || root.timerEnded || root.timerDone
+                visible: root.showStart
                 // Qt keeps focus on a button that hides inside a card that stays, so hand it on here.
                 onVisibleChanged: if (!visible && activeFocus) root.handFocusToHeading()
                 theme: root.theme

@@ -95,6 +95,7 @@ Item {
         year: root.year
         month: root.month
         today: root.today
+        showHeader: false
         accessName: "Month"
         activeFocusOnTab: !root.passive
         onDayActivated: (day) => {

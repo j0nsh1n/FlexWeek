@@ -9,12 +9,14 @@ Item {
     property int year: 2026
     property int month: 11
     property int today: 5
+    property bool showHeader: true
     property string accessName: "Month"
     signal dayActivated(int day)
 
     readonly property int cell: M3Font.px(28)
+    readonly property int headerOffset: showHeader ? (caption.implicitHeight + 4) : 0
     implicitWidth: 7 * cell + 12
-    implicitHeight: caption.implicitHeight + 8 + 7 * cell
+    implicitHeight: (showHeader ? caption.implicitHeight + 8 : 4) + 7 * cell
     width: implicitWidth
     height: implicitHeight
 
@@ -63,6 +65,7 @@ Item {
 
     Text {
         id: caption
+        visible: root.showHeader
         text: root.monthName()
         color: root.muteInk
         font.family: M3Font.family
@@ -74,7 +77,7 @@ Item {
         model: 7
         delegate: Text {
             x: index * root.cell
-            y: caption.height + 4
+            y: root.headerOffset
             width: root.cell
             height: root.cell
             horizontalAlignment: Text.AlignHCenter
@@ -96,7 +99,7 @@ Item {
             readonly property bool inside: day >= 1 && day <= root.daysInMonth()
             readonly property bool isToday: inside && day === root.today
             x: (index % 7) * root.cell
-            y: caption.height + 4 + root.cell + Math.floor(index / 7) * root.cell
+            y: root.headerOffset + root.cell + Math.floor(index / 7) * root.cell
             width: root.cell
             height: root.cell
             opacity: inside ? 1 : 0.4
