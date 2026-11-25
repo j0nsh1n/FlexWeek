@@ -20,7 +20,7 @@ SectionPage {
         if (tone === "error")
             return m3.error
         if (tone === "warn")
-            return m3.warning
+            return m3.statusDueSoon
         return m3.inkMuted
     }
 
@@ -145,9 +145,9 @@ SectionPage {
                 implicitHeight: clockNote.implicitHeight + 4
                 height: implicitHeight
                 radius: m3.cornerFor(10)
-                color: m3.warningTint
+                color: m3.statusDueSoonTint
                 border.width: 1
-                border.color: m3.warning
+                border.color: m3.statusDueSoon
                 NoteRow {
                     id: clockNote
                     width: parent.width

@@ -282,7 +282,7 @@ FocusScope {
                             height: parent.height
                             radius: 3
                             width: parent.width * Math.max(0, Math.min(1, root.fraction))
-                            color: root.fraction < 0.2 ? pal.warning : pal.primary
+                            color: root.fraction < 0.2 ? pal.statusDueSoon : pal.primary
                         }
                     }
 
