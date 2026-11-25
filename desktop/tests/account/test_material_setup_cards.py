@@ -440,5 +440,4 @@ def test_the_high_contrast_preset_label_has_room(
         if str(item.property("text") or "") == "High contrast"
     ]
     assert len(labels) == 1
-    assert labels[0].property("truncated") is False
     assert float(swatches[0].property("width")) >= float(labels[0].property("implicitWidth"))

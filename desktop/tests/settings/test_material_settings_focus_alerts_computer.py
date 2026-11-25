@@ -698,6 +698,13 @@ def test_start_a_new_code_that_never_answers_times_out_while_a_code_is_shown(
     wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is True)
     wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is False)
     assert _panel(window).property("state")["pairError"] == "Pairing did not start."
+    # The old code is no longer the one the computer offers: the pop-up closes and drops it, so
+    # nothing can copy it, and the Settings row shows why.
+    state = _panel(window).property("state")
+    assert state["pairOpen"] is False
+    assert state["pairCode"] == ""
+    assert _named(root, "pairingDialog")[0].property("visible") is False
+    assert "Pairing did not start." in str(_named(root, "row_pairError")[0].property("subtitle"))
 
 
 def test_restarting_a_code_by_keyboard_keeps_focus_in_the_dialog(

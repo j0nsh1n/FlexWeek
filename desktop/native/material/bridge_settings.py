@@ -2553,6 +2553,14 @@ class SettingsBridge(QObject):
                 return
             self._pair_gen += 1
             self._pair_starting = False
+            # A code still on screen is no longer the one the computer offers once a newer start was
+            # asked for, so close the pop-up and drop it, as a lost service does; the row says why.
+            self._pair_watch.stop()
+            self._pair_code = ""
+            self._pair_status = ""
+            self._pair_seconds = 0
+            self._pair_tries = 0
+            self._pair_open = False
             self._pair_error = "Pairing did not start."
             self._publish()
 
