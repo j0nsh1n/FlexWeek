@@ -93,6 +93,15 @@ def in_view(qapp, block: QObject) -> None:
     limit = max(0.0, float(flick.property("contentHeight")) - float(flick.height()))
     flick.setProperty("contentY", min(max(0.0, top - room), limit))
     pump(qapp, 4)
+    # A drag test that failed on CI only (2026-11-24) found the hours still at the top; this says why.
+    scene_top = block.mapToScene(QPointF(0, 0)).y()
+    shown = block.window().height()
+    assert scene_top >= 0 and scene_top + block.height() <= shown, (
+        f"the block is off screen after scrolling: its top at {scene_top:.0f} and bottom at "
+        f"{scene_top + block.height():.0f} in a window {shown} high; the hours' contentY "
+        f"{float(flick.property('contentY')):.0f} (asked {top - room:.0f}, limit {limit:.0f}), contentHeight "
+        f"{float(flick.property('contentHeight')):.0f}, height {float(flick.height()):.0f}"
+    )
 
 
 def page_of(window: NativeWindow, screen: str) -> QObject:
@@ -107,6 +116,11 @@ def scene_point(item: QObject, x: float, y: float) -> QPoint:
 def hold_and_move(qapp, window: NativeWindow, start: QPoint, to: QPoint) -> None:
     """Press at `start` and travel to `to` without letting go."""
     quick = quick_of(window)
+    # Something between scrolling the block into view and the press can move it (CI, 2026-11-24).
+    assert 0 <= start.y() < quick.height() and 0 <= start.x() < quick.width(), (
+        f"the drag starts off screen at {start.x()},{start.y()} in a window "
+        f"{quick.width()}x{quick.height()}: the block moved after it was scrolled into view"
+    )
     QTest.mouseMove(quick, start)
     pump(qapp, 4)
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
