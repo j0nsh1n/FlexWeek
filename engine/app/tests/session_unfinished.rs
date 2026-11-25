@@ -4,9 +4,9 @@
 //! `test_plan_leftover_sentences`).
 
 use flexweek_app::session::unfinished::{
-    ALREADY_FULLY_PLANNED, ALREADY_HAS_TIME, ClockNow, HomeworkCountsInput, UnfinishedInput,
-    UnfinishedPlan, UnfinishedPlanInput, UnfinishedPreview, UnfinishedPreviewInput, WEEK_OVER,
-    homework_counts, left_unfinished_items, plan_unfinished, unfinished_items, unfinished_preview,
+    ClockNow, HomeworkCountsInput, UnfinishedInput, UnfinishedPlan, UnfinishedPlanInput,
+    UnfinishedPreview, UnfinishedPreviewInput, homework_counts, left_unfinished_items,
+    plan_unfinished, unfinished_items, unfinished_preview,
 };
 use serde_json::{Map, Value, json};
 
@@ -463,6 +463,29 @@ fn unfinished_preview_builds_row_or_says_too_short_or_already_planned() {
         UnfinishedPreview::Say(words) => panic!("expected rows, got: {words}"),
     }
 
+    // The session clock says Monday; the wall clock (candidate days) says Wednesday: the row starts
+    // on Wednesday and runs through the Friday deadline.
+    let later = unfinished_preview(
+        UnfinishedPreviewInput {
+            week_start: WEEK,
+            blocks: &blocks,
+            assignments: &assignments,
+            assignments_basis: &blocks,
+            assignment_id: "lab",
+            now: ClockNow::at(WEEK, 7, 0),
+            plannable_today: "2026-09-23",
+        },
+        "new-lab-2",
+    )
+    .unwrap();
+    match later {
+        UnfinishedPreview::Rows(rows) => {
+            assert_eq!(rows[0]["day"], 2);
+            assert_eq!(rows[0]["block"]["days"], json!([2, 3, 4]));
+        }
+        UnfinishedPreview::Say(words) => panic!("expected rows, got: {words}"),
+    }
+
     // Essay has 10m uncovered -> too short sentence in minutes.
     let short = unfinished_preview(
         UnfinishedPreviewInput {
@@ -501,7 +524,7 @@ fn unfinished_preview_builds_row_or_says_too_short_or_already_planned() {
     .unwrap();
     assert_eq!(
         full,
-        UnfinishedPreview::Say(ALREADY_FULLY_PLANNED.to_string())
+        UnfinishedPreview::Say("That homework is already fully planned.".to_string())
     );
 }
 
@@ -589,8 +612,9 @@ fn plan_unfinished_handles_week_over_under_grid_already_has_time_and_duplicate_i
         assignment("bio", "Bio", "2026-09-25T23:59", 60),
     ]);
 
-    // 1. Week is over (including Sunday 23:45:01 rounding up past midnight into day 7).
-    let mut ids = std::iter::empty();
+    // 1. Week is over (including Sunday 23:45:01 rounding up past midnight into day 7). An id is on hand,
+    // so a guard that let the week through would build a block instead of failing on a missing id.
+    let mut ids = ["unused-1"].into_iter().map(str::to_string);
     let over = plan_unfinished(
         UnfinishedPlanInput {
             week_start: WEEK,
@@ -609,7 +633,12 @@ fn plan_unfinished_handles_week_over_under_grid_already_has_time_and_duplicate_i
         &mut ids,
     )
     .unwrap();
-    assert_eq!(over, UnfinishedPlan::Say(WEEK_OVER.to_string()));
+    assert_eq!(
+        over,
+        UnfinishedPlan::Say(
+            "This week is over, so nothing was planned. Plan this week or a later one.".to_string()
+        )
+    );
 
     // 2. Under-grid work (10 min left, no waiting session).
     let short_blocks = vec![pinned(hw_block("b-essay", "essay", 4, Some("15:00"), 50))];
@@ -648,7 +677,10 @@ fn plan_unfinished_handles_week_over_under_grid_already_has_time_and_duplicate_i
         &mut ids,
     )
     .unwrap();
-    assert_eq!(already, UnfinishedPlan::Say(ALREADY_HAS_TIME.to_string()));
+    assert_eq!(
+        already,
+        UnfinishedPlan::Say("That homework already has a time.".to_string())
+    );
 
     // 4. Duplicate assignment IDs in one call never create a duplicate block.
     let mut ids = ["once-1", "once-2"].into_iter().map(str::to_string);
@@ -871,4 +903,69 @@ fn a_block_without_a_text_id_is_refused_before_any_date_branch() {
         "new-1",
     );
     assert_eq!(preview.unwrap_err(), "block is missing a text id");
+}
+
+#[test]
+fn the_card_list_and_the_solve_check_differ_by_one_minute_at_the_end_of_the_day() {
+    // Kept from the old window: at 23:59 on the deadline day the card list already calls an
+    // end-of-day deadline overdue, while the solve check (1440 > 1439) does not until midnight.
+    let assignments = map_of(vec![assignment(
+        "eod",
+        "End of day",
+        "2026-09-26T23:59",
+        60,
+    )]);
+    let ids_of = |hour, minute| {
+        let counts = homework_counts(HomeworkCountsInput {
+            week_start: WEEK,
+            first_weekday: 0,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            now: ClockNow::at("2026-09-26", hour, minute),
+        })
+        .unwrap();
+        let cards = unfinished_items(UnfinishedInput {
+            week_start: WEEK,
+            first_weekday: 0,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            saved_weeks: &[],
+            stored_parts: &[],
+            now: ClockNow::at("2026-09-26", hour, minute),
+        })
+        .unwrap();
+        let overdue_cards: Vec<String> = cards
+            .iter()
+            .filter(|card| card["left_over_state"] == "overdue")
+            .map(|card| card["id"].as_str().unwrap().to_string())
+            .collect();
+        (counts.overdue_assignment_ids, overdue_cards)
+    };
+
+    let (solve, cards) = ids_of(23, 58);
+    assert!(solve.is_empty() && cards.is_empty());
+    let (solve, cards) = ids_of(23, 59);
+    assert!(solve.is_empty());
+    assert_eq!(cards, vec!["eod"]);
+}
+
+#[test]
+fn homework_due_this_very_minute_is_overdue_and_one_minute_before_is_not() {
+    let assignments = map_of(vec![assignment("timed", "Timed", "2026-09-26T10:00", 60)]);
+    let overdue_at = |hour, minute| {
+        homework_counts(HomeworkCountsInput {
+            week_start: WEEK,
+            first_weekday: 0,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            now: ClockNow::at("2026-09-26", hour, minute),
+        })
+        .unwrap()
+        .overdue_assignment_ids
+    };
+    assert!(overdue_at(9, 59).is_empty());
+    assert_eq!(overdue_at(10, 0), vec!["timed"]);
 }
