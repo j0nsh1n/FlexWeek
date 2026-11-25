@@ -225,32 +225,11 @@ def _checked_homework(item: dict) -> dict:
 
 
 def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
-    if item is None:
-        return {"id": item_id, "assignment": None, "revision": revision}
-    dumped = _checked_homework({key: value for key, value in item.items() if key in HOMEWORK_FIELDS})
-    dumped.pop("revision", None)
-    return {"id": item_id, "assignment": dumped, "revision": revision}
+    return json.loads(flexweek_engine.save_assignment_write(item_id, json.dumps(item), revision))
 
 
-def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
-    return {
-        "week_start": week_start,
-        "blocks": [_checked_block(block) for block in blocks],
-        "revision": revision,
-    }
-
-
-def _revision_after_deletes(
-    stored_blocks: list[dict], revision: int | list[int], deleted: set[str]
-) -> int | list[int]:
-    """The revision a week written in the same save as some deletes will have by then (the engine's rule:
-    desk/history.rs `revision_after_deletes`)."""
-    after: int | list[int] = json.loads(
-        flexweek_engine.history_revision_after_deletes(
-            json.dumps(stored_blocks), json.dumps(revision), sorted(deleted)
-        )
-    )
-    return after
+def _week_write(week_start: str, blocks: list[dict], revision: int | list[int]) -> dict:
+    return json.loads(flexweek_engine.save_week_write(week_start, json.dumps(blocks), json.dumps(revision)))
 
 
 def _without_homework(blocks: list[dict], assignment_id: str) -> list[dict]:
@@ -2142,8 +2121,11 @@ class NativeSession(QObject):
                 request = parked["pending_save"]
                 if request is not None:
                     rebuilt = _request_without_homework(request, parked, assignment_id, revisions)
-                    if rebuilt != request:
-                        parked["pending_save"] = {**rebuilt, "operation_id": str(uuid4())}
+                    renewed = flexweek_engine.renew_save_retry(
+                        json.dumps(request), json.dumps(rebuilt), uuid4
+                    )
+                    if renewed is not None:
+                        parked["pending_save"] = json.loads(renewed)
                 if parked["pending_step"] is not None:
                     parked["pending_step"] = _step_without_homework(
                         parked["pending_step"], assignment_id, revisions
@@ -2410,36 +2392,6 @@ class NativeSession(QObject):
         self._apply_side(step, "after")
         self.save()
 
-    def _post_travel_weeks(
-        self,
-        extra: list[dict],
-        assignments: list[dict],
-        operation_id: str | None,
-        snapshot_label: str | None,
-    ) -> None:
-        side = "before" if self._traveling == "undo" else "after"
-        writes = [_week_write(self.week_start, self.blocks, self.revision)]
-        # A stored week of the week on screen goes with the revision it has now, as the week on screen does.
-        live = {part["week_start"]: part for part in self._stored_parts}
-        deleted = {entry["id"] for entry in assignments if entry["assignment"] is None}
-        for entry in extra:
-            part = live.get(entry["week_start"])
-            revision = (
-                entry["revision"]
-                if part is None
-                else _revision_after_deletes(part["blocks"], part["revision"], deleted)
-            )
-            writes.append(_week_write(entry["week_start"], deepcopy(entry[side]), revision))
-        self.pending_save = {
-            "weeks": writes,
-            "assignments": assignments,
-            "operation_id": operation_id or str(uuid4()),
-            "stay": True,
-        }
-        if snapshot_label:
-            self.pending_save["snapshot_label"] = snapshot_label
-        self._post_pending()
-
     def save(
         self,
         snapshot_label: str | None = None,
@@ -2459,38 +2411,34 @@ class NativeSession(QObject):
         if status is not None:
             self._save_status = status
         if self.pending_save is None:
-            writes = []
-            for item_id in sorted(self.dirty_assignments):
-                item = self.assignments.get(item_id)
-                source = item if item is not None else self._committed_assignments.get(item_id)
-                revision = int((source or {}).get("revision") or 0)
-                writes.append(_assignment_write(item_id, item, revision))
-            extra = [
-                week
-                for week in (self._travel_step or {}).get("weeks") or []
-                if week["week_start"] != self.week_start
-            ]
-            if extra:
-                self._post_travel_weeks(extra, writes, operation_id, snapshot_label)
-                return
-            deleted = {entry["id"] for entry in writes if entry["assignment"] is None}
-            revision = _revision_after_deletes(self._committed_blocks, self.revision, deleted)
-            self.pending_save = {
-                "weeks": [_week_write(self.week_start, self.blocks, revision)],
-                "assignments": writes,
-                "operation_id": operation_id or str(uuid4()),
+            draft = {
+                "blocks": self.blocks,
+                "revision": self.revision,
+                "committed_blocks": self._committed_blocks,
+                "assignments": self.assignments,
+                "committed_assignments": self._committed_assignments,
+                "travel_step": self._travel_step,
+                "stored_parts": self._stored_parts,
+                "saved_repeats": self._saved_repeats,
+                "repeats": self.repeats,
+                "queued_repeats": self._repeat_send,
             }
+            self.pending_save = json.loads(
+                flexweek_engine.freeze_save(
+                    self.week_start,
+                    json.dumps(draft),
+                    list(self.dirty_assignments),
+                    self._traveling,
+                    operation_id,
+                    snapshot_label,
+                    uuid4,
+                )
+            )
+            if self.pending_save.get("stay"):
+                self._post_pending()
+                return
             # Kept until this save is acknowledged, so a failure and a later edit still send them.
-            if self._repeat_send:
-                changes = list(self._repeat_send)
-                self._repeat_ack = changes
-            else:
-                changes = repeat_changes(self._saved_repeats, self.repeats, self.week_start)
-                self._repeat_ack = None
-            if changes:
-                self.pending_save["repeats"] = changes
-            if snapshot_label:
-                self.pending_save["snapshot_label"] = snapshot_label
+            self._repeat_ack = list(self._repeat_send) if self._repeat_send else None
             if self._traveling is None and record_history:
                 self._pending_step = capture_step(
                     self._history_label,
@@ -2559,15 +2507,10 @@ class NativeSession(QObject):
         held = self._save_status
         if held is None:
             self._say("Saving…")
-        destination = None
-        written = {week["week_start"] for week in self.pending_save.get("weeks") or []}
-        stay = bool(self.pending_save.get("stay"))
-        # A week on screen from another day than Monday is written through its stored Mondays; writing
-        # them keeps that week open.
-        shown_parts = set(stored_weeks_of(self.week_start)) if self.first_weekday else set()
-        if self.week_start not in written and written and not stay and not written & shown_parts:
-            destination = next(iter(written))
-        payload = {key: value for key, value in self.pending_save.items() if key != "stay"}
+        wire, destination, written = flexweek_engine.prepare_save_post(
+            json.dumps(self.pending_save), self.week_start, bool(self.first_weekday)
+        )
+        payload = json.loads(wire)
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
@@ -2766,13 +2709,8 @@ class NativeSession(QObject):
             self._save_status = None
             # A save the server read and refused (not a lost connection or another window's change) will be
             # refused again as it is: `drop_refused_save` lets a sheet take it back and try a corrected one.
-            self.last_save_refused = error.status not in (0, 409)
-            if error.status == 0:
-                self._say(
-                    "Not saved: FlexWeek can't be reached. Your changes are still here. Choose Retry save."
-                )
-            else:
-                self._say("Not saved. " + error.message)
+            self.last_save_refused, words = flexweek_engine.save_failure(error.status, error.message)
+            self._say(words)
             self.save_finished.emit(False, self.message)
             self.week_changed.emit()
             if refused_travel:
