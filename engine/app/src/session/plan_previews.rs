@@ -655,6 +655,7 @@ pub fn accept_late(input: LateAcceptInput<'_>) -> Result<LateAcceptDecision, Str
         .ok_or_else(|| "late preview is missing operation_id".to_string())?
         .to_string();
     let checked_block = check_block(block).map_err(|refused| refused.0)?;
+    check_late_block(&checked_block)?;
     check_trace_lists(trace)?;
     let mut with_late = Vec::with_capacity(input.blocks.len() + 1);
     with_late.extend(input.blocks.iter().cloned());
@@ -870,8 +871,24 @@ pub fn spread_selection(input: SpreadSelectionInput<'_>) -> Result<SplitSelectio
     })
 }
 
+/// A Running late block is a locked block on real days (0 to 6) with a real HH:MM start.
+fn check_late_block(block: &Value) -> Result<(), String> {
+    if block.get("kind").and_then(Value::as_str) != Some("locked") {
+        return Err("late block must be a locked block".to_string());
+    }
+    let days = int_list(block.get("days"), "days")?;
+    if days.is_empty() || days.iter().any(|day| !(0..=6).contains(day)) {
+        return Err("late block days must be a list of days 0 to 6".to_string());
+    }
+    let Some(start) = block.get("start").and_then(Value::as_str) else {
+        return Err("late block start must be an HH:MM time".to_string());
+    };
+    hhmm_to_minutes(start).map_err(|err| format!("late block start: {}", err.message))?;
+    Ok(())
+}
+
 /// A held trace's `placed` and `unplaced` must be lists of objects with a text `id`; a placement's
-/// `start` is text, its `days` whole numbers and its `duration_min` a whole number, when present.
+/// `start` is null or a real HH:MM time, its `days` are 0 to 6 and its `duration_min` is positive.
 fn check_trace_lists(trace: &Value) -> Result<(), String> {
     for key in ["placed", "unplaced"] {
         let items = match trace.get(key) {
@@ -886,18 +903,31 @@ fn check_trace_lists(trace: &Value) -> Result<(), String> {
             if !fields.get("id").is_some_and(Value::is_string) {
                 return Err(format!("each trace.{key} item needs a text id"));
             }
-            if !matches!(
-                fields.get("start"),
-                None | Some(Value::Null | Value::String(_))
-            ) {
-                return Err(format!("trace.{key} start must be text"));
+            match fields.get("start") {
+                None | Some(Value::Null) => {}
+                Some(Value::String(start)) => {
+                    hhmm_to_minutes(start)
+                        .map_err(|err| format!("trace.{key} start: {}", err.message))?;
+                }
+                Some(_) => return Err(format!("trace.{key} start must be text")),
             }
-            if !matches!(fields.get("duration_min"), None | Some(Value::Null))
-                && fields.get("duration_min").and_then(Value::as_i64).is_none()
+            if !matches!(fields.get("duration_min"), None | Some(Value::Null)) {
+                match fields.get("duration_min").and_then(Value::as_i64) {
+                    None => {
+                        return Err(format!("trace.{key} duration_min must be a whole number"));
+                    }
+                    Some(minutes) if minutes < 1 => {
+                        return Err(format!("trace.{key} duration_min must be positive"));
+                    }
+                    Some(_) => {}
+                }
+            }
+            if int_list(fields.get("days"), "days")?
+                .iter()
+                .any(|day| !(0..=6).contains(day))
             {
-                return Err(format!("trace.{key} duration_min must be a whole number"));
+                return Err(format!("trace.{key} days must be 0 to 6"));
             }
-            int_list(fields.get("days"), "days")?;
         }
     }
     Ok(())

@@ -1115,6 +1115,64 @@ fn accepting_running_late_refuses_malformed_blocks_and_traces() {
 }
 
 #[test]
+fn accepting_running_late_refuses_a_late_block_or_placement_the_week_cannot_hold() {
+    let essay = homework_session("essay-1", "essay", "Essay", vec![3], Some("18:45"), 60);
+    let good_trace = json!({"placed": [], "unplaced": [], "moves": []});
+    let accept = |block: Value, trace: Value| {
+        accept_late(LateAcceptInput {
+            preview: Some(&json!({
+                "week_start": WEEK, "stale": false, "operation_id": "op",
+                "block": block, "trace": trace,
+            })),
+            week_start: WEEK,
+            blocks: std::slice::from_ref(&essay),
+            assignments: &json!({}),
+        })
+    };
+    let late = |patch: Value| {
+        let mut block = json!({
+            "id": "b-late-1", "kind": "locked", "title": "Running late",
+            "days": [3], "start": "19:00", "duration_min": 30,
+        });
+        for (key, value) in patch.as_object().unwrap() {
+            block[key] = value.clone();
+        }
+        block
+    };
+    assert!(accept(late(json!({})), good_trace.clone()).is_ok());
+    // Only the clock is wrong; every other field of the block is valid.
+    assert!(accept(late(json!({"start": "99:99"})), good_trace.clone()).is_err());
+    assert!(accept(late(json!({"start": "24:00"})), good_trace.clone()).is_err());
+    assert!(accept(late(json!({"start": null})), good_trace.clone()).is_err());
+    // A late block is a locked block on real days.
+    assert!(accept(late(json!({"kind": "flexible"})), good_trace.clone()).is_err());
+    assert!(accept(late(json!({"days": []})), good_trace.clone()).is_err());
+    assert!(accept(late(json!({"days": [7]})), good_trace.clone()).is_err());
+    assert!(accept(late(json!({"days": [-1]})), good_trace.clone()).is_err());
+    // Placements: only the clock is wrong, then days and length.
+    let placed = |item: Value| json!({"placed": [item], "unplaced": [], "moves": []});
+    let item = |patch: Value| {
+        let mut placement = json!({
+            "id": "essay-1", "days": [3], "start": "19:15", "duration_min": 60,
+        });
+        for (key, value) in patch.as_object().unwrap() {
+            placement[key] = value.clone();
+        }
+        placement
+    };
+    assert!(accept(late(json!({})), placed(item(json!({})))).is_ok());
+    assert!(accept(late(json!({})), placed(item(json!({"start": null})))).is_ok());
+    assert!(accept(late(json!({})), placed(item(json!({"start": "99:99"})))).is_err());
+    assert!(accept(late(json!({})), placed(item(json!({"start": "7pm"})))).is_err());
+    assert!(accept(late(json!({})), placed(item(json!({"days": [7]})))).is_err());
+    assert!(accept(late(json!({})), placed(item(json!({"days": [-1]})))).is_err());
+    assert!(accept(late(json!({})), placed(item(json!({"duration_min": 0})))).is_err());
+    assert!(accept(late(json!({})), placed(item(json!({"duration_min": -15})))).is_err());
+    let unplaced = |item: Value| json!({"placed": [], "unplaced": [item], "moves": []});
+    assert!(accept(late(json!({})), unplaced(item(json!({"start": "99:99"})))).is_err());
+}
+
+#[test]
 fn allow_splitting_refuses_minute_counts_a_homework_cannot_hold() {
     let split = |estimate: Value, focus: Value| {
         prepare_allow_splitting(AllowSplittingInput {
