@@ -762,3 +762,35 @@ fn splitting_a_series_without_a_fresh_id_is_refused() {
     let (after, _, _) = applied(relocate(&input, &mut empty).unwrap());
     assert_eq!(after[0]["days"], json!([1]));
 }
+
+#[test]
+fn day_view_pastes_onto_the_day_it_shows_not_today() {
+    // Today is Wednesday (day 2); Day view shows Friday of the open week, so the paste lands on day 4.
+    let blocks = json!([]);
+    let trace = json!({});
+    let friday = PasteSelection {
+        planner_view: "day",
+        selected_day: "2026-09-25",
+        ..no_selection()
+    };
+    let found = paste_destination(&blocks, &trace, &friday, WEEK)
+        .unwrap()
+        .expect("the planner day decides");
+    assert_eq!((found.day, found.start), (Some(4), None));
+}
+
+#[test]
+fn day_view_on_another_week_falls_back_to_today() {
+    // Day view shows a date in the next week: it is not the open week, so today's column decides.
+    let blocks = json!([]);
+    let trace = json!({});
+    let later = PasteSelection {
+        planner_view: "day",
+        selected_day: "2026-09-30",
+        ..no_selection()
+    };
+    let found = paste_destination(&blocks, &trace, &later, WEEK)
+        .unwrap()
+        .expect("today decides");
+    assert_eq!((found.day, found.start), (Some(2), None));
+}
