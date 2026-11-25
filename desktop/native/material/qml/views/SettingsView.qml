@@ -196,6 +196,7 @@ Item {
                 sourceComponent: ComputerSection {}
             }
             Loader {
+                id: syncLoader
                 anchors.fill: parent
                 active: root.st.section === "sync"
                 visible: active
@@ -220,12 +221,17 @@ Item {
         open: !!root.st.pairOpen
         code: root.st.pairCode || ""
         status: root.st.pairStatus || ""
-        fraction: root.st.pairFraction === undefined ? 1.0 : root.st.pairFraction
+        fraction: root.st.pairFraction === undefined ? 0.0 : root.st.pairFraction
         copied: !!root.st.pairCopied
         relayNote: root.st.relayNote || ""
         onCopyRequested: root.panel.copyPairCode()
         onRestartRequested: root.panel.pair()
         onDismissed: root.panel.closePairing()
+        onClosed: Qt.callLater(function() {
+            if (root.visible && root.st.section === "sync" && root.st.page === "sections"
+                && syncLoader.item && syncLoader.item.pairRow)
+                syncLoader.item.pairRow.forceActiveFocus()
+        })
     }
 
     Prompt {

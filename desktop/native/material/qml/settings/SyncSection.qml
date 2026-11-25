@@ -8,6 +8,7 @@ SectionPage {
     objectName: "syncSection"
     readonly property var st: Ui.st
     readonly property var panel: Ui.settings
+    property alias pairRow: pairLinkRow
 
     M3Palette { id: m3; theme: Ui.theme }
 
@@ -43,15 +44,23 @@ SectionPage {
             width: parent.width - 36
             spacing: 12
 
+            // Wrap controls onto a second row whenever keeping them inline would squeeze the title under 180 px.
+            readonly property real controlsNaturalWidth: statusWord.implicitWidth
+                + (syncNowWrap.visible ? (12 + syncNowBtn.implicitWidth) : 0)
+            readonly property bool wrapControls: width < (iconTile.width + 14 + 180 + controlsNaturalWidth + 16)
+
             Item {
+                id: statusTopRow
                 width: parent.width
-                implicitHeight: Math.max(iconTile.height, titleCol.implicitHeight, rightCol.implicitHeight)
+                implicitHeight: statusCol.wrapControls
+                    ? (Math.max(iconTile.height, titleCol.implicitHeight) + 12 + rightCol.implicitHeight)
+                    : Math.max(iconTile.height, titleCol.implicitHeight, rightCol.implicitHeight)
                 height: implicitHeight
 
                 Rectangle {
                     id: iconTile
                     anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
+                    y: statusCol.wrapControls ? 0 : (statusTopRow.height - height) / 2
                     width: 44
                     height: 44
                     radius: m3.cornerFor(12)
@@ -67,11 +76,15 @@ SectionPage {
 
                 Column {
                     id: titleCol
+                    objectName: "syncStatusTitleCol"
                     anchors.left: iconTile.right
                     anchors.leftMargin: 14
-                    anchors.right: rightCol.left
-                    anchors.rightMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
+                    width: statusCol.wrapControls
+                        ? Math.max(0, statusTopRow.width - iconTile.width - 14)
+                        : Math.max(0, statusTopRow.width - iconTile.width - 14 - statusCol.controlsNaturalWidth - 12)
+                    y: statusCol.wrapControls
+                        ? Math.max(0, (iconTile.height - implicitHeight) / 2)
+                        : (statusTopRow.height - implicitHeight) / 2
                     spacing: 2
 
                     Text {
@@ -94,16 +107,21 @@ SectionPage {
                     }
                 }
 
-                Row {
+                Flow {
                     id: rightCol
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
+                    objectName: "syncStatusControls"
+                    x: statusCol.wrapControls ? 0 : Math.max(0, statusTopRow.width - width)
+                    y: statusCol.wrapControls
+                        ? Math.max(iconTile.height, titleCol.implicitHeight) + 12
+                        : (statusTopRow.height - height) / 2
+                    width: statusCol.wrapControls ? statusTopRow.width : statusCol.controlsNaturalWidth
                     spacing: 12
 
                     Text {
                         id: statusWord
                         objectName: "syncStatusWord"
-                        anchors.verticalCenter: parent.verticalCenter
+                        height: syncNowWrap.visible ? syncNowBtn.implicitHeight : implicitHeight
+                        verticalAlignment: Text.AlignVCenter
                         text: page.st.syncStatusWord || "Not linked"
                         color: page.statusColor
                         font.family: M3Font.family
@@ -119,7 +137,6 @@ SectionPage {
                         visible: !!page.st.canSync
                         width: visible ? syncNowBtn.implicitWidth : 0
                         height: syncNowBtn.implicitHeight
-                        anchors.verticalCenter: parent.verticalCenter
                         Button {
                             id: syncNowBtn
                             objectName: "syncNow"
@@ -182,6 +199,7 @@ SectionPage {
     Group {
         GroupHeader { title: "Linked phones"; icon: "smartphone" }
         LinkRow {
+            id: pairLinkRow
             key: "pair"
             title: "Pair a phone"
             subtitle: page.st.pairCode
@@ -201,6 +219,12 @@ SectionPage {
                 buttonKind: "danger-outlined"
                 onActivated: page.panel.askRemovePhone(modelData.id)
             }
+        }
+        NoteRow {
+            key: "removeError"
+            visible: !!page.st.removeError
+            problem: true
+            text: page.st.removeError || ""
         }
         SettingsRow {
             visible: !!page.st.pairError

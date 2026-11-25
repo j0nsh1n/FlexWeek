@@ -42,7 +42,7 @@ Item {
     readonly property bool typing: sheetHost.active || _field(Window.activeFocusItem)
     // The Focus screen covers the window. The number keys, Z and Esc belong to it while it is open.
     readonly property bool focusOpen: bridge ? bridge.focus.open : false
-    readonly property bool settingsPromptOpen: bridge && bridge.settingsBridge
+    readonly property bool settingsPromptOpen: bridge && bridge.screen === "settings" && bridge.settingsBridge
         ? bridge.settingsBridge.promptOpen : false
     // Set by the window while one of its own dialogs (Help) is up over this one: its keys are not ours,
     // and a Shortcut here still fires with that dialog active, so Esc never reached it.

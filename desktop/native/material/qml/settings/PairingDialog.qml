@@ -2,8 +2,9 @@ import QtQuick
 import components 1.0
 
 // Dedicated phone pairing pop-up dialog (hybrid of Option A + Option C):
-// computer <-> phone graphic header, large 4+4 one-time code tiles, live 5-min countdown bar,
-// tries left, Copy code / Start a new code, 3 numbered steps, and n0 relay privacy note.
+// computer <-> phone graphic header, responsive 4+4 one-time code tiles, live 5-min countdown bar
+// backed strictly by a waiting offer, Copy code / Start a new code, 3 steps, n0 relay note,
+// trapped Tab/Backtab cycle, focus-driven scrolling, and focus restoration on close.
 FocusScope {
     id: root
     objectName: "pairingDialog"
@@ -15,16 +16,18 @@ FocusScope {
     property bool open: false
     property string code: ""
     property string status: ""
-    property real fraction: 1.0
+    property real fraction: 0.0
     property bool copied: false
     property string relayNote: ""
     signal copyRequested()
     signal restartRequested()
     signal dismissed()
+    signal closed()
 
     anchors.fill: parent
     visible: open
     enabled: open
+    focus: open
     z: 30
 
     M3Palette { id: pal; theme: root.theme }
@@ -32,15 +35,54 @@ FocusScope {
     readonly property string compactCode: root.code.replace(/[\s\-]+/g, "")
     readonly property string firstHalf: compactCode.length >= 8 ? compactCode.slice(0, 4) : root.code
     readonly property string secondHalf: compactCode.length >= 8 ? compactCode.slice(4, 8) : ""
+    readonly property int focusMargin: 6
 
-    onOpenChanged: {
-        if (open)
-            Qt.callLater(function() { copyBtn.forceActiveFocus() })
+    function ensureVisible(item) {
+        if (!item)
+            return
+        var pos = item.mapToItem(dialogFlick.contentItem, 0, 0)
+        var top = pos.y - focusMargin
+        var bottom = pos.y + item.height + focusMargin
+        var limit = Math.max(0, dialogFlick.contentHeight - dialogFlick.height)
+        if (top < dialogFlick.contentY)
+            dialogFlick.contentY = Math.max(0, top)
+        else if (bottom > dialogFlick.contentY + dialogFlick.height)
+            dialogFlick.contentY = Math.min(limit, bottom - dialogFlick.height)
     }
 
+    function cycle(step) {
+        var next = FocusCycle.nextItem([card], step, Window.activeFocusItem)
+        FocusCycle.take(next, step)
+        root.ensureVisible(next)
+    }
+
+    onOpenChanged: {
+        if (open) {
+            dialogFlick.contentY = 0
+            Qt.callLater(function() { if (root.open) copyBtn.forceActiveFocus() })
+        } else {
+            root.closed()
+        }
+    }
+
+    Accessible.role: Accessible.Dialog
+    Accessible.name: "Pair a phone"
+    Keys.priority: Keys.BeforeItem
     Keys.onEscapePressed: (event) => {
         if (root.open) {
             root.dismissed()
+            event.accepted = true
+        }
+    }
+    Keys.onTabPressed: (event) => {
+        if (root.open) {
+            root.cycle(1)
+            event.accepted = true
+        }
+    }
+    Keys.onBacktabPressed: (event) => {
+        if (root.open) {
+            root.cycle(-1)
             event.accepted = true
         }
     }
@@ -64,7 +106,7 @@ FocusScope {
         id: card
         objectName: "pairingCard"
         z: 1
-        width: root.phone ? Math.max(0, root.width - 24) : Math.min(540, Math.max(320, root.width - 48))
+        width: root.phone ? Math.max(240, root.width - 24) : Math.min(540, Math.max(320, root.width - 48))
         height: Math.min(root.height - 32, inner.implicitHeight + 48)
         anchors.centerIn: parent
         radius: pal.cornerFor(24)
@@ -75,17 +117,27 @@ FocusScope {
         TapHandler {}
 
         Flickable {
+            id: dialogFlick
+            objectName: "pairingScroll"
             anchors.fill: parent
             anchors.margins: 24
             contentWidth: width
-            contentHeight: inner.implicitHeight
+            contentHeight: inner.implicitHeight + 8
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
             Column {
                 id: inner
-                width: parent.width
+                width: dialogFlick.width
                 spacing: 16
+                readonly property bool compact: width < 320
+                readonly property real tileWidth: root.secondHalf !== ""
+                    ? Math.min(168, Math.max(88, Math.floor((width - 28) / 2)))
+                    : Math.min(260, width)
+                readonly property int digitPx: Math.min(
+                    M3Font.px(compact ? 22 : 28),
+                    Math.max(15, Math.floor(tileWidth * 0.22))
+                )
 
                 // Option C computer <-> phone graphic header
                 Rectangle {
@@ -96,22 +148,22 @@ FocusScope {
 
                     Row {
                         anchors.centerIn: parent
-                        spacing: 18
+                        spacing: inner.compact ? 10 : 18
 
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 4
                             Rectangle {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                width: 40
-                                height: 40
+                                width: 38
+                                height: 38
                                 radius: pal.cornerFor(12)
                                 color: pal.cardSurface
                                 M3Icon {
                                     anchors.centerIn: parent
                                     name: "computer"
-                                    width: 22
-                                    height: 22
+                                    width: 20
+                                    height: 20
                                     color: pal.primary
                                 }
                             }
@@ -127,9 +179,9 @@ FocusScope {
 
                         Row {
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 6
+                            spacing: inner.compact ? 4 : 6
                             Rectangle {
-                                width: 20
+                                width: inner.compact ? 10 : 20
                                 height: 2
                                 radius: 1
                                 anchors.verticalCenter: parent.verticalCenter
@@ -137,20 +189,20 @@ FocusScope {
                                 opacity: 0.45
                             }
                             Rectangle {
-                                width: 28
-                                height: 28
-                                radius: 14
+                                width: 26
+                                height: 26
+                                radius: 13
                                 color: pal.primary
                                 M3Icon {
                                     anchors.centerIn: parent
                                     name: "link"
-                                    width: 16
-                                    height: 16
+                                    width: 15
+                                    height: 15
                                     color: pal.inkPrimary
                                 }
                             }
                             Rectangle {
-                                width: 20
+                                width: inner.compact ? 10 : 20
                                 height: 2
                                 radius: 1
                                 anchors.verticalCenter: parent.verticalCenter
@@ -164,15 +216,15 @@ FocusScope {
                             spacing: 4
                             Rectangle {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                width: 40
-                                height: 40
+                                width: 38
+                                height: 38
                                 radius: pal.cornerFor(12)
                                 color: pal.cardSurface
                                 M3Icon {
                                     anchors.centerIn: parent
                                     name: "smartphone"
-                                    width: 22
-                                    height: 22
+                                    width: 20
+                                    height: 20
                                     color: pal.primary
                                 }
                             }
@@ -188,7 +240,7 @@ FocusScope {
                     }
                 }
 
-                // Eyebrow + 4+4 digit tiles
+                // Eyebrow + responsive 4+4 digit tiles
                 Column {
                     width: parent.width
                     spacing: 10
@@ -216,12 +268,15 @@ FocusScope {
                     }
 
                     Row {
+                        id: tilesRow
+                        objectName: "pairingTilesRow"
                         anchors.horizontalCenter: parent.horizontalCenter
-                        spacing: 12
+                        spacing: inner.compact ? 6 : 10
 
                         Rectangle {
-                            width: Math.max(132, firstDigits.implicitWidth + 32)
-                            height: 60
+                            objectName: "pairingTileFirst"
+                            width: inner.tileWidth
+                            height: Math.max(54, inner.digitPx + 30)
                             radius: pal.cornerFor(14)
                             color: pal.wellSurface
                             border.width: root.highContrast ? 1.5 : 1
@@ -232,9 +287,9 @@ FocusScope {
                                 text: root.firstHalf
                                 color: pal.inkSurface
                                 font.family: "JetBrains Mono, monospace"
-                                font.pixelSize: M3Font.px(28)
+                                font.pixelSize: inner.digitPx
                                 font.weight: 700
-                                font.letterSpacing: 3
+                                font.letterSpacing: inner.compact ? 1.5 : 3
                             }
                         }
 
@@ -244,14 +299,15 @@ FocusScope {
                             text: "·"
                             color: pal.inkMuted
                             font.family: M3Font.family
-                            font.pixelSize: M3Font.px(24)
+                            font.pixelSize: M3Font.px(22)
                             font.weight: 700
                         }
 
                         Rectangle {
+                            objectName: "pairingTileSecond"
                             visible: root.secondHalf !== ""
-                            width: Math.max(132, secondDigits.implicitWidth + 32)
-                            height: 60
+                            width: inner.tileWidth
+                            height: Math.max(54, inner.digitPx + 30)
                             radius: pal.cornerFor(14)
                             color: pal.wellSurface
                             border.width: root.highContrast ? 1.5 : 1
@@ -262,17 +318,18 @@ FocusScope {
                                 text: root.secondHalf
                                 color: pal.inkSurface
                                 font.family: "JetBrains Mono, monospace"
-                                font.pixelSize: M3Font.px(28)
+                                font.pixelSize: inner.digitPx
                                 font.weight: 700
-                                font.letterSpacing: 3
+                                font.letterSpacing: inner.compact ? 1.5 : 3
                             }
                         }
                     }
 
-                    // 5-minute countdown bar
+                    // 5-minute countdown bar (only shown when backed by an active waiting offer)
                     Rectangle {
                         id: progressTrack
                         objectName: "pairingProgress"
+                        visible: root.status !== ""
                         width: parent.width
                         height: 6
                         radius: 3
@@ -288,21 +345,31 @@ FocusScope {
 
                     Text {
                         objectName: "pairingStatus"
+                        visible: root.status !== ""
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
-                        text: root.status || "Code works for 5:00. 3 tries left. It works once."
+                        text: root.status
                         color: pal.inkMuted
                         font.family: M3Font.family
                         font.pixelSize: M3Font.px(13)
                     }
 
-                    Row {
+                    Grid {
+                        id: actionsGrid
+                        objectName: "pairingActions"
+                        readonly property real naturalWidth: copyBtn.implicitWidth + newCodeBtn.implicitWidth + 10
+                        readonly property bool stacked: naturalWidth > inner.width
+                        columns: stacked ? 1 : 2
+                        columnSpacing: 10
+                        rowSpacing: 8
                         anchors.horizontalCenter: parent.horizontalCenter
-                        spacing: 10
+                        width: stacked ? inner.width : naturalWidth
+
                         Button {
                             id: copyBtn
                             objectName: "pairCopy"
+                            width: actionsGrid.stacked ? actionsGrid.width : implicitWidth
                             theme: root.theme
                             density: root.density
                             reduceMotion: root.reduceMotion
@@ -312,9 +379,12 @@ FocusScope {
                             text: root.copied ? "Copied" : "Copy code"
                             accessName: text
                             onClicked: root.copyRequested()
+                            onActiveFocusChanged: if (activeFocus) root.ensureVisible(this)
                         }
                         Button {
+                            id: newCodeBtn
                             objectName: "pairNewCode"
+                            width: actionsGrid.stacked ? actionsGrid.width : implicitWidth
                             theme: root.theme
                             density: root.density
                             reduceMotion: root.reduceMotion
@@ -324,6 +394,7 @@ FocusScope {
                             text: "Start a new code"
                             accessName: text
                             onClicked: root.restartRequested()
+                            onActiveFocusChanged: if (activeFocus) root.ensureVisible(this)
                         }
                     }
                 }
@@ -408,9 +479,13 @@ FocusScope {
                 // Footer
                 Item {
                     width: parent.width
-                    height: closeBtn.implicitHeight
+                    implicitHeight: Math.max(waitRow.implicitHeight, closeBtn.implicitHeight)
+                    height: implicitHeight
                     Row {
+                        id: waitRow
                         anchors.left: parent.left
+                        anchors.right: closeBtn.left
+                        anchors.rightMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 8
                         Rectangle {
@@ -421,6 +496,8 @@ FocusScope {
                             color: pal.primary
                         }
                         Text {
+                            width: Math.max(0, parent.width - 16)
+                            wrapMode: Text.WordWrap
                             text: "Waiting for your phone…"
                             color: pal.inkMuted
                             font.family: M3Font.family
@@ -440,6 +517,7 @@ FocusScope {
                         text: "Close"
                         accessName: "Close pairing dialog"
                         onClicked: root.dismissed()
+                        onActiveFocusChanged: if (activeFocus) root.ensureVisible(this)
                     }
                 }
             }

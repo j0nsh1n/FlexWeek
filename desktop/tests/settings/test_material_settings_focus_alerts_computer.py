@@ -6,14 +6,15 @@ from __future__ import annotations
 import re
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from backend import clock as wall_clock
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import quick_of
+from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
     _click,
@@ -169,6 +170,11 @@ def test_this_computer_account_setup_updates_and_pairing_are_wired(
         return True
 
     monkeypatch.setattr(window.session, "begin_pairing", begin)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
     root = _open_settings(qapp, window, "computer")
     _click(qapp, window, _named(root, "row_account")[0])
     _click(qapp, window, _named(root, "row_setup")[0])
@@ -182,27 +188,33 @@ def test_this_computer_account_setup_updates_and_pairing_are_wired(
     assert _named(root, "pairingDialog")[0].property("visible") is True
     assert str(_named(root, "pairingCodeText")[0].property("text")) == "ABCD-1234"
     assert "ABCD-1234" in str(_named(root, "row_pair")[0].property("subtitle"))
-    _panel(window).closePairing()
-    _pump(qapp)
+    _click(qapp, window, _named(root, "pairClose")[0])
+    _pump(qapp, 10)
     assert _named(root, "pairingDialog")[0].property("visible") is False
 
 
 def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_tries_and_its_problems(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Phone & sync opens the pairing dialog with countdown, tries, copy/restart and closes on problem."""
-    status: dict = {}
+    """Findings 3, 5, 6, 7: UI-driven Copy, Start a new code, Close, Escape, focus cycle/restore,
+    service loss clearing stale code, pending-callback cancellation, and 320 px layout fit."""
+    status: dict | None = {}
+    codes = iter(["1234 5678", "9012 3456", "1234 5678", "1234 5678", "1234 5678", "1234 5678"])
     monkeypatch.setattr(
-        window.session, "begin_pairing", lambda done: done({"display_code": "1234 5678"}, None) or True
+        window.session, "begin_pairing", lambda done: done({"display_code": next(codes)}, None) or True
     )
-    monkeypatch.setattr(window.session, "pairing_status", lambda: dict(status))
+    monkeypatch.setattr(window.session, "pairing_status", lambda: None if status is None else dict(status))
     root = _open_settings(qapp, window, "sync")
     row = _named(root, "row_pair")[0]
+    quick = quick_of(window)
+    scene = quick_window_of(window)
+    assert quick is not None and scene is not None
 
     def subtitle() -> str:
         _pump(qapp, 5)
         return str(row.property("subtitle"))
 
+    assert status is not None
     status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 300_500, tries_left=3)
     _click(qapp, window, row)
     wait_until(qapp, lambda: "1234 5678" in subtitle())
@@ -210,28 +222,111 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert re.search(r"Code works for (5:00|4:59)\. 3 tries left\. It works once\.", words), words
     assert _named(root, "pairingDialog")[0].property("visible") is True
     assert "3 tries left." in str(_named(root, "pairingStatus")[0].property("text"))
-    _panel(window).copyPairCode()
-    assert _panel(window).property("state")["pairCopied"] is True
-    status.update(tries_left=1)
-    _panel(window)._pair_tick()
-    assert "1 try left." in subtitle()
-    _panel(window).closePairing()
-    _pump(qapp)
-    assert _named(root, "pairingDialog")[0].property("visible") is False
 
+    # Copy code via real UI button writes to the real clipboard.
+    QGuiApplication.clipboard().setText("")
+    _click(qapp, window, _named(root, "pairCopy")[0])
+    assert QGuiApplication.clipboard().text() == "1234 5678"
+    assert _panel(window).property("state")["pairCopied"] is True
+
+    # Tab cycles inside the pairing dialog without escaping to the background page.
+    _named(root, "pairCopy")[0].forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
+    assert scene.activeFocusItem().objectName() == "pairNewCode"
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
+    assert scene.activeFocusItem().objectName() == "pairClose"
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
+    assert scene.activeFocusItem().objectName() == "pairCopy"
+
+    # Start a new code via real UI button replaces the displayed code.
+    _click(qapp, window, _named(root, "pairNewCode")[0])
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "9012 3456")
+    assert str(_named(root, "pairingCodeText")[0].property("text")) == "9012 3456"
+
+    # At 320 px phone width and Larger text, both tiles and both action buttons stay within the viewport.
+    _panel(window).setTextSize("larger")
+    window.resize(320, 640)
+    _pump(qapp, 15)
+    scroll = _named(root, "pairingScroll")[0]
+    s_left = scroll.mapToScene(QPointF(0, 0)).x()
+    s_right = scroll.mapToScene(QPointF(scroll.width(), 0)).x()
+    for part_name in ("pairingTileFirst", "pairingTileSecond", "pairCopy", "pairNewCode"):
+        part = _named(root, part_name)[0]
+        p_left = part.mapToScene(QPointF(0, 0)).x()
+        p_right = part.mapToScene(QPointF(part.width(), 0)).x()
+        assert p_left >= s_left - 1 and p_right <= s_right + 1, part_name
+    _panel(window).setTextSize("normal")
+    window.resize(1280, 800)
+    _pump(qapp, 10)
+
+    # Escape closes the dialog and restores keyboard focus to Pair a phone.
+    _named(root, "pairCopy")[0].forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    _pump(qapp, 10)
+    assert _named(root, "pairingDialog")[0].property("visible") is False
+    assert scene.activeFocusItem().objectName() == "row_pair"
+
+    # Service loss (pairing_status returns None) closes & clears stale code with no fake 5:00 countdown.
+    status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
+    _click(qapp, window, row)
+    wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is True)
+    status = None
+    _panel(window)._pair_tick()
+    _pump(qapp, 10)
+    assert _panel(window).property("state")["pairOpen"] is False
+    assert _panel(window).property("state")["pairCode"] == ""
+    assert _panel(window).property("state")["pairStatus"] == ""
+    assert _panel(window).property("state")["pairError"] != ""
+    assert scene.activeFocusItem().objectName() == "row_pair"
+
+    # Countdown expiry and other terminal states close the dialog, clear code, and show the problem.
     for state, problem in (
         ("expired", "That code has expired. Start a new one."),
         ("too_many_tries", "Too many wrong tries. Start a new code."),
         ("idle", "That code is no longer open. Start a new one."),
     ):
-        status.clear()
-        status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
+        status = {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 60_000, "tries_left": 3}
         _click(qapp, window, row)
         wait_until(qapp, lambda: "1234 5678" in subtitle())
-        status.clear()
-        status.update(state=state)
+        status = {"state": state}
         _panel(window)._pair_tick()
+        _pump(qapp, 10)
         assert _panel(window).property("state")["pairError"] == problem, state
         assert _panel(window).property("state")["pairOpen"] is False, state
         assert subtitle() == "Show a code to link a phone.", state
         assert problem in str(_named(root, "row_pairError")[0].property("subtitle")), state
+
+
+def test_dismissing_or_leaving_settings_cancels_a_pending_pairing_callback(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 6: an in-flight begin_pairing callback must not reopen the dialog after Close or leaving."""
+    pending: list[object] = []
+    monkeypatch.setattr(window.session, "begin_pairing", lambda done: pending.append(done) or True)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 1
+    _panel(window).closePairing()
+    pending.pop()({"display_code": "5555 6666"}, None)  # type: ignore[operator]
+    _pump(qapp, 10)
+    assert _panel(window).property("state")["pairOpen"] is False
+
+    # Starting pairing and leaving Settings to Week before it finishes also ignores the late callback.
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 1
+    _bridge(window).showPage("week")
+    _pump(qapp)
+    pending.pop()({"display_code": "7777 8888"}, None)  # type: ignore[operator]
+    _pump(qapp, 10)
+    assert _panel(window).property("state")["pairOpen"] is False
+    assert _panel(window).property("promptOpen") is False

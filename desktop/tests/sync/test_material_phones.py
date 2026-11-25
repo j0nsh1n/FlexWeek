@@ -145,3 +145,63 @@ def test_the_clock_warning_is_said_when_changes_were_held_back(
     assert _named(root, "note_clockWarning")[0].property("visible")
     _panel(window)._synced([("phone", {"clock_skewed": 0}, None)], None)
     assert _panel(window).property("state")["clockWarning"] == ""
+
+
+def test_failed_phone_removal_does_not_override_healthy_sync_status_and_newer_sync_clears_old_error(
+    qapp: QApplication, light_desk: NativeWindow, phone: SyncService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 8: removal failure shows its own note without flipping Synced to Not synced, and a newer
+    successful service sync clears a stale manual sync error."""
+    window = light_desk
+    root = _open_settings(qapp, window, "sync")
+    _pair(window, phone)
+    panel = _panel(window)
+    panel._publish()
+    _pump(qapp)
+
+    fake_status = {"syncing": False, "last_error": None, "last_sync_ms": 1000}
+    monkeypatch.setattr(window._sync, "status", lambda: dict(fake_status))
+    panel._publish()
+    assert panel.property("state")["syncStatusWord"] == "Synced"
+
+    # A failed removal writes removeError but leaves Synced intact.
+    monkeypatch.setattr(
+        window.session, "unlink_phone", lambda _dev_id, done: done(None, RuntimeError("denied"))
+    )
+    panel.askRemovePhone(_rows(window)[0]["id"])
+    panel.answerRemovePhone("remove")
+    _pump(qapp)
+    state = panel.property("state")
+    assert "Could not remove" in state["removeError"]
+    assert state["syncStatusWord"] == "Synced"
+    assert _named(root, "note_removeError")[0].property("visible") is True
+
+    # A failed manual sync shows Not synced until a newer automatic sync succeeds.
+    panel._synced(None, RuntimeError("offline"))
+    assert panel.property("state")["syncStatusWord"] == "Not synced"
+    fake_status["last_sync_ms"] = 2000
+    panel._publish()
+    assert panel.property("state")["syncProblem"] == ""
+    assert panel.property("state")["syncStatusWord"] == "Synced"
+
+
+def test_sync_status_card_wraps_controls_at_phone_width_and_large_text(
+    qapp: QApplication, light_desk: NativeWindow, phone: SyncService
+) -> None:
+    """Finding 4: at 320 px and Large text with a linked phone, the title keeps usable width and controls
+    wrap."""
+    window = light_desk
+    root = _open_settings(qapp, window, "sync")
+    _pair(window, phone)
+    panel = _panel(window)
+    panel.setTextSize("large")
+    window.resize(320, 640)
+    panel._publish()
+    _pump(qapp, 15)
+    title_col = _named(root, "syncStatusTitleCol")[0]
+    controls = _named(root, "syncStatusControls")[0]
+    assert float(title_col.width()) >= 160
+    assert float(controls.y()) >= float(title_col.y()) + float(title_col.height()) - 1
+    panel.setTextSize("normal")
+    window.resize(1280, 800)
+    _pump(qapp)

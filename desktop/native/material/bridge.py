@@ -899,6 +899,8 @@ class MaterialBridge(QObject):
             # Week leaves the month through the session. Day opens today's week itself: leaving
             # through the month anchor first would load that month's week and win the race.
             session.set_view(name)
+        if self._screen == "settings" and name != "settings":
+            self._settings_bridge.leave_settings()
         self._screen = name
         if name == "myday":
             self._myday.ensure_today()
