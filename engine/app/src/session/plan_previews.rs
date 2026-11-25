@@ -4,7 +4,7 @@
 //! `preview_running_late`, `_late_blocks`, `accept_running_late`, `preview_spread` and
 //! `confirm_spread`. The window keeps the requests, timers, signals and state writes.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 use flexweek_engine::desk::clipboard::merge_preview_rows;
 use flexweek_engine::desk::datetext::day_of;
@@ -981,61 +981,24 @@ fn choose_previous(
     Ok((PreviousSource::BaseSolve, None))
 }
 
-/// Mirrors `NativeSession.scheduled_blocks`: when no trace is held (null or empty dict), returns
-/// locked blocks and flexible blocks with a start; otherwise merges `trace.placed` over `blocks`.
+/// Mirrors `NativeSession.scheduled_blocks` for the only case `choose_previous` reaches: no
+/// placements are held. With no trace (null or empty dict) it returns locked blocks and flexible
+/// blocks with a start; a trace with entries but an empty `placed` list means nothing is scheduled.
 fn scheduled_blocks(blocks: &[Value], trace: Option<&Value>) -> Result<Vec<Value>, String> {
-    let has_trace = match trace {
-        None | Some(Value::Null) => false,
-        Some(Value::Object(map)) => !map.is_empty(),
+    match trace {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(map)) if map.is_empty() => {}
+        Some(Value::Object(_)) => return Ok(Vec::new()),
         Some(_) => return Err("trace must be a JSON object".to_string()),
-    };
-    let Some(trace) = trace.filter(|_| has_trace) else {
-        return Ok(blocks
-            .iter()
-            .filter(|block| {
-                let kind = block.get("kind").and_then(Value::as_str);
-                kind == Some("locked") || (kind == Some("flexible") && truthy(block.get("start")))
-            })
-            .cloned()
-            .collect());
-    };
-    let sources: HashMap<&str, &Map<String, Value>> = blocks
-        .iter()
-        .filter_map(|block| {
-            let map = block.as_object()?;
-            let id = map.get("id")?.as_str()?;
-            Some((id, map))
-        })
-        .collect();
-    let placed = trace_placed_list(trace)?;
-    let mut merged = Vec::with_capacity(placed.len());
-    for item in placed {
-        let Value::Object(placed_map) = &item else {
-            return Err("each placed block must be a JSON object".to_string());
-        };
-        let Some(id) = placed_map.get("id").and_then(Value::as_str) else {
-            return Err("placed block is missing id".to_string());
-        };
-        let Some(source) = sources.get(id) else {
-            merged.push(item);
-            continue;
-        };
-        let mut copy = (*source).clone();
-        let days = match placed_map.get("days") {
-            Some(Value::Array(days)) if !days.is_empty() => Value::Array(days.clone()),
-            _ => match source.get("days") {
-                Some(Value::Array(days)) if !days.is_empty() => Value::Array(days.clone()),
-                _ => json!([]),
-            },
-        };
-        copy.insert("days".into(), days);
-        copy.insert(
-            "start".into(),
-            placed_map.get("start").cloned().unwrap_or(Value::Null),
-        );
-        merged.push(Value::Object(copy));
     }
-    Ok(merged)
+    Ok(blocks
+        .iter()
+        .filter(|block| {
+            let kind = block.get("kind").and_then(Value::as_str);
+            kind == Some("locked") || (kind == Some("flexible") && truthy(block.get("start")))
+        })
+        .cloned()
+        .collect())
 }
 
 fn int_list(value: Option<&Value>, name: &str) -> Result<Vec<i64>, String> {
