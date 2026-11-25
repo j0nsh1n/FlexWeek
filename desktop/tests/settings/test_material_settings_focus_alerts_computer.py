@@ -46,7 +46,7 @@ def test_the_focus_section_writes_audio_and_the_link(
 
     link = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS"
     _panel(window).setSpotify("https://example.com/not-spotify")
-    assert _panel(window).property("state")["spotifyError"] == "Use a link from open.spotify.com."
+    assert _panel(window).property("state")["spotifyError"] == "Use a link that starts with https://open.spotify.com."
     assert _prefs(window).get("default_spotify_url") != "https://example.com/not-spotify"
     _panel(window).setSpotify(link)
     wait_until(qapp, lambda: _prefs(window).get("default_spotify_url") == link)

@@ -61,7 +61,7 @@ def test_routines_apply_to_the_open_week_through_the_session(
     assert [day["on"] for day in sheets.form["days"]] == [False] * 5 + [True, False]
     sheets.toggleRoutineDay(5)
     sheets.applyRoutine()
-    assert sheets.form["error"] == "Choose at least one weekday to copy."
+    assert sheets.form["error"] == "Choose at least one day."
     sheets.toggleRoutineDay(5)
     sheets.applyRoutine()
     wait_until(qapp, lambda: sheets.kind == "")

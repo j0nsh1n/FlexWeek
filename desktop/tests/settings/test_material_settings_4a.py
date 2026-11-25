@@ -103,7 +103,7 @@ def test_the_volume_saves_inside_zero_to_one_hundred_and_refuses_outside(
         _panel(window).setVolume(bad)
         _pump(qapp)
         assert _prefs(window).get("alert_volume") == 35
-        assert _state(window)["notice"] == "Could not save that."
+        assert _state(window)["notice"] == "Couldn't save that change. Try again."
 
 
 def test_play_sounds_the_chosen_tone_at_the_saved_volume(
@@ -231,7 +231,7 @@ def test_a_custom_length_saves_up_to_the_backend_limit_and_refuses_past_it(
         _panel(window).setTimerLength(key, value)
         _pump(qapp)
         assert _prefs(window).get(field) == ok, value
-        assert _state(window)["notice"] == "Could not save that."
+        assert _state(window)["notice"] == "Couldn't save that change. Try again."
 
 
 def test_splitting_rounds_lengths_to_the_grid_says_so_and_then_steps_in_fifteens(

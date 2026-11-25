@@ -33,7 +33,7 @@ from desktop.tests.window_support import (
 
 # ruff: noqa: F811
 
-NO_DAY = "Pick at least one day"
+NO_DAY = "Pick at least one day."
 BAD_LINK = "Use an https://open.spotify.com share link."
 
 

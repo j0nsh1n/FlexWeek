@@ -340,7 +340,9 @@ def test_import_backup_asks_first_and_only_imports_on_the_answer(
     ask = sheets.property("ask")
     assert ask["title"] == "Import backup file?"
     assert f"From {USERNAME}'s backup: " in ask["body"]
-    assert ask["body"].endswith("FlexWeek saves a copy of this week first, so you can go back.")
+    assert ask["body"].endswith(
+        "FlexWeek saves a copy of your current weeks and homework first, so you can go back."
+    )
     assert _answer_buttons(sheets) == {"stay": "Cancel", "import": "Import"}
     assert applied == [], "nothing is imported before the answer"
     _press(shell, Qt.Key.Key_Escape)
@@ -669,7 +671,7 @@ def test_restore_asks_first_and_not_now_restores_nothing(
     assert _asking(sheets) == "restore-copy" and applied == []
     ask = sheets.property("ask")
     assert ask["title"] == "Restore"
-    assert ask["body"] == "Restore this copy? FlexWeek saves a copy of this week first."
+    assert ask["body"] == "Restore this copy? FlexWeek saves a copy of your current weeks and homework first."
     assert _answer_buttons(sheets) == {"not": "Not now", "restore": "Restore"}
     assert ask["answers"][0]["default"] is True and ask["answers"][0]["id"] == "not"
     _press(shell, Qt.Key.Key_Escape)
