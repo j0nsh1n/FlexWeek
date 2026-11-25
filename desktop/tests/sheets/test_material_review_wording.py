@@ -62,7 +62,7 @@ def test_a_pasted_row_at_a_taken_time_says_both_will_show_one_over_the_other() -
     from desktop.native.material.sheet_preview import beside_words
 
     words = beside_words("School")
-    assert words == "School is at that time too. Both will show, one slightly over the other."
+    assert words == "School is at that time too. Both will stay visible and overlap slightly."
 
 
 def test_the_recovery_codes_line_names_the_switch_by_its_label(qapp, window) -> None:

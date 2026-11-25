@@ -13,11 +13,14 @@
 pub mod account;
 pub mod autosave;
 pub mod block_edits;
+pub mod copies;
 pub mod focus;
 pub mod frame;
+pub mod homework_edits;
 pub mod leaving;
 pub mod preferences;
 pub mod reminders;
+pub mod spotify;
 pub mod status;
 pub mod transfer;
 pub mod words;

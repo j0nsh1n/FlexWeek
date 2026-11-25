@@ -313,7 +313,7 @@ fn running_late_warning(trace: &Value, before: &[Value], moves: &[Value]) -> Opt
             .min_by_key(|candidate| candidate.0)
     });
     if let Some((_, work, fixed)) = candidates.min_by_key(|candidate| candidate.0) {
-        return Some(format!("{work} is pushed past {fixed}."));
+        return Some(format!("{work} no longer fits before {fixed}."));
     }
     let unplaced = trace.get("unplaced").and_then(Value::as_array)?;
     let moves_trace = trace.get("moves").and_then(Value::as_array)?;
@@ -360,7 +360,7 @@ fn running_late_warning(trace: &Value, before: &[Value], moves: &[Value]) -> Opt
             .filter(|(start, _)| *start > old_start)
             .min_by_key(|(start, _)| *start)
         {
-            return Some(format!("{work_title} is pushed past {fixed}."));
+            return Some(format!("{work_title} no longer fits before {fixed}."));
         }
     }
     None
@@ -529,7 +529,7 @@ mod tests {
             "the fixed activity remains in the preview"
         );
         assert_eq!(
-            result["warning"], "Spanish quiz prep is pushed past Soccer practice.",
+            result["warning"], "Spanish quiz prep no longer fits before Soccer practice.",
             "the warning names the homework and fixed conflict"
         );
     }

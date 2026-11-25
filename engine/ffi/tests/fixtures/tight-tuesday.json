@@ -79,7 +79,7 @@
       {
         "block_id": "lab-session",
         "reason": "ENERGY_MISMATCH",
-        "message": "Planned outside its preferred time of day."
+        "message": "Planned outside the time of day you chose for it."
       },
       {
         "block_id": "lab-session",

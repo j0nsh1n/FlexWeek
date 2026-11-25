@@ -50,7 +50,9 @@ def test_advanced_is_a_draft_until_done_and_back_drops_it(qapp: QApplication, wi
     _click(qapp, window, _named(root, "advancedBack")[0])
     wait_until(qapp, lambda: panel.property("state")["page"] == "sections")
     assert int(bridge.property("hourRow")) == 56
-    assert panel.property("state")["notice"] == "Advanced changes were not applied. Done applies them."
+    assert panel.property("state")["notice"] == (
+        "Your advanced changes aren't applied yet. Choose Done to apply them."
+    )
     _click(qapp, window, _named(root, "openAdvanced")[0])
     wait_until(qapp, lambda: panel.property("state")["page"] == "advanced")
     assert panel.property("state")["hour"] == 56

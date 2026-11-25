@@ -22,7 +22,7 @@ SectionPage {
         GroupHeader { title: "Reminders" }
         ChoiceRow {
             key: "reminder"
-            title: "Upcoming block reminders"
+            title: "Remind me before things start"
             subtitle: "How long before a block starts."
             choices: page.st.reminderChoices && page.st.reminderChoices.length
                 ? page.st.reminderChoices
@@ -58,7 +58,7 @@ SectionPage {
         }
         ActionRow {
             key: "playTone"
-            title: "Hear it"
+            title: "Play a test sound"
             subtitle: "Plays the sound at the volume below."
             buttonText: "Play"
             onActivated: page.panel.playTone()
@@ -128,7 +128,7 @@ SectionPage {
         GroupHeader { title: "While a session runs" }
         ToggleRow {
             key: "autoMute"
-            title: "Mute alerts while a session runs"
+            title: "Mute reminders while I focus"
             subtitle: "Reminders wait until the work part of a focus session is over."
             isOn: !!page.st.autoMute
             onFlipped: (value) => page.panel.setAutoMute(value)
@@ -149,14 +149,14 @@ SectionPage {
         }
         ToggleRow {
             key: "endChime"
-            title: "Chime when a session ends"
+            title: "Chime when focus ends"
             subtitle: "A short sound when the focus timer finishes."
             isOn: !!page.st.endChime
             onFlipped: (value) => page.panel.setEndChime(value)
         }
         ToggleRow {
             key: "tray"
-            title: "Keep running when I close the window"
+            title: "Keep FlexWeek running when I close the window"
             subtitle: page.st.trayNote || ""
             isOn: !!page.st.tray
             onFlipped: (value) => page.panel.setTray(value)

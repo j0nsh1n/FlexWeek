@@ -125,8 +125,8 @@ SheetFrame {
             reduceMotion: root.reduceMotion
             highContrast: root.highContrast
             kind: "filled"
-            text: "Apply"
-            accessName: "Apply"
+            text: "Apply routine"
+            accessName: "Apply routine"
             onClicked: root.sheets.applyRoutine()
         }
     ]

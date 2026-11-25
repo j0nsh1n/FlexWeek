@@ -19,21 +19,30 @@ Column {
 
     M3Palette { id: m3Palette; theme: page.theme }
 
-    Repeater {
-        model: bridge ? bridge.schoolCards : []
-        ChoiceCard {
-            required property var modelData
-            width: page.width
-            objectName: "setupSchool-" + modelData.value
-            theme: page.theme
-            density: page.density
-            reduceMotion: page.reduceMotion
-            highContrast: page.highContrast
-            title: modelData.title
-            note: modelData.note
-            tag: modelData.tag
-            selected: modelData.selected
-            onChosen: page.bridge.setSchoolPreset(modelData.value)
+    GridLayout {
+        id: schoolGrid
+        width: parent.width
+        columns: width >= 440 ? 2 : 1
+        columnSpacing: 12
+        rowSpacing: 12
+        Repeater {
+            model: bridge ? bridge.schoolCards : []
+            ChoiceCard {
+                required property var modelData
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                objectName: "setupSchool-" + modelData.value
+                theme: page.theme
+                density: page.density
+                reduceMotion: page.reduceMotion
+                highContrast: page.highContrast
+                title: modelData.title
+                note: modelData.note
+                tag: modelData.tag
+                selected: modelData.selected
+                onChosen: page.bridge.setSchoolPreset(modelData.value)
+            }
         }
     }
 
@@ -122,7 +131,7 @@ Column {
             theme: page.theme
             width: parent.width
             visible: bridge ? bridge.schoolHint : false
-            text: "No school days picked means no school on the calendar."
+            text: "No school days picked: School won't appear on the calendar."
         }
         HelpText {
             objectName: "setupThisWeek"
@@ -142,8 +151,8 @@ Column {
                 width: page.width
                 implicitHeight: inner.implicitHeight + 32
                 height: implicitHeight
-                radius: 16
-                color: m3Palette.surfaceContainerLow
+                radius: m3Palette.cornerFor(16)
+                color: m3Palette.cardSurface
                 border.width: page.highContrast ? 1.5 : 1
                 border.color: m3Palette.outlineVariant
                 Column {

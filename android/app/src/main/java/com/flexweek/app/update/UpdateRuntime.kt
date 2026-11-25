@@ -237,7 +237,7 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
     private fun check(loud: Boolean) {
         if (busy) return
         busy = true; state.value = UpdateState.Checking
-        viewModelScope.launch { try { val found = withContext(worker) { lookup() }; if (found != null) { prefs.lastChecked = now(); prefs.lastFailedAttempt = null } else prefs.lastFailedAttempt = now(); state.value = found ?: if (loud) UpdateState.Failed("Could not check for updates.") else UpdateState.Idle } finally { busy = false } }
+        viewModelScope.launch { try { val found = withContext(worker) { lookup() }; if (found != null) { prefs.lastChecked = now(); prefs.lastFailedAttempt = null } else prefs.lastFailedAttempt = now(); state.value = found ?: if (loud) UpdateState.Failed("Couldn't check for updates. Check your internet connection and try again.") else UpdateState.Idle } finally { busy = false } }
     }
     private suspend fun lookup(): UpdateState? {
         val json = source.get("https://api.github.com/repos/j0nsh1n/FlexWeek/releases/latest")
@@ -255,7 +255,7 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
         viewModelScope.launch { try {
             withContext(worker) {
                 val checksum = source.get(offer.checksumUrl)?.let { rules.digest(it, offer.apkName) }
-                    ?: throw IllegalStateException("Could not check the update checksum.")
+                    ?: throw IllegalStateException("Couldn't verify the update. Try downloading it again.")
                 val part = File(updatesDir, offer.apkName + ".part"); val apk = File(updatesDir, offer.apkName); updatesDir.mkdirs(); part.delete()
                 state.value = UpdateState.Downloading(offer, 0, offer.size ?: -1)
                 if (!source.download(offer.apkUrl, part) { got, total -> state.value = UpdateState.Downloading(offer, got, total) }) {
@@ -267,12 +267,12 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
                 state.value = UpdateState.Downloading(offer, part.length(), offer.size ?: -1)
                 state.value = UpdateState.Verifying(offer)
                 val actual = part.inputStream().use(UpdateParsing::sha256)
-                if (!UpdateDigest.matches(actual, checksum)) { part.delete(); throw IllegalStateException("The checksum did not match. The download was discarded.") }
+                if (!UpdateDigest.matches(actual, checksum)) { part.delete(); throw IllegalStateException("The update didn't pass its safety check. The download was deleted. Try again.") }
                 apk.delete()
                 if (!part.renameTo(apk)) { part.delete(); throw IllegalStateException("Could not save the verified download.") }
                 if (!installer.validApk(apk, offer.version)) { apk.delete(); throw IllegalStateException("The downloaded app does not match this FlexWeek release. Nothing was installed.") }
                 if (!installer.canInstall()) { state.value = UpdateState.NeedsPermission(offer); return@withContext }
-                if (!installer.install(apk)) throw IllegalStateException("Android's installer could not start.")
+                if (!installer.install(apk)) throw IllegalStateException("Android couldn't start the installer. Try again.")
                 state.value = UpdateState.Installing(offer)
             }
         } catch (error: Exception) {
@@ -291,7 +291,7 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
             try {
                 withContext(worker) {
                     if (!installer.validApk(apk, offer.version)) throw IllegalStateException("The verified update is no longer available.")
-                    if (!installer.install(apk)) throw IllegalStateException("Android's installer could not start.")
+                    if (!installer.install(apk)) throw IllegalStateException("Android couldn't start the installer. Try again.")
                     state.value = UpdateState.Installing(offer)
                 }
             } catch (error: Exception) { state.value = UpdateState.Failed(error.message ?: "The update could not be installed.") }

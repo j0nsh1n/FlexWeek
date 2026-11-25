@@ -135,7 +135,7 @@ def test_more_has_account_and_copies_of_this_week_and_nothing_opens_a_widgets_di
     sheets.moreAction("restoreButton")
     pump(qapp, 40)
     assert _kind(sheets) == "restore"
-    assert _text(shell, "sheetTitle") == "Copies of this week"
+    assert _text(shell, "sheetTitle") == "Saved copies"
     # The window's own entry points, which Settings and the keys use, land on the sheets too.
     sheets.forceClose()
     shell._open_account()
@@ -188,7 +188,7 @@ def test_the_account_sheet_has_the_widgets_words_and_hides_the_passwords(
         for item in named(_root(shell), name)
     ]
     assert shown == [
-        "Replace password",
+        "Change password",
         "Replace recovery codes",
         "Export backup file",
         "Import backup file",
@@ -340,7 +340,9 @@ def test_import_backup_asks_first_and_only_imports_on_the_answer(
     ask = sheets.property("ask")
     assert ask["title"] == "Import backup file?"
     assert f"From {USERNAME}'s backup: " in ask["body"]
-    assert ask["body"].endswith("FlexWeek saves a copy of this week first, so you can go back.")
+    assert ask["body"].endswith(
+        "FlexWeek saves a copy of your current weeks and homework first, so you can go back."
+    )
     assert _answer_buttons(sheets) == {"stay": "Cancel", "import": "Import"}
     assert applied == [], "nothing is imported before the answer"
     _press(shell, Qt.Key.Key_Escape)
@@ -603,14 +605,14 @@ def test_make_a_copy_lists_it_with_its_time_and_the_name_box_empties(
     # The week the seed saved is the one week the copy holds.
     assert _labels(shell) == [f"Before term 2 · {point['created_at']} · 1 week"]
     assert _text(shell, "restoreLabel") == "", "ready for the next name"
-    assert shell.session.message == "Saved restore point Before term 2."
+    assert shell.session.message == "Saved copy Before term 2."
 
 
 def test_a_copy_needs_a_name(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     _open_restore(qapp, shell, sheets)
     _click(shell, "restoreCreate")
     assert shell.session.restore_points == []
-    assert _text(shell, "restoreNote") == "Give the restore point a name."
+    assert _text(shell, "restoreNote") == "Name the saved copy."
 
 
 def test_the_sheet_says_where_copies_are_kept(qapp: QApplication, shell: NativeWindow, sheets) -> None:
@@ -669,7 +671,7 @@ def test_restore_asks_first_and_not_now_restores_nothing(
     assert _asking(sheets) == "restore-copy" and applied == []
     ask = sheets.property("ask")
     assert ask["title"] == "Restore"
-    assert ask["body"] == "Restore this copy? FlexWeek saves a copy of this week first."
+    assert ask["body"] == "Restore this copy? FlexWeek saves a copy of your current weeks and homework first."
     assert _answer_buttons(sheets) == {"not": "Not now", "restore": "Restore"}
     assert ask["answers"][0]["default"] is True and ask["answers"][0]["id"] == "not"
     _press(shell, Qt.Key.Key_Escape)

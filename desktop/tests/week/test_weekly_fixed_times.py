@@ -437,7 +437,7 @@ def test_the_201st_repeat_is_refused_with_the_stores_sentence_and_the_sheet_stay
 
     sentence = (
         "FlexWeek keeps at most 200 weekly blocks (School, activities and weekly fixed times) in one "
-        "account. Stop one before adding another."
+        "account. Delete one before adding another."
     )
     client = week.session.client
     real = client.request

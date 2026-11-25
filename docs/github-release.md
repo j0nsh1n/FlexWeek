@@ -26,7 +26,7 @@ Extract, then open the file named FlexWeek. Needs a 64-bit Linux desktop (GNOME,
 ## Download for Android
 `FlexWeek-Android-<version>.apk`
 
-Open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with FlexWeek's own key, not Google Play's. Then pair it with the computer in Settings > This computer > Devices. A phone that already has FlexWeek is offered the update by the app itself.
+Open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with FlexWeek's own key, not Google Play's. Then pair it with the computer in Settings > Phone & sync > Pair a phone. A phone that already has FlexWeek is offered the update by the app itself.
 
 ## Chromebooks
 Not supported. FlexWeek is a Windows and Linux desktop app, and there is no longer a web version to open in a browser.
@@ -35,7 +35,7 @@ Not supported. FlexWeek is a Windows and Linux desktop app, and there is no long
 Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256`, `FlexWeek-x86_64.AppImage.sha256` and `FlexWeek-Android-<version>.apk.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.
 
 ## First open
-The first screen is Sign in. Choose "New here? Create an account" under it. Setup then goes a page at a time: a style, your week, how homework gets a time, reminders and the alarm sound, and your first homework. You can skip any page.
+The first screen is Sign in. Choose "New here? Create an account" under it. Setup then has three steps: School hours, Study hours, and Look & alerts. You can skip any step.
 ```
 
 ## Release checklist
@@ -51,8 +51,8 @@ Before the tag
    They build and test every package and upload nothing. Both must pass. If anyone can try the Windows
    installers from the run's artifacts on a real PC, do; otherwise say in the notes
    that they were not tried.
-3. Open a developer build for an hour (`scripts/dev-release.sh`) and note its memory
-   use. Decide whether to fix, name it under Known limits, or close it.
+3. Start a developer build with `scripts/dev-release.sh`. Depot CI normally publishes it in about four minutes.
+   Open the build for an hour and note its memory use. Decide whether to fix, name it under Known limits, or close it.
 4. Open the release pull request: `desktop/native/version.py` VERSION, the CHANGELOG
    heading `## [X.Y.Z] - <date>` over a new empty `## [Unreleased]`, Android
    `versionName` and `versionCode` (up by one), `docs/release-notes-vX.Y.Z.md`,
@@ -60,8 +60,8 @@ Before the tag
    Run Verify by hand on the branch so every mutation shard runs (on Depot CI:
    `depot ci dispatch --repo j0nsh1n/FlexWeek --workflow verify.yml --ref <branch>`). Merge when the
    reviewer passes and every check is green.
-5. Use a developer build of the merged main, and try every visible control once in
-   Material and in Today's app. What turns up becomes fixes before the tag.
+5. Use a developer build of the merged main, and try every visible control once in Material. What turns
+   up becomes fixes before the tag.
 
 Cutting the release
 

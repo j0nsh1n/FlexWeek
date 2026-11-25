@@ -440,7 +440,7 @@ class AccountBridge(QObject):
         try:
             Path(path).write_text(self.recoveryCodes + "\n")
         except OSError:
-            self._recovery_status = "FlexWeek could not save the codes there. Try another folder."
+            self._recovery_status = "FlexWeek couldn't save the codes there. Try another folder."
             self.changed.emit()
             return
         self._recovery_status = ""
@@ -693,10 +693,7 @@ class AccountBridge(QObject):
         else:
             said = "Sent. This computer shows no notifications, so reminders appear in FlexWeek instead."
         if opened:
-            said += (
-                " Alarms and block starts play your Spotify link in the Spotify app,"
-                " which it has just been given."
-            )
+            said += " FlexWeek asked Spotify to open your link."
         self._test_result = said
         self.changed.emit()
 
@@ -1202,8 +1199,8 @@ class AccountBridge(QObject):
     @Property(str, notify=changed)
     def workMessage(self) -> str:  # noqa: N802 — QML name
         if self._windows:
-            return "Homework is only planned between these times."
-        return "Homework can be planned at any time of day."
+            return "FlexWeek plans homework only during these hours."
+        return "FlexWeek can plan homework at any time of day."
 
     @Property(str, constant=True)
     def workPresetsNote(self) -> str:  # noqa: N802 — QML name
@@ -1212,7 +1209,7 @@ class AccountBridge(QObject):
     @Property(str, notify=changed)
     def workLimit(self) -> str:  # noqa: N802 — QML name
         if len(self._windows) >= MAX_WORK_WINDOWS:
-            return f"{MAX_WORK_WINDOWS} is the most you can add."
+            return f"You can add up to {MAX_WORK_WINDOWS} sets of study hours."
         return ""
 
     @Property("QVariantList", constant=True)  # type: ignore[arg-type]

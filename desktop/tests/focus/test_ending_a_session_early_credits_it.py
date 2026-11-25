@@ -215,4 +215,4 @@ def test_the_material_end_question_says_the_minutes_count_toward_the_homework(
     pump(qapp)
     clock.move(minutes=7)
     question = window._material_page.bridge.focus.endQuestion
-    assert question == "You have done 7 min of History essay. It counts toward the homework."
+    assert question == "You've done 7 min of History essay. It counts toward the homework."

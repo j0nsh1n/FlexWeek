@@ -14,6 +14,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QAccessible
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.setup_steps import WEEK
@@ -27,6 +30,7 @@ from desktop.tests.account.support import (
     fill,
     light_launches,  # noqa: F401
     material_launches,  # noqa: F401
+    named,
     page,
     qml,
     shown,
@@ -94,7 +98,7 @@ def test_create_account_validates_then_shows_the_codes_then_setup(
     assert bridge.passwordHint == "At least 12 characters."
     fill(window, "new_student", "short")
     bridge.submit()
-    assert bridge.passwordProblem == "Add 7 more characters. Passwords need at least 12."
+    assert bridge.passwordProblem == "Add 7 more characters. Passwords need at least 12 characters."
     assert window.session.account is None
     fill(window, "new_student")
     bridge.submit()
@@ -163,7 +167,7 @@ def test_forgot_password_resets_with_a_recovery_code(
     bridge.setRecoveryCode(codes[0])
     bridge.setNewPassword("short")
     bridge.submit()
-    assert bridge.newPasswordProblem == "Add 7 more characters. Passwords need at least 12."
+    assert bridge.newPasswordProblem == "Add 7 more characters. Passwords need at least 12 characters."
     bridge.setNewPassword(OTHER_PASSWORD)
     bridge.submit()
     wait_until(qapp, lambda: bridge.phase == "app")
@@ -275,3 +279,118 @@ def test_a_bad_load_asks_for_a_cpu_copy_instead_of_showing_the_widgets_sign_in(
     qapp.processEvents()
     assert page(window) == "drawErrorPage"
     assert launched == []
+
+
+def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_reduce_or_off(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    from desktop.tests.material_support import focus_quick, quick_of
+    from desktop.tests.window_support import look_file
+
+    window = material_launches.launch()
+    window.resize(1280, 800)
+    window.activateWindow()
+    focus_quick(window)
+    pump(qapp, 10)
+    quick = quick_of(window)
+    assert quick is not None
+    # Place the pointer on the form panel so a leftover Xvfb cursor at (0, 0) does not hover the showcase.
+    form = qml(window, "authSurface")
+    off_spot = form.mapToScene(QPointF(form.width() / 2, form.height() / 2)).toPoint()
+    QTest.mouseMove(quick, off_spot)
+    pump(qapp, 10)
+    showcase = qml(window, "signInShowcase")
+    assert showcase is not None and showcase.property("visible") is True
+    assert showcase.property("staticMode") is False
+    assert showcase.property("autoAdvancing") is True
+    assert qml(window, "signInSlideDots").property("visible") is True
+
+    # Finding 9: prove the timer actually advances slides, clicking a dot while hovered pauses on that
+    # slide instead of restarting rotation, and hiding the showcase stops the timer.
+    showcase.setProperty("slideIntervalMs", 60)
+    wait_until(qapp, lambda: int(showcase.property("currentSlide")) > 0, timeout=3)
+
+    showcase_iface = QAccessible.queryAccessibleInterface(showcase)
+    assert showcase_iface is not None
+    assert showcase_iface.text(QAccessible.Text.Name) == "FlexWeek preview"
+
+    # Repeater delegates live in the visual item tree, not QObject.children(), so look them up via named().
+    dots = named(window, "signInDot2")
+    assert dots, "signInDot2"
+    dot2 = dots[0]
+    assert dot2.property("activeFocusOnTab") is True
+    dot2_iface = QAccessible.queryAccessibleInterface(dot2)
+    assert dot2_iface is not None
+    assert dot2_iface.role() == QAccessible.Role.RadioButton
+    assert "Show picture 3 of 5" in dot2_iface.text(QAccessible.Text.Name)
+    spot = dot2.mapToScene(QPointF(dot2.width() / 2, dot2.height() / 2)).toPoint()
+    QTest.mouseMove(quick, spot)
+    pump(qapp, 5)
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, spot)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 2
+    assert showcase.property("autoAdvancing") is False
+    QTest.qWait(140)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 2, "hovered slide must not advance after dot click"
+
+    # Moving the pointer off the showcase onto the form resumes rotation.
+    QTest.mouseMove(quick, off_spot)
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is True
+
+    # Claude #2: indicator dots are keyboard-operable and pause rotation while focused.
+    dots = named(window, "signInDot3")
+    assert dots, "signInDot3"
+    dot3 = dots[0]
+    dot3.forceActiveFocus()
+    pump(qapp, 5)
+    QTest.keyClick(quick, Qt.Key.Key_Space)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 3
+    assert showcase.property("autoAdvancing") is False
+    QTest.keyClick(quick, Qt.Key.Key_Right)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 4
+    assert showcase.property("autoAdvancing") is False
+
+    # Focusing password or typing into username pauses rotation; clearing and returning leaves it clean.
+    pwd = qml(window, "password")
+    pwd.forceActiveFocus()
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is False
+    user = qml(window, "username")
+    user.forceActiveFocus()
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is True
+    account(window).setUsername("alex")
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is False
+    account(window).setUsername("")
+    pump(qapp, 5)
+
+    # Narrowing hides the showcase and stops the timer.
+    window.resize(700, 800)
+    pump(qapp, 10)
+    assert showcase.property("visible") is False
+    assert showcase.property("autoAdvancing") is False
+    window.resize(1280, 800)
+    pump(qapp, 10)
+
+    # Reduce motion and Animations Off both freeze the showcase on a single static scene.
+    for motion in ("reduce", "off"):
+        window._motion = motion
+        window._material_page.publish()
+        pump(qapp, 10)
+        assert showcase.property("staticMode") is True, motion
+        assert showcase.property("autoAdvancing") is False, motion
+        assert int(showcase.property("currentSlide")) == 0, motion
+        assert qml(window, "signInSlideDots").property("visible") is False, motion
+
+    # Motion speed Off in the look file also stops the carousel.
+    window._motion = "normal"
+    look_file().write_text(json.dumps({"surface": "material", "material": {"advanced": {"motion": "Off"}}}))
+    window._material_page.publish()
+    pump(qapp, 10)
+    assert showcase.property("staticMode") is True
+    assert showcase.property("autoAdvancing") is False

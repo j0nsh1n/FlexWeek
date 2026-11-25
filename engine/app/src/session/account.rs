@@ -14,7 +14,8 @@ use super::Session;
 use super::frame::{Event, Identity, Outcome};
 
 /// Said when a sign-in's answer cannot be read as an account.
-const UNDISPLAYABLE: &str = "FlexWeek could not display this response.";
+const UNDISPLAYABLE: &str =
+    "FlexWeek couldn't read its own answer. Close and reopen it, then try again.";
 
 /// A flow waiting for its request's answer, with the ticket it began with.
 #[derive(Clone, Debug)]

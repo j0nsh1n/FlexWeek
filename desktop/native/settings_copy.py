@@ -18,12 +18,13 @@ PLANNING_STYLES = (
     (
         "suggest",
         "Plan when I press Plan my homework",
-        "Homework waits in a list until you ask. This is how FlexWeek has always worked.",
+        "Homework waits in a list until you ask for times.",
     ),
     ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
 )
 SPOTIFY_LINK_HINT = (
-    "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
+    "Plays when a block starts if the alarm sound is Spotify, or when focus starts if the focus sound"
+    " is Spotify."
 )
 SPOTIFY_TONE_REST = (
     "It plays in your Spotify app, and stopping the alarm stops it. Reminders before a block and the"
@@ -35,7 +36,7 @@ SPOTIFY_TONE_NOTE = f"{SPOTIFY_LINK_HINT} {SPOTIFY_TONE_REST}"
 # widgets.py; the Widgets originals go with the Widgets styles).
 STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
 SCHOOL_HOURS_NOTE = "The days and times you're at school, so nothing is planned then."
-NO_SCHOOL_DAYS = "No school days picked means no school on the calendar."
+NO_SCHOOL_DAYS = "No school days picked: School won't appear on the calendar."
 NO_STUDY_HOURS = "No study hours yet, so homework can go at any time of day."
 NO_PROTECTED = "Nothing protected yet. Add practice, family time or a job."
 PROTECTED_WORDS = {"downtime": "Downtime", "commute": "Commute", "meal": "Meal"}
@@ -47,13 +48,15 @@ BLOCK_SONG_NOTE = (
 )
 FOCUS_AUDIO_NOTE = (
     "Rain, Lo-Fi and White noise play inside FlexWeek and pause with the timer. Spotify opens the link"
-    " from Alerts when focus starts."
+    " from Settings > Alerts when focus starts."
 )
 NO_SOUND = (
     "No sound played. Check that Volume is above 0 % and that your speakers or headphones are connected"
     " and not muted, then press Play again."
 )
-SPLIT_ROUNDED = "Focus lengths rounded to {step} minutes, which splitting needs."
+SPLIT_ROUNDED = (
+    "Focus lengths were rounded to {step} minutes so FlexWeek can split them into sessions and breaks."
+)
 
 
 def ring_days(days: list[int]) -> str:
@@ -80,8 +83,7 @@ HELP_SCREENS = (
     ("Day", "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in."),
     (
         "Week",
-        "Seven days from the day your week starts on: drag a block to move it, or drag across empty time "
-        "to add one.",
+        "Your seven-day week. Drag a block to move it, or drag across empty time to add one.",
     ),
     ("Month", "Each date's blocks and the homework due that day; click a date to open it in Day."),
     ("My day", "What is on now and what comes next, to follow once your plan is made."),
@@ -200,7 +202,7 @@ def key_parts(marked: str) -> list[tuple[str, bool]]:
 ACCOUNT_PASSWORD_NOTE = "Your current password is needed for every change on this page."
 ACCOUNT_CODES_NOTE = "Each code signs you in once if you forget your password."
 ACCOUNT_DATA_NOTE = "Keep a copy of your account, or of one week or day, in a file."
-RESTORE_FIRST = "Choose a restore point."
+RESTORE_FIRST = "Choose a saved copy."
 
 
 def recovery_status(remaining: int | None) -> str:
@@ -211,7 +213,7 @@ def recovery_status(remaining: int | None) -> str:
         return "1 unused recovery code remains."
     if isinstance(remaining, int):
         return f"{remaining} unused recovery codes remain."
-    return "Recovery-code status unavailable."
+    return "Couldn't find out how many recovery codes are left."
 
 
 def restore_parts(point: dict) -> tuple[str, str]:
@@ -287,18 +289,18 @@ RELAY_SENTENCE = (
     "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
     "It sees that two devices are talking, not what they send."
 )
-UNREACHABLE_WORDS = "Could not reach your phone. Make sure FlexWeek is open on it."
+UNREACHABLE_WORDS = "Couldn't reach your phone. Open FlexWeek on it, then try again."
 DOT_WORDS = {
     "off": "",
     "idle": "Waiting for a linked phone to sync",
     "syncing": "Syncing with your phone",
     "synced": "Synced with your phone",
-    "problem": "Could not reach your phone",
+    "problem": "Couldn't reach your phone",
 }
 
 
 def seen_words(last_seen_ms: str | None, now_ms: int) -> str:
-    """When a phone last synced, in the card's words. last_seen is Unix milliseconds as text."""
+    """When a phone was last seen, in the card's words. last_seen is Unix milliseconds as text."""
     if not last_seen_ms:
         return "Not synced yet"
     seen = int(last_seen_ms)
@@ -309,7 +311,7 @@ def seen_words(last_seen_ms: str | None, now_ms: int) -> str:
         return f"Synced {minutes} min ago"
     if minutes < 24 * 60:
         return f"Synced {minutes // 60} h ago"
-    return f"Not seen since {datetime.fromtimestamp(seen / 1000):%A}"
+    return f"Last seen on {datetime.fromtimestamp(seen / 1000):%A}"
 
 
 def clock_warning_words(count: int) -> str:
@@ -334,7 +336,7 @@ def sync_state(status: dict, linked: bool) -> str:
 
 # The pairing code's own words while it is open, and why it closed. The engine allows one phone per code.
 PAIR_ONCE = "It works once."
-PAIR_CLOSED = "That code is no longer open. Start a new one."
+PAIR_CLOSED = "That code isn't active anymore. Start a new one."
 
 
 def countdown_words(seconds: int) -> str:

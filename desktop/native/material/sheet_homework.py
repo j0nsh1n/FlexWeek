@@ -54,7 +54,7 @@ PROMPTS = ("What is it?", "When is it due?", "How long will it take?")
 TITLE_PROBLEM = "Give the homework a title."
 TYPES = ((1, "Test prep"), (2, "Quiz prep"), (3, "Everyday homework"), (4, "Reading"))
 ENERGIES = (("high", "Morning"), ("medium", "Afternoon"), ("low", "Evening"))
-WHEN_CHOICES = (("plan", "FlexWeek picks the time"), ("fixed", "Pin to a time"))
+WHEN_CHOICES = (("plan", "FlexWeek picks the time"), ("fixed", "Choose a time myself"))
 SPREAD_CHOICES = (("one", "In one go"), ("spread", "Spread over days"))
 DAYS_AHEAD = 28
 
@@ -453,7 +453,7 @@ class HomeworkDraft:
             return
         label, url = self.link_label.strip(), self.link_url.strip()
         if not label or not url:
-            self.details_error = "A link needs a label and an http(s) address."
+            self.details_error = "Give the link a name and an address that starts with http:// or https://."
             return
         self.links.append({"label": label, "url": url})
         self.link_label = self.link_url = ""

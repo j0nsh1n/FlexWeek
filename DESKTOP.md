@@ -1,6 +1,6 @@
 # FlexWeek desktop
 
-## What FlexWeek is (current, 1.5.0)
+## What FlexWeek is (current, 2.0.0 development)
 
 One Python application. **Material 3 in Qt Quick/QML** is the only student
 interface. `desktop/native/material/host.py` defines `MaterialPage`, a
@@ -9,10 +9,11 @@ interface. `desktop/native/material/host.py` defines `MaterialPage`, a
 alarms, tray, updates, local look file and drawing-error page. `QQuickView`
 paces frames to the screen. On a 360 Hz screen, Material drew at 360.0 and
 349.1 frames a second in two five-second checks; the old `QQuickWidget` host
-drew at about 60. The FastAPI backend runs in the same process on a loopback
-port and owns accounts, the week and the database. There is no Chromium, no
-`QWebEngineView`, and since 2026-09-19 no browser client at all: `frontend/`
-was deleted and `backend/app.py` answers the API and 404s everything else.
+drew at about 60. The Rust service answers requests in the app's process and
+owns accounts, the week and the database. There is no server or loopback port.
+There is no Chromium or `QWebEngineView`, and since 2026-09-19 no browser
+client. `frontend/`, `backend/app.py`, `desktop/server.py` and
+`desktop/origin.py` have been deleted.
 
 Run from a checkout: `python -m desktop.main` (`python -m desktop.native` is the
 same entry).
@@ -34,10 +35,11 @@ plugin the app starts, shows the alarm and makes no sound), plus
 `qmltooling` and `vectorimageformats`. `--onefile` is not used, because Qt
 plugins ship as a folder.
 
-Icons come from `desktop/assets/logo.png`. The SQLite database lives under the
-user data directory, never inside the read-only bundle. A frozen build also
-carries `desktop/native/material/tokens.json` and `desktop/native/material/qml/`
-next to the executable.
+The app icon is the dumbbell on a lime rounded square, with transparent corners. It comes from
+`desktop/assets/logo.png`; `scripts/brand.py` makes the Windows `.ico` and Android launcher icons. The
+SQLite database lives under the user data directory, never inside the read-only bundle. A frozen build
+also carries `desktop/native/material/tokens.json` and `desktop/native/material/qml/` next to the
+executable.
 
 If Material cannot draw with the graphics card, the shell saves unsaved edits
 and starts one new copy with `QT_QUICK_BACKEND=software`. The look file's
@@ -46,9 +48,9 @@ a newer version tries the graphics card again. The new Material window says
 once that it is drawing without the graphics card. If that fails too, a plain
 page offers Quit and Try again.
 
-**What is still true below.** Section 6 (the Linux build), section 7 (the
-bundled server), section 9 and the sections after it (the Windows build and installers, releasing the Linux build,
-reminders, and window/tray/quit behaviour). Read those.
+**What is still true below.** Section 6 (the Linux build), section 9 and the sections after it (the
+Windows build and installers, releasing the Linux build, reminders, and window/tray/quit behaviour).
+Section 7 is the history of the removed loopback server.
 
 **What is superseded.** Sections 1 to 5 recommended a `QWebEngineView` window
 pointed at a hosted origin. That decision was reversed on 2026-09-17 in favour
@@ -202,16 +204,15 @@ a stamp (left by a run that was killed outright). It replaces `dist/FlexWeek` an
 The venv and the compile caches stay in `BUILD_CACHE`
 (`~/.flexweek-ui-harness/build-cache`), so the checkout's own `.venv` and
 `engine/target` are untouched. Measured on 2026-11-09 with 8 cores: about 5½ minutes
-from empty caches, under 2 minutes after a small change. GitHub still publishes
-developer builds and releases.
+from empty caches, under 2 minutes after a small change. Depot CI builds developer releases and publishes
+them to GitHub. `scripts/dev-release.sh` dispatches `.depot/workflows/dev-build.yml` from `main`; a build
+normally publishes in about four minutes and replaces the `dev` pre-release.
 
 **Files**
 
-- `desktop/main.py` — `QApplication`, the bundled backend (section 7) unless
-  `FLEXWEEK_DESKTOP_ORIGIN` is set, and the native window
-  (`desktop/native/window.py`). One copy runs per user data folder; launching
-  again brings it forward. `--smoke-test` is described under "Releasing the
-  Linux build".
+- `desktop/main.py` — `QApplication`, the in-process Rust service and the native window
+  (`desktop/native/window.py`). One copy runs per user data folder; launching again brings it forward.
+  `--smoke-test` is described under "Releasing the Linux build".
 - `desktop/build_linux.sh` — Nuitka onedir. Leaves out the WebEngine modules,
   keeps the Qt plugins listed at the top of this file, and drops
   `egldeviceintegrations` and `printsupport`.
@@ -330,16 +331,12 @@ py -3.14 -m venv .venv
 .\dist\FlexWeek-Windows\FlexWeek.exe
 ```
 
-A compatible Visual Studio C++ build toolchain is required. No Windows host or
-PowerShell interpreter was available in this session, so neither a Windows
-executable nor PowerShell execution has been verified. The remaining Windows
-check is build → open → register → save → restart → sign out on a machine
-without the development virtualenv.
+A compatible Visual Studio C++ build toolchain is required. Jonathan ran 1.5.0 on a real Windows PC on
+2026-11-21. The 2.0.0 rewrite's Windows pieces still need a real-PC check: build → open → register → save →
+restart → sign out without the development virtualenv.
 
-The default self-contained desktop mode stores accounts locally. Hosted mode
-(`FLEXWEEK_DESKTOP_ORIGIN`) points the desktop app at another deployment's
-accounts and weeks. There is no automatic local-to-hosted synchronization, and
-since 2026-09-19 no browser client on either side.
+The desktop stores accounts locally. The hosted mode and its `FLEXWEEK_DESKTOP_ORIGIN` and `FLEXWEEK_ORIGIN`
+settings were removed in 2.0.0 P2. There is no browser client.
 
 ### Windows release build — CI, same method as Daily Scheduler (2026-09-09)
 
@@ -432,11 +429,9 @@ temporary data folder (removed afterwards, never the real profile), acknowledges
 its recovery codes, skips Material setup, adds a fixed time and homework through
 the real session, and exits 0 only when the Material week is on screen: the
 window grab must show at least 8 colors on an 8 px grid. A dead or blank page
-is one flat color, which is how 0.9.0 failed for testers after that button. With
-`FLEXWEEK_DESKTOP_ORIGIN` set it stops at the Create account screen instead of
-making accounts on that server. `desktop/smoke_linux_containers.sh` runs it
-inside stock Ubuntu 24.04 and Debian 13 containers; the release workflow runs it
-on the Linux tarball, the raw Linux onedir and the Windows build.
+is one flat color, which is how 0.9.0 failed for testers after that button.
+`desktop/smoke_linux_containers.sh` runs it inside stock Ubuntu 24.04 and Debian 13 containers; the release
+workflow runs it on the Linux tarball, the raw Linux onedir and the Windows build.
 
 **Housekeeping.** `build_linux.sh` preserves each previous build as
 `dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
@@ -474,7 +469,7 @@ engine's timing rules; the controller presents the alerts.
   instead of starting a second copy on the same database. One copy runs per
   user data directory.
 
-The tray icon is loaded from `desktop/assets/logo.png` next to the bundled backend.
+The tray icon is loaded from `desktop/assets/logo.png` beside the bundled app files.
 Before this fix the path was taken from `desktop/main.py`. Nuitka places that file
 at the bundle root, so the path pointed one directory above the bundle. Qt logged
 `QSystemTrayIcon::setVisible: No Icon set`, the tray entry was invisible, and a

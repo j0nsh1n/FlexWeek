@@ -7,17 +7,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from desktop.native.material.theme import (
+    DAY_SIDE_DEFAULT,
+    DAY_SIDE_RANGE,
     DEFAULT_PRESET,
     FONT_FILES,
     INTER,
     PRESETS,
+    SETTINGS_NAV_DEFAULT,
+    SETTINGS_NAV_RANGE,
     SIX_CLASSES,
     STATUS_COLORS,
+    advanced_default,
     bar_for_category,
+    pack_material,
     paint_for_category,
+    read_day_side_width,
     read_material_choice,
+    read_settings_nav_width,
     scheme,
+    store_material,
     theme_object,
 )
 from desktop.native.tokens import mix
@@ -29,24 +40,24 @@ EXPECTED_NEUTRALS = {
     "light": {
         "surface": "#eef1f5",
         "surfaceContainerLowest": "#ffffff",
-        "surfaceContainerLow": "#ffffff",
-        "surfaceContainer": "#ffffff",
-        "surfaceContainerHigh": "#ffffff",
-        "surfaceContainerHighest": "#ffffff",
-        "surfaceVariant": "#ffffff",
-        "outlineVariant": "#e5e9f0",
+        "surfaceContainerLow": "#f6f8fc",
+        "surfaceContainer": "#edf0f7",
+        "surfaceContainerHigh": "#e3e8f2",
+        "surfaceContainerHighest": "#d8dfec",
+        "surfaceVariant": "#e3e8f2",
+        "outlineVariant": "#d4dce8",
         "outline": "#64748b",
         "onSurface": "#0f172a",
         "onSurfaceVariant": "#475569",
     },
     "dark": {
         "surface": "#0b0d10",
-        "surfaceContainerLowest": "#14171c",
+        "surfaceContainerLowest": "#0e1116",
         "surfaceContainerLow": "#14171c",
-        "surfaceContainer": "#14171c",
-        "surfaceContainerHigh": "#14171c",
-        "surfaceContainerHighest": "#14171c",
-        "surfaceVariant": "#14171c",
+        "surfaceContainer": "#1b202a",
+        "surfaceContainerHigh": "#232936",
+        "surfaceContainerHighest": "#2c3444",
+        "surfaceVariant": "#232936",
         "outlineVariant": "#252a33",
         "outline": "#6b7280",
         "onSurface": "#ececec",
@@ -179,7 +190,7 @@ def test_the_focus_ring_is_the_primary_colour_on_the_card_and_page() -> None:
         assert str(t["focusRing"]) == t["primary"]
         assert str(t["card"]) == ("#ffffff" if mode == "light" else "#14171c")
         assert str(t["page"]) == ("#eef1f5" if mode == "light" else "#0b0d10")
-        assert str(t["edge"]) == ("#e5e9f0" if mode == "light" else "#252a33")
+        assert str(t["edge"]) == ("#d4dce8" if mode == "light" else "#252a33")
 
 
 def test_material_fonts_are_inter_and_roboto_flex_is_gone() -> None:
@@ -201,3 +212,82 @@ def test_material_fonts_are_inter_and_roboto_flex_is_gone() -> None:
 
     for font_file in FONTS_DIR.glob("RobotoFlex*"):
         assert not font_file.exists(), f"RobotoFlex file {font_file} was not removed"
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected_day", "expected_nav"),
+    [
+        (None, DAY_SIDE_DEFAULT, SETTINGS_NAV_DEFAULT),
+        ({}, DAY_SIDE_DEFAULT, SETTINGS_NAV_DEFAULT),
+        ({"surface": "material", "material": {"preset": "Slate"}}, DAY_SIDE_DEFAULT, SETTINGS_NAV_DEFAULT),
+        (
+            {"material": {"daySideWidth": DAY_SIDE_RANGE[0], "settingsNavWidth": SETTINGS_NAV_RANGE[0]}},
+            DAY_SIDE_RANGE[0],
+            SETTINGS_NAV_RANGE[0],
+        ),
+        (
+            {"material": {"daySideWidth": DAY_SIDE_RANGE[1], "settingsNavWidth": SETTINGS_NAV_RANGE[1]}},
+            DAY_SIDE_RANGE[1],
+            SETTINGS_NAV_RANGE[1],
+        ),
+        (
+            {
+                "material": {
+                    "daySideWidth": DAY_SIDE_RANGE[0] - 1,
+                    "settingsNavWidth": SETTINGS_NAV_RANGE[1] + 1,
+                }
+            },
+            DAY_SIDE_DEFAULT,
+            SETTINGS_NAV_DEFAULT,
+        ),
+        (
+            {"material": {"daySideWidth": True, "settingsNavWidth": False}},
+            DAY_SIDE_DEFAULT,
+            SETTINGS_NAV_DEFAULT,
+        ),
+        (
+            {"material": {"daySideWidth": "340", "settingsNavWidth": 210.5}},
+            DAY_SIDE_DEFAULT,
+            SETTINGS_NAV_DEFAULT,
+        ),
+    ],
+)
+def test_saved_panel_widths_fall_back_to_defaults_on_missing_or_invalid_values(
+    stored: object, expected_day: int, expected_nav: int
+) -> None:
+    assert read_day_side_width(stored) == expected_day
+    assert read_settings_nav_width(stored) == expected_nav
+
+
+def test_pack_and_store_material_preserve_valid_panel_widths_and_drop_out_of_range(
+    tmp_path: Path,
+) -> None:
+    import json
+
+    choice = read_material_choice(None)
+    packed = pack_material(
+        choice,
+        advanced_default(),
+        True,
+        False,
+        [],
+        day_side_width=360,
+        settings_nav_width=260,
+    )
+    look = tmp_path / "look.json"
+    store_material(look, packed)
+    loaded = json.loads(look.read_text(encoding="utf-8"))
+    assert read_day_side_width(loaded) == 360
+    assert read_settings_nav_width(loaded) == 260
+
+    bad = pack_material(
+        choice,
+        advanced_default(),
+        True,
+        False,
+        [],
+        day_side_width=10,
+        settings_nav_width=9999,
+    )
+    assert "daySideWidth" not in bad
+    assert "settingsNavWidth" not in bad

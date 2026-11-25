@@ -48,7 +48,7 @@ class SyncWordsTest {
 
     @Test fun theStatusLineNamesAnUpdateInsteadOfAnOffComputer() {
         val raw = JSONObject().put("paired", true).put("state", "unreachable")
-            .put("line", "Your computer isn't reachable. Showing the last saved week.").toString()
+            .put("line", "Your computer isn't reachable. Showing the last synced week.").toString()
         val zone = ZoneId.of("UTC")
         assertEquals(SyncWords.NEEDS_UPDATE, JSONObject(RustPhoneJson.sync(raw, zone, "version_mismatch")).getString("line"))
         assertTrue(JSONObject(RustPhoneJson.sync(raw, zone, "timeout")).getString("line").startsWith("Your computer isn't reachable"))

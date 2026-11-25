@@ -789,7 +789,7 @@ pub fn span_problem(
 ) -> EngineResult<Option<&'static str>> {
     if start_min < DAY_START_MIN || end_min > DAY_END_MIN {
         return Ok(Some(
-            "That's outside the hours FlexWeek plans in, so it stayed where it was.",
+            "FlexWeek can't use that time, so the block stayed where it was.",
         ));
     }
     if !due.is_null() {

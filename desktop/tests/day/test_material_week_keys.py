@@ -165,7 +165,7 @@ def test_delete_is_held_while_a_save_is_running(qapp: QApplication, material_win
     try:
         sheets.answer("delete")
         assert any(item["id"] == "school" for item in session.blocks)
-        assert sheets.notice == "Saving your last change… Delete will work in a moment."
+        assert sheets.notice == "Saving your last change… Try Delete again in a moment."
     finally:
         session.busy = False
 

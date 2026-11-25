@@ -145,5 +145,5 @@ def test_the_paste_preview_keeps_a_block_that_lands_on_another_checked_and_says_
     assert rows is not None
     assert rows[0]["checked"] is True
     assert row_conflict(rows[0], rows, session.blocks) == "Soccer"
-    said = "Soccer is at that time too. Both will show, one slightly over the other."
+    said = "Soccer is at that time too. Both will stay visible and overlap slightly."
     assert beside_words(row_conflict(rows[0], rows, session.blocks)) == said

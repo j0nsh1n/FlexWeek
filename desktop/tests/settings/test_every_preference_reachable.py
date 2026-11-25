@@ -7,6 +7,7 @@ feature the desktop app could not turn on.
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -19,7 +20,9 @@ WEB_ONLY = {
     "sidebar_width_px": "as above",
 }
 # Written for you, not chosen. save_preferences derives the light or dark axis from the pack.
-DERIVED = {"theme": "follows theme_pack, set in NativeSession.save_preferences"}
+DERIVED = {
+    "theme": "follows theme_pack, set by the engine's preferences_body for NativeSession.save_preferences"
+}
 
 
 def native_source() -> str:
@@ -37,9 +40,14 @@ def test_every_preference_is_reachable_from_the_desktop_app() -> None:
 
 
 def test_a_derived_preference_really_is_derived() -> None:
-    controller = (ROOT / "desktop" / "native" / "controller.py").read_text()
-    for field in DERIVED:
-        assert f'body["{field}"]' in controller, f"{field} is not derived anywhere"
+    # The save's body comes from the engine since 2.0.0's P4 (session/preferences.rs): whatever theme the
+    # caller holds, the pack decides it.
+    current = {"theme": "nocturne", "theme_pack": "dark-frost"}
+    body = json.loads(
+        flexweek_engine.session_preferences_body(json.dumps(current), json.dumps({"theme_pack": "slate"}))
+    )
+    assert set(DERIVED) == {"theme"}
+    assert body["theme"] == "slate"
 
 
 def test_every_web_only_preference_says_why() -> None:
