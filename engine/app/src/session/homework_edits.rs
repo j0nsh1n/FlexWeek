@@ -8,6 +8,7 @@
 
 use flexweek_engine::desk::planning::{available_homework_minutes, session_days};
 use flexweek_engine::stored::truthy;
+use flexweek_engine::time::hhmm_to_minutes;
 use flexweek_service::blocks::check_block;
 use flexweek_service::homework_saves::check_homework;
 use serde_json::{Map, Value, json};
@@ -105,6 +106,39 @@ fn fix_session(session: &mut Map<String, Value>, fixed_at: &Value) -> Result<boo
     Ok(true)
 }
 
+/// A pin the dialog supplied: absent leaves the pins as they are, `null` takes them off, and an object holding
+/// a day (0 to 6) and a start time sets one. Anything else is refused whatever the sessions are, so Spread
+/// and a homework with no open session refuse it too.
+fn check_pin(assignment: &Value) -> Result<(), String> {
+    let Some(pin) = assignment.get("fixed_at") else {
+        return Ok(());
+    };
+    if pin.is_null() {
+        return Ok(());
+    }
+    let fields = pin.as_object().ok_or_else(|| {
+        format!(
+            "fixed_at is null or an object with a day and a start, not a '{}'",
+            flexweek_engine::stored::type_name(pin)
+        )
+    })?;
+    let day_ok = fields
+        .get("day")
+        .and_then(Value::as_i64)
+        .is_some_and(|day| (0..=6).contains(&day));
+    if !day_ok {
+        return Err("fixed_at needs a day from 0 to 6".into());
+    }
+    let start_ok = fields
+        .get("start")
+        .and_then(Value::as_str)
+        .is_some_and(|start| hhmm_to_minutes(start).is_ok());
+    if !start_ok {
+        return Err("fixed_at needs a start as HH:MM".into());
+    }
+    Ok(())
+}
+
 fn checked_session(session: Map<String, Value>) -> Result<Value, String> {
     check_block(&Value::Object(session)).map_err(|refused| refused.0)
 }
@@ -195,6 +229,7 @@ pub fn edit_homework(input: &HomeworkEditInput) -> Result<HomeworkEdit, String> 
         .and_then(Value::as_str)
         .and_then(|id| input.assignments.get(id));
     let body = homework_body(input, known)?;
+    check_pin(input.assignment)?;
     let body_id = body["id"].clone();
     let linked = |block: &Value| block.get("assignment_id") == Some(&body_id);
 
