@@ -325,6 +325,27 @@ fn a_move_into_a_full_week_is_refused_with_its_words() {
 }
 
 #[test]
+fn fixed_rows_treat_a_missing_or_null_blocks_field_as_empty() {
+    let mut ids = Vec::new().into_iter();
+    for source in [json!({}), json!({"blocks": Value::Null})] {
+        let rows = fixed_copy_rows(Some(&source), WEEK, &mut ids).unwrap();
+        assert!(rows.rows.is_none());
+        assert_eq!(
+            rows.words.as_deref(),
+            Some("There's nothing to copy from last week yet.")
+        );
+        assert_eq!(
+            copy_empty_words(Some(&source)).unwrap(),
+            "There's nothing to copy from last week yet."
+        );
+    }
+    for bad in [json!({"blocks": "not-a-list"}), json!([])] {
+        assert!(fixed_copy_rows(Some(&bad), WEEK, &mut ids).is_err());
+        assert!(copy_empty_words(Some(&bad)).is_err());
+    }
+}
+
+#[test]
 fn copying_without_a_selection_names_what_to_do() {
     let blocks = json!([locked("piano", vec![2], "18:00")]);
     let copied = clipboard_block(&blocks, None, None, "auto", "group-1").unwrap();

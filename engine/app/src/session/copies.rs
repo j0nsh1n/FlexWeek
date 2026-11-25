@@ -124,6 +124,19 @@ fn assignment_of<'a>(assignments: &'a Value, id: &str) -> Option<&'a Value> {
     assignments.as_object()?.get(id)
 }
 
+/// The blocks a week object holds: a missing or null field reads as none, as `or []` did.
+/// Anything else that is not a list is refused.
+fn week_blocks(source: &Value) -> Result<&[Value], EngineError> {
+    match get(source, "blocks")? {
+        None | Some(Value::Null) => Ok(&[]),
+        Some(Value::Array(blocks)) => Ok(blocks),
+        Some(_) => Err(EngineError {
+            kind: ErrorKind::Type,
+            message: "blocks are a list".to_string(),
+        }),
+    }
+}
+
 /// `block[key]`: only an object answers, as `.get` only answered for one.
 fn get<'a>(block: &'a Value, key: &str) -> Result<Option<&'a Value>, EngineError> {
     match block {
@@ -160,7 +173,7 @@ pub fn fixed_copy_rows(
             words: Some(NOTHING_TO_COPY.to_string()),
         });
     };
-    let blocks = rows(source.get("blocks").unwrap_or(&Value::Null), "blocks")?;
+    let blocks = week_blocks(source)?;
     objects(blocks, "blocks")?;
     let mut offered = Vec::new();
     for item in blocks {
@@ -216,7 +229,7 @@ pub fn fixed_copy_rows(
 pub fn copy_empty_words(source: Option<&Value>) -> Result<&'static str, EngineError> {
     let blocks = match source.filter(|value| !value.is_null()) {
         None => return Ok(NOTHING_TO_COPY),
-        Some(source) => rows(source.get("blocks").unwrap_or(&Value::Null), "blocks")?,
+        Some(source) => week_blocks(source)?,
     };
     objects(blocks, "blocks")?;
     for item in blocks {
