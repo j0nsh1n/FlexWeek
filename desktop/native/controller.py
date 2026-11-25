@@ -236,15 +236,14 @@ def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
 def _revision_after_deletes(
     stored_blocks: list[dict], revision: int | list[int], deleted: set[str]
 ) -> int | list[int]:
-    """The server takes a deleted homework's blocks out of every week before it writes the week sent
-    with it, and each deleted homework that had blocks there moves that week up by one. A week written
-    in the same save has to carry the revision it will have by then. A week on screen from another day
-    names its two stored weeks' revisions, which the server checks as they were before the save."""
-    if isinstance(revision, list):
-        return revision
-    return revision + sum(
-        1 for item_id in deleted if any(block.get("assignment_id") == item_id for block in stored_blocks)
+    """The revision a week written in the same save as some deletes will have by then (the engine's rule:
+    desk/history.rs `revision_after_deletes`)."""
+    after: int | list[int] = json.loads(
+        flexweek_engine.history_revision_after_deletes(
+            json.dumps(stored_blocks), json.dumps(revision), sorted(deleted)
+        )
     )
+    return after
 
 
 def _without_homework(blocks: list[dict], assignment_id: str) -> list[dict]:
@@ -252,71 +251,40 @@ def _without_homework(blocks: list[dict], assignment_id: str) -> list[dict]:
 
 
 def _step_without_homework(step: dict, assignment_id: str, revisions: dict[str, int]) -> dict | None:
-    """An Undo or Redo step as it reads once `assignment_id` is deleted: the homework and its sessions
-    are gone from both sides, and a week left with nothing else to change drops out. None when nothing
-    else is left, so Undo can never bring the deleted homework back."""
-    weeks = []
-    for entry in step.get("weeks") or []:
-        before = _without_homework(entry["before"], assignment_id)
-        after = _without_homework(entry["after"], assignment_id)
-        if before != after:
-            cleaned = {**entry, "before": before, "after": after}
-            # A step whose save is not acknowledged yet has no revision; the reply gives it one.
-            if "revision" in entry:
-                cleaned["revision"] = revisions.get(entry["week_start"], entry["revision"])
-            weeks.append(cleaned)
-    assignments = [entry for entry in step.get("assignments") or [] if entry["id"] != assignment_id]
-    if not weeks and not assignments:
-        return None
-    return {**step, "weeks": weeks, "assignments": assignments}
+    """An Undo or Redo step as it reads once `assignment_id` is deleted, or None when nothing else is left,
+    so Undo can never bring the deleted homework back (desk/history.rs `step_without_homework`)."""
+    raw = flexweek_engine.history_step_without_homework(
+        json.dumps(step), assignment_id, json.dumps(revisions)
+    )
+    return None if raw is None else json.loads(raw)
 
 
 def _request_without_homework(
     request: dict, draft: dict, assignment_id: str, revisions: dict[str, int]
 ) -> dict:
-    """A save that failed, as it reads once `assignment_id` is deleted: without the homework and its
-    sessions, and with the revisions the delete moved the weeks on to. The draft's own week keeps the
-    lead its write had over the revision the draft held (a delete in the same save moves it on)."""
-    weeks = []
-    for write in request["weeks"]:
-        week, revision = write["week_start"], write["revision"]
-        if week == draft["week_start"] and isinstance(revision, list):
-            held = zip(stored_weeks_of(week), revision, strict=True)
-            revision = [revisions.get(part, number) for part, number in held]
-        elif week in revisions:
-            lead = revision - draft["revision"] if week == draft["week_start"] else 0
-            revision = revisions[week] + lead
-        blocks = _without_homework(write["blocks"], assignment_id)
-        weeks.append({**write, "blocks": blocks, "revision": revision})
-    kept = [entry for entry in request["assignments"] if entry["id"] != assignment_id]
-    return {**request, "weeks": weeks, "assignments": kept}
+    """A save that failed, as it reads once `assignment_id` is deleted (desk/history.rs
+    `request_without_homework`)."""
+    held = {"week_start": draft["week_start"], "revision": draft["revision"]}
+    rebuilt: dict = json.loads(
+        flexweek_engine.history_request_without_homework(
+            json.dumps(request), json.dumps(held), assignment_id, json.dumps(revisions)
+        )
+    )
+    return rebuilt
 
 
 def _keep_stored_weeks(step: dict, before: list[dict], after: list[dict]) -> None:
-    """A week on screen from another day than Monday is saved in two Monday weeks that also hold days
-    the screen cannot see, such as the other days a session waiting for a time may go on. The step keeps
-    both as they were and are, so Undo and Redo put back exactly what was there."""
-    if not after or [part["week_start"] for part in before] != [part["week_start"] for part in after]:
-        return
-    held = {entry["week_start"] for entry in step["weeks"]}
-    for was, now in zip(before, after, strict=True):
-        if now["week_start"] not in held and was["blocks"] != now["blocks"]:
-            step["weeks"].append(
-                {
-                    "week_start": now["week_start"],
-                    "before": deepcopy(was["blocks"]),
-                    "after": deepcopy(now["blocks"]),
-                    "revision": now["revision"],
-                }
-            )
+    """A week on screen from another day than Monday is saved in two Monday weeks; the step keeps each one
+    the save changed, as it was and is (desk/history.rs `keep_stored_weeks`)."""
+    step["weeks"] = json.loads(
+        flexweek_engine.history_keep_stored_weeks(json.dumps(step), json.dumps(before), json.dumps(after))
+    )
 
 
 def _keep_step_revisions(step: dict, data: dict) -> None:
-    stored = {week["week_start"]: week for week in data.get("weeks") or []}
-    for entry in step.get("weeks") or []:
-        week = stored.get(entry["week_start"])
-        if week is not None:
-            entry["revision"] = week["revision"]
+    step["weeks"] = json.loads(
+        flexweek_engine.history_keep_step_revisions(json.dumps(step), json.dumps(data))
+    )
 
 
 # What the status line says when a save or a week load goes as expected. A reminder on the status line
@@ -2403,12 +2371,13 @@ class NativeSession(QObject):
     def undo(self) -> None:
         if not self.can_undo():
             if self._undo and self._undo[-1].get("stale"):
-                self._say("That change can't be undone. Reload and try again.")
+                self._say(flexweek_engine.history_stale_words(False))
             return
         step = self._undo.pop()
-        if step.get("weeks") and not any(week["week_start"] == self.week_start for week in step["weeks"]):
+        refused = flexweek_engine.history_travel_refusal(json.dumps(step), self.week_start, False)
+        if refused is not None:
             self._undo.append(step)
-            self._say("Undo applies to the week where that change was saved.")
+            self._say(refused)
             return
         self._traveling = "undo"
         self._travel_step = step
@@ -2418,12 +2387,13 @@ class NativeSession(QObject):
     def redo(self) -> None:
         if not self.can_redo():
             if self._redo and self._redo[-1].get("stale"):
-                self._say("That change can't be redone. Reload and try again.")
+                self._say(flexweek_engine.history_stale_words(True))
             return
         step = self._redo.pop()
-        if step.get("weeks") and not any(week["week_start"] == self.week_start for week in step["weeks"]):
+        refused = flexweek_engine.history_travel_refusal(json.dumps(step), self.week_start, True)
+        if refused is not None:
             self._redo.append(step)
-            self._say("Redo applies to the week where that change was saved.")
+            self._say(refused)
             return
         self._traveling = "redo"
         self._travel_step = step
