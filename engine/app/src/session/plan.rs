@@ -212,35 +212,95 @@ fn block_id(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
 }
 
+impl PlanClock<'_> {
+    /// The ranges Python's `datetime.time` allows; anything else is refused before arithmetic.
+    fn check(&self) -> Result<(), String> {
+        let ranges = [
+            ("hour", self.hour, 23),
+            ("minute", self.minute, 59),
+            ("second", self.second, 59),
+            ("microsecond", self.microsecond, 999_999),
+        ];
+        for (name, value, top) in ranges {
+            if !(0..=top).contains(&value) {
+                return Err(format!("clock {name} must be 0 to {top}, got {value}"));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A field that may be missing or null but otherwise must be a string.
+fn opt_text<'a>(item: &'a Value, key: &str) -> Result<Option<&'a str>, String> {
+    match item.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text.as_str())),
+        Some(_) => Err(format!("{key} must be a string or null")),
+    }
+}
+
+/// A field that may be missing or null but otherwise must be a whole number.
+fn opt_int(item: &Value, key: &str) -> Result<Option<i64>, String> {
+    match item.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_i64()
+            .map(Some)
+            .ok_or_else(|| format!("{key} must be a whole number or null")),
+    }
+}
+
+/// The first day of a block's `days`, which may be missing or null but otherwise must be a list
+/// of whole numbers.
+fn first_day_of(item: &Value) -> Result<Option<i64>, String> {
+    match item.get("days") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(days)) => match days.first() {
+            None => Ok(None),
+            Some(day) => day
+                .as_i64()
+                .map(Some)
+                .ok_or_else(|| "days must hold whole numbers".to_string()),
+        },
+        Some(_) => Err("days must be a list or null".to_string()),
+    }
+}
+
+/// The trace's `placed` rows, each checked for the fields the plan reads.
+fn placed_rows(trace: &Value) -> Result<&[Value], String> {
+    let rows: &[Value] = match trace.get("placed") {
+        None | Some(Value::Null) => return Ok(&[]),
+        Some(Value::Array(items)) => items.as_slice(),
+        Some(_) => return Err("trace placed must be a list".to_string()),
+    };
+    for row in rows {
+        if !row.is_object() {
+            return Err("each placed row must be an object".to_string());
+        }
+        opt_text(row, "id")?;
+        opt_text(row, "kind")?;
+        opt_text(row, "start")?;
+        opt_int(row, "duration_min")?;
+        first_day_of(row)?;
+    }
+    Ok(rows)
+}
+
 /// Where the first homework a plan gave a time is, by day and then minute.
 pub fn first_placed(trace: &Value, targets: &[String]) -> Result<Option<(i64, i64)>, String> {
     let target_set: HashSet<&str> = targets.iter().map(String::as_str).collect();
-    let placed = match trace.get("placed") {
-        None | Some(Value::Null) => return Ok(None),
-        Some(Value::Array(items)) => items,
-        Some(_) => return Err("trace placed must be a list".to_string()),
-    };
     let mut best: Option<(i64, i64)> = None;
-    for item in placed {
+    for item in placed_rows(trace)? {
         let Some(id) = block_id(item) else {
             continue;
         };
         if !target_set.contains(id) {
             continue;
         }
-        let Some(start) = item
-            .get("start")
-            .and_then(Value::as_str)
-            .filter(|text| !text.is_empty())
-        else {
+        let Some(start) = opt_text(item, "start")?.filter(|text| !text.is_empty()) else {
             continue;
         };
-        let Some(day) = item
-            .get("days")
-            .and_then(Value::as_array)
-            .and_then(|days| days.first())
-            .and_then(Value::as_i64)
-        else {
+        let Some(day) = first_day_of(item)? else {
             continue;
         };
         let minute = weekmodel::minute_of(start).map_err(|error| error.message)?;
@@ -287,20 +347,11 @@ pub fn plan_sentence(placed: i64, waiting: i64, left: &[(String, i64)]) -> Strin
 
 /// Where Place now put one block, or that it found no room this week.
 pub fn place_now_sentence(block: &Value, week_start: &str) -> Result<String, String> {
-    let title = block
-        .get("title")
-        .and_then(Value::as_str)
+    let title = opt_text(block, "title")?
         .filter(|text| !text.is_empty())
         .unwrap_or("this homework");
-    let start = block
-        .get("start")
-        .and_then(Value::as_str)
-        .filter(|text| !text.is_empty());
-    let first_day = block
-        .get("days")
-        .and_then(Value::as_array)
-        .and_then(|days| days.first())
-        .and_then(Value::as_i64);
+    let start = opt_text(block, "start")?.filter(|text| !text.is_empty());
+    let first_day = first_day_of(block)?;
     let (Some(start), Some(day_index)) = (start, first_day) else {
         return Ok(format!("No free time this week for {title}."));
     };
@@ -389,6 +440,7 @@ pub fn prepare_plan(input: PlanInput<'_>) -> Result<PlanPreparation, String> {
         });
     }
 
+    input.clock.check()?;
     let start = planning::plan_start_at(
         input.week_start,
         input.clock.today_iso,
@@ -635,15 +687,12 @@ pub fn apply_plan_answer(
     input: PlanAnswerInput<'_>,
     next_id: impl FnMut() -> String,
 ) -> Result<PlanAnswer, String> {
+    input.clock.check()?;
     let trace_obj = input
         .trace
         .as_object()
         .ok_or_else(|| "trace must be an object".to_string())?;
-    let raw_placed: &[Value] = match trace_obj.get("placed") {
-        None | Some(Value::Null) => &[],
-        Some(Value::Array(items)) => items.as_slice(),
-        Some(_) => return Err("trace placed must be a list".to_string()),
-    };
+    let raw_placed = placed_rows(input.trace)?;
     let explanations: &[Value] = match trace_obj.get("explanations") {
         None | Some(Value::Null) => &[],
         Some(Value::Array(items)) => items.as_slice(),
@@ -729,16 +778,10 @@ pub fn apply_plan_answer(
                 && item.get("assignment_id") == Some(&assignment_id)
                 && truthy(item.get("start"))
             {
-                placed_min += item
-                    .get("duration_min")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0);
-                if let Some(day) = item
-                    .get("days")
-                    .and_then(Value::as_array)
-                    .and_then(|days| days.first())
-                    .and_then(Value::as_i64)
-                {
+                placed_min = placed_min
+                    .checked_add(opt_int(item, "duration_min")?.unwrap_or(0))
+                    .ok_or_else(|| "placed minutes too large".to_string())?;
+                if let Some(day) = first_day_of(item)? {
                     placed_days.insert(day);
                 }
             }
@@ -751,9 +794,14 @@ pub fn apply_plan_answer(
             .get("left_min")
             .and_then(Value::as_i64)
             .unwrap_or(0);
-        let total_min = this_week_min + left_min;
+        let total_min = this_week_min
+            .checked_add(left_min)
+            .ok_or_else(|| "share minutes too large".to_string())?;
         share_obj.insert("this_week_min".into(), json!(placed_min));
-        share_obj.insert("left_min".into(), json!((total_min - placed_min).max(0)));
+        share_obj.insert(
+            "left_min".into(),
+            json!(total_min.saturating_sub(placed_min).max(0)),
+        );
         share_obj.insert(
             "placed_days".into(),
             Value::Array(placed_days.into_iter().map(Value::from).collect()),
@@ -768,10 +816,9 @@ pub fn apply_plan_answer(
             let replace = (item.get("kind").and_then(Value::as_str) == Some("locked")
                 || overdue_set.contains(id))
                 && sources.contains_key(id);
-            if replace {
-                sources[id].clone()
-            } else {
-                item.clone()
+            match sources.get(id) {
+                Some(source) if replace => source.clone(),
+                _ => item.clone(),
             }
         })
         .collect();

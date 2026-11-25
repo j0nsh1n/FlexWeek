@@ -1259,3 +1259,181 @@ fn unchanged_validated_blocks_report_changed_false_and_return_originals() {
     assert!(!answer.changed);
     assert_eq!(answer.blocks, blocks);
 }
+
+/// One placed homework session answered by a one-row trace, for the refusal tests below.
+fn answer_for(
+    trace: &Value,
+    shares: &[Value],
+    now: PlanClock<'_>,
+) -> Result<flexweek_app::session::plan::PlanAnswer, String> {
+    let assignments = map_of(&[(
+        "sheet",
+        homework("sheet", "Math worksheet", "2026-09-27", 30),
+    )]);
+    let mut placed = flex_block("b-sheet", "sheet", "Math worksheet", 30, &[3]);
+    placed["start"] = json!("20:00");
+    let blocks = vec![placed];
+    let targets = vec!["b-sheet".to_string()];
+    let empty_needs = Map::new();
+    apply_plan_answer(
+        PlanAnswerInput {
+            original_blocks: &blocks,
+            source_week: &blocks,
+            trace,
+            targets: &targets,
+            assignments: &assignments,
+            assignments_basis: &blocks,
+            week_start: WEEK,
+            preferences: None,
+            shares,
+            needs_time: &empty_needs,
+            clock: now,
+            earliest_first: false,
+            overdue: None,
+            new_left: None,
+        },
+        counter_ids(),
+    )
+}
+
+fn placed_row(extra: Value) -> Value {
+    let mut row = json!({
+        "id": "b-sheet",
+        "title": "Math worksheet",
+        "kind": "flexible",
+        "duration_min": 30,
+        "days": [3],
+        "start": "20:00",
+        "assignment_id": "sheet",
+    });
+    for (key, value) in extra.as_object().unwrap() {
+        row[key] = value.clone();
+    }
+    row
+}
+
+#[test]
+fn a_wrong_shaped_trace_row_or_block_is_refused_not_skipped() {
+    // A placed row that is not an object, or whose start or days are the wrong kind, is refused;
+    // missing and null fields stay supported.
+    let targets = vec!["b-sheet".to_string()];
+    assert!(first_placed(&json!({"placed": [0]}), &targets).is_err());
+    assert!(first_placed(&json!({"placed": ["b-sheet"]}), &targets).is_err());
+    let rows = [
+        json!({"start": 2000}),
+        json!({"days": {"first": 3}}),
+        json!({"days": ["Thu"]}),
+        json!({"duration_min": "30"}),
+    ];
+    for extra in rows {
+        let trace = json!({"placed": [placed_row(extra)]});
+        assert!(first_placed(&trace, &targets).is_err(), "{trace}");
+        assert!(
+            answer_for(&trace, &[], clock("2026-09-24", 19, 0)).is_err(),
+            "{trace}"
+        );
+    }
+    let loose = json!({"placed": [placed_row(json!({"start": null, "days": null}))]});
+    assert_eq!(first_placed(&loose, &targets).unwrap(), None);
+    let bare = json!({"placed": [{"id": "b-sheet"}]});
+    assert_eq!(first_placed(&bare, &targets).unwrap(), None);
+
+    // Place now: a block with a start and an object for days is a refusal, not "no free time".
+    let wrong = json!({"title": "Bio", "start": "17:15", "days": {"first": 1}});
+    assert!(place_now_sentence(&wrong, WEEK).is_err());
+    let wrong_start = json!({"title": "Bio", "start": 1715, "days": [1]});
+    assert!(place_now_sentence(&wrong_start, WEEK).is_err());
+    let wrong_title = json!({"title": 7, "start": "17:15", "days": [1]});
+    assert!(place_now_sentence(&wrong_title, WEEK).is_err());
+    let nulls = json!({"title": null, "start": null, "days": null});
+    assert_eq!(
+        place_now_sentence(&nulls, WEEK).unwrap(),
+        "No free time this week for this homework."
+    );
+}
+
+#[test]
+fn clock_fields_outside_a_real_time_of_day_are_refused_before_any_arithmetic() {
+    let trace = json!({"placed": [placed_row(json!({}))], "unplaced": [], "explanations": []});
+    let huge = PlanClock {
+        today_iso: "2026-09-24",
+        hour: 4_611_686_018_427_387_904,
+        minute: 0,
+        second: 0,
+        microsecond: 0,
+    };
+    assert!(answer_for(&trace, &[], huge).is_err());
+
+    let bad = [
+        (24, 0, 0, 0),
+        (-1, 0, 0, 0),
+        (0, 60, 0, 0),
+        (0, -1, 0, 0),
+        (0, 0, 60, 0),
+        (0, 0, -1, 0),
+        (0, 0, 0, 1_000_000),
+        (0, 0, 0, -1),
+    ];
+    let assignments = map_of(&[(
+        "sheet",
+        homework("sheet", "Math worksheet", "2026-09-27", 30),
+    )]);
+    let blocks = vec![flex_block("b-sheet", "sheet", "Math worksheet", 30, &[3])];
+    let none: Vec<String> = Vec::new();
+    for (hour, minute, second, microsecond) in bad {
+        let now = PlanClock {
+            today_iso: "2026-09-24",
+            hour,
+            minute,
+            second,
+            microsecond,
+        };
+        assert!(
+            answer_for(&trace, &[], now).is_err(),
+            "apply {hour}:{minute}:{second}.{microsecond}"
+        );
+        let input = base_plan_input(WEEK, &blocks, &assignments, &blocks, &none, &none, now);
+        assert!(
+            prepare_plan(input).is_err(),
+            "prepare {hour}:{minute}:{second}.{microsecond}"
+        );
+    }
+
+    let last_moment = PlanClock {
+        today_iso: "2026-09-24",
+        hour: 23,
+        minute: 59,
+        second: 59,
+        microsecond: 999_999,
+    };
+    assert!(answer_for(&trace, &[], last_moment).is_ok());
+    let input = base_plan_input(
+        WEEK,
+        &blocks,
+        &assignments,
+        &blocks,
+        &none,
+        &none,
+        last_moment,
+    );
+    assert!(prepare_plan(input).is_ok());
+}
+
+#[test]
+fn share_minutes_too_large_to_add_are_refused() {
+    let trace = json!({"placed": [placed_row(json!({}))], "unplaced": [], "explanations": []});
+    let share = |this_week: i64, left: i64| json!({"assignment_id": "sheet", "this_week_min": this_week, "left_min": left});
+    let now = clock("2026-09-24", 19, 0);
+    assert!(answer_for(&trace, &[share(i64::MAX, 1)], now).is_err());
+    assert!(answer_for(&trace, &[share(i64::MIN, -1)], now).is_err());
+    // A sane share still works: 20 + 10 minutes, 30 placed, nothing left.
+    let answer = answer_for(&trace, &[share(20, 10)], now).unwrap();
+    assert_eq!(answer.trace["shares"][0]["this_week_min"], 30);
+    assert_eq!(answer.trace["shares"][0]["left_min"], 0);
+    // Placed minutes are summed with the same care.
+    let two = json!({"placed": [
+        placed_row(json!({"duration_min": i64::MAX})),
+        placed_row(json!({"duration_min": 1})),
+    ], "unplaced": [], "explanations": []});
+    assert!(answer_for(&two, &[share(0, 0)], now).is_err());
+}
