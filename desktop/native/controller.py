@@ -67,21 +67,31 @@ from desktop.native.files import (
     plan_imported_homework,
 )
 from desktop.native.focus import (
-    FOCUS_PHASE_LABEL,
+    advance_begin,
+    advance_plan,
+    alerts_held,
+    auto_complete_plan,
     begin_state,
     break_phase,
-    credit_target,
+    credit_plan,
+    drop_missing,
+    elapsed_minutes,
+    enter_phase,
     focus_candidates,
     more_time_choices,
+    mutes_alerts,
     now_and_next,
     now_next_line,
     pause_state,
     persist_payload,
-    phase_total_ms,
     quick_focus_homework,
+    rebase_state,
     remaining_ms,
     restore_state,
     set_phase,
+    start_decision,
+    start_target,
+    tick_step,
     work_minutes,
 )
 from desktop.native.history import capture_step, join_step, mark_stale, push_step
@@ -324,17 +334,6 @@ def _keep_step_revisions(step: dict, data: dict) -> None:
 ROUTINE_STATUS = frozenset(
     ("Saving…", "Saved.", "Saving preferences…", "Saved preferences.", "Loading…", "This week.")
 )
-
-
-def _same_timer(running: dict, target: dict) -> bool:
-    """Starting the homework (or block) whose timer is already going is going back to it, not a replace."""
-    if running.get("phase") == "ended":
-        return False
-    homework = target.get("assignmentId")
-    if homework:
-        return homework == running.get("assignmentId")
-    block = target.get("blockId")
-    return bool(block) and block == running.get("blockId")
 
 
 def _stamp_edited(changes: list[dict], edited: str, today: str, first_weekday: int) -> list[dict]:
@@ -918,15 +917,9 @@ class NativeSession(QObject):
 
     def _rebase_focus(self) -> None:
         """The focus timer names its week and day: keep its date, in the week from the new first day."""
-        state = self.focus
-        if state is None or not state.get("weekStart"):
+        moved = rebase_state(self.focus, self.first_weekday)
+        if moved is None:
             return
-        day = state.get("day")
-        anchor = date_for_day(state["weekStart"], day) if isinstance(day, int) else state["weekStart"]
-        week = self.shown_week_of(anchor)
-        moved = {**state, "weekStart": week}
-        if isinstance(day, int):
-            moved["day"] = day_in_week(anchor, week)
         self.focus = moved
         self._persist_focus()
 
@@ -4241,24 +4234,14 @@ class NativeSession(QObject):
         )
 
     def _drop_missing_focus(self) -> None:
-        state = self.focus
         announce = self._focus_after_restore
         self._focus_after_restore = False
-        if state is None or not state.get("blockId") or state.get("weekStart") != self.week_start:
-            return
-        exists = any(
-            item["id"] == state["blockId"]
-            and (not state.get("assignmentId") or item.get("assignment_id") == state["assignmentId"])
-            for item in self.blocks
-        )
-        if exists:
+        decision = drop_missing(self.focus, self.week_start, self.blocks, announce)
+        if not decision["drop"]:
             return
         self._reset_focus()
-        if announce:
-            self._say(
-                "Schedule restored. The previous focus timer was stopped because "
-                "its session no longer exists."
-            )
+        if decision["say"]:
+            self._say(decision["say"])
 
     def _persist_focus(self) -> None:
         if self.account is None:
@@ -4329,56 +4312,26 @@ class NativeSession(QObject):
     ) -> bool:
         if self.account is None or self.busy or self._focus_busy:
             return False
-        if quick:
-            target = {
-                "weekStart": self.week_start,
-                "blockId": None,
-                "assignmentId": None,
-                "day": None,
-                "start": None,
-                "title": "Quick focus",
-            }
-        else:
-            if day is None and block_id in self.assignments:
-                assignment = self.assignments[block_id]
-                target = {
-                    "weekStart": self.week_start,
-                    "blockId": None,
-                    "assignmentId": block_id,
-                    "day": None,
-                    "start": None,
-                    "title": f"{assignment['title']}, overdue" if block_id in self._overdue_assignment_ids()
-                    else assignment["title"],
-                }
-            else:
-                block = next((item for item in self.blocks if item["id"] == block_id), None)
-                if block is None or block.get("completed") or block.get("pomodoro_role") == "break":
-                    self._say("Place a work block that isn't finished before starting focus.")
-                    return False
-                placed = block if block.get("start") else None
-                if placed is None and self.trace:
-                    placed = next(
-                        (
-                            item
-                            for item in (self.trace.get("placed") or [])
-                            if item["id"] == block_id and (day is None or day in (item.get("days") or []))
-                        ),
-                        None,
-                    )
-                if placed is None or not placed.get("start"):
-                    self._say("Place a work block that isn't finished before starting focus.")
-                    return False
-                target = {
-                    "weekStart": self.week_start,
-                    "blockId": block["id"],
-                    "assignmentId": block.get("assignment_id"),
-                    "day": (placed.get("days") or [day])[0],
-                    "start": placed["start"],
-                    "title": block["title"],
-                }
-        if self.focus is not None and not replace and _same_timer(self.focus, target):
+        # Only a homework's title says whether it is overdue, so the clock is read only for one.
+        names_homework = not quick and day is None and block_id in self.assignments
+        planned = start_target(
+            block_id=block_id,
+            day=day,
+            quick=quick,
+            week_start=self.week_start,
+            assignments=self.assignments,
+            blocks=self.blocks,
+            trace=self.trace,
+            overdue=sorted(self._overdue_assignment_ids()) if names_homework else [],
+        )
+        if "refuse" in planned:
+            self._say(planned["refuse"])
+            return False
+        target = planned["target"]
+        decision = start_decision(self.focus, target, replace)
+        if decision == "same":
             return True
-        if self.focus is not None and not replace:
+        if decision == "ask":
             self._pending_focus = {**target, "quick": quick, "block_id": block_id, "day": day}
             self.focus_replace_needed.emit(self.focus["title"], target["title"])
             return False
@@ -4435,79 +4388,58 @@ class NativeSession(QObject):
     def focus_elapsed_min(self) -> int:
         """Whole minutes of the work session running or paused, which are credited to the homework only
         when it ends. A homework is credited whichever week is open; a block, only from its own week."""
-        state = self.focus
-        if state is None or state.get("phase") != "work":
-            return 0
-        if not state.get("assignmentId") and state.get("weekStart") != self.week_start:
-            return 0
-        spent = phase_total_ms(state, self.preferences) - remaining_ms(state, self.now_ms())
-        return max(0, spent) // 60_000
+        return elapsed_minutes(self.focus, self.week_start, self.preferences, self.now_ms())
 
     def tick_focus(self) -> None:
-        if self._credits_waiting and not self.busy:
+        step = tick_step(
+            self.focus, credits_waiting=bool(self._credits_waiting), busy=self.busy, now_ms=self.now_ms()
+        )
+        if step["credit"]:
             self._credit_waiting_sessions()
-        if self.focus is None or not self.focus.get("running"):
-            return
-        if int(self.focus.get("endsAt") or 0) <= self.now_ms():
+            # Crediting can save, which can change or end the timer: decide again on what is left.
+            step = tick_step(self.focus, credits_waiting=False, busy=self.busy, now_ms=self.now_ms())
+        if step["action"] == "ended":
             self.focus["running"] = False
             self.focus["remainingMs"] = 0
             self.advance_focus(completed=True)
-            return
-        self.focus_changed.emit()
+        elif step["action"] == "changed":
+            self.focus_changed.emit()
 
     def advance_focus(self, completed: bool) -> None:
-        if self.focus is None or self._focus_busy or self.focus.get("phase") == "ended":
+        begin = advance_begin(self.focus, focus_busy=self._focus_busy, completed=completed)
+        if not begin["go"]:
             return
         self._focus_busy = True
         try:
-            if self.focus["phase"] == "work":
-                if completed:
-                    self.credit_focus_session()
-                if self.focus is None:
-                    return
-                self.focus["cycles"] = int(self.focus.get("cycles") or 0) + (1 if completed else 0)
-                assignment_id = self.focus.get("assignmentId")
-                if completed and assignment_id and assignment_id in self.assignments:
-                    self.focus["phase"] = "ended"
-                    self.focus["running"] = False
-                    self.focus["remainingMs"] = 0
-                    self._persist_focus()
-                    self.focus_changed.emit()
-                    self.alerts.emit(
-                        [
-                            {
-                                "title": "Focus session finished",
-                                "body": self.focus["title"],
-                                "kind": "focus",
-                                "tone": "soft",
-                            }
-                        ]
-                    )
-                    return
-                self.focus = self._enter_phase(
-                    self.focus, break_phase(int(self.focus.get("cycles") or 0), self.preferences)
-                )
-            else:
-                self.focus = self._enter_phase(self.focus, "work")
+            if begin["credit"]:
+                self.credit_focus_session()
+            # Crediting can save, and a save's reply can drop the timer.
+            if self.focus is None:
+                return
+            plan = advance_plan(
+                self.focus,
+                completed=completed,
+                assignment_known=self.focus.get("assignmentId") in self.assignments,
+                prefs=self.preferences,
+                now_ms=self.now_ms(),
+            )
+            if "cycles" in plan:
+                self.focus["cycles"] = plan["cycles"]
+            if plan["alert_first"]:
+                self.alerts.emit([plan["alert"]])
+            self.focus = plan["state"]
             self._persist_focus()
             self.focus_changed.emit()
+            if not plan["alert_first"]:
+                self.alerts.emit([plan["alert"]])
         finally:
             self._focus_busy = False
 
     def _enter_phase(self, state: dict, phase: str) -> dict:
-        """Move to a phase and announce it, which is what the web's setFocusPhase does. The tone is
-        the web's: bright going into work, soft going into a break."""
-        moved = set_phase(state, phase, self.preferences, self.now_ms())
-        self.alerts.emit(
-            [
-                {
-                    "title": FOCUS_PHASE_LABEL.get(phase, "Focus"),
-                    "body": moved.get("title") or "",
-                    "kind": "focus",
-                    "tone": "bright" if phase == "work" else "soft",
-                }
-            ]
-        )
+        """Move to a phase and announce it, which is what the web's setFocusPhase does."""
+        entered = enter_phase(state, phase, self.preferences, self.now_ms())
+        self.alerts.emit([entered["alert"]])
+        moved: dict = entered["state"]
         return moved
 
     def credit_focus_session(self, minutes: int | None = None, *, finished: bool = True) -> None:
@@ -4529,24 +4461,23 @@ class NativeSession(QObject):
             self._credit_session(*credit)
 
     def _credit_session(self, state: dict, work_min: int, finished: bool = True) -> None:
-        if state.get("assignmentId"):
-            assignment = self.assignments.get(state["assignmentId"])
-            updated = credit_target(state, assignment, None, work_min)
-            if updated is None:
-                self._say(
-                    "This homework did not load, so the focus time was not counted. "
-                    "Reload the week and try again."
-                )
-                return
+        plan = credit_plan(
+            state,
+            week_start=self.week_start,
+            assignments=self.assignments,
+            blocks=self.blocks,
+            work_min=work_min,
+        )
+        if "say" in plan:
+            self._say(plan["say"])
+            return
+        if "skip" in plan:
+            return
+        updated = plan["updated"]
+        if plan["to"] == "assignment":
             self.assignments[updated["id"]] = updated
             self.dirty_assignments.add(updated["id"])
         else:
-            if state.get("weekStart") != self.week_start:
-                return
-            block = next((item for item in self.blocks if item["id"] == state["blockId"]), None)
-            updated = credit_target(state, None, block, work_min)
-            if updated is None:
-                return
             self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
         if finished:
             self._auto_complete_session(state)
@@ -4559,21 +4490,21 @@ class NativeSession(QObject):
 
     def focus_mutes_alerts(self) -> bool:
         """Auto-mute: reminders wait while a focus work phase is under way, running or paused."""
-        state = self.focus
-        return (
-            self._material_focus_rules()
-            and bool((self.preferences or {}).get("focus_auto_mute", True))
-            and state is not None
-            and state.get("phase") == "work"
-        )
+        return mutes_alerts(self.focus, self.preferences, self._material_focus_rules())
 
     def hold_alerts(self, notices: list[dict]) -> list[dict]:
         """The notices to show now. Focus's own are always shown; reminders are kept until focus
         leaves its work phase. Alarms the student set do not come through here and still ring."""
-        if not self.focus_mutes_alerts():
+        held = alerts_held(
+            [item.get("kind") for item in notices],
+            self.focus,
+            self.preferences,
+            self._material_focus_rules(),
+        )
+        if not any(held):
             return notices
-        self._held_alerts.extend(item for item in notices if item.get("kind") != "focus")
-        return [item for item in notices if item.get("kind") == "focus"]
+        self._held_alerts.extend(item for item, keep in zip(notices, held, strict=True) if keep)
+        return [item for item, keep in zip(notices, held, strict=True) if not keep]
 
     def release_held_alerts(self) -> list[dict]:
         if not self._held_alerts or self.focus_mutes_alerts():
@@ -4584,36 +4515,22 @@ class NativeSession(QObject):
     def _auto_complete_session(self, state: dict) -> None:
         """Auto-complete: the block this session worked on goes to Done and nothing else does. Its
         homework is finished too only when that was its last session; with sessions left it stays open."""
-        if not self._material_focus_rules() or not (self.preferences or {}).get("focus_auto_complete"):
-            return
-        block = None
-        if state.get("blockId") and state.get("weekStart") == self.week_start:
-            block = next((item for item in self.blocks if item["id"] == state["blockId"]), None)
-        day = state.get("day")
-        if (
-            block is not None
-            and not block.get("completed")
-            and block.get("kind") == "flexible"
-            and state.get("start")
-            and isinstance(day, int)
-            and day in (block.get("days") or [])
-        ):
-            block["start"] = state["start"]
+        plan = auto_complete_plan(
+            state,
+            prefs=self.preferences,
+            material_owns=self._material_focus_rules(),
+            week_start=self.week_start,
+            assignments=self.assignments,
+            blocks=self.blocks,
+        )
+        done = plan["block"]
+        if done is not None:
+            block = next(item for item in self.blocks if item["id"] == done["id"])
+            block["start"] = done["start"]
             block["completed"] = True
-            block["completed_day"] = day
-        assignment_id = state.get("assignmentId") or (block or {}).get("assignment_id")
-        assignment = self.assignments.get(assignment_id) if assignment_id else None
-        if assignment is None or assignment.get("completed"):
-            return
-        left = [
-            item
-            for item in self.blocks
-            if item.get("assignment_id") == assignment_id
-            and not item.get("completed")
-            and item.get("pomodoro_role") != "break"
-        ]
-        if not left:
-            self.complete_homework(assignment_id, True)
+            block["completed_day"] = done["completed_day"]
+        if plan["complete_homework"]:
+            self.complete_homework(plan["complete_homework"], True)
 
     def finish_focused_homework(self) -> bool:
         state = self.focus
