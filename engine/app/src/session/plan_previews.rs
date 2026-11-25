@@ -654,12 +654,12 @@ pub fn accept_late(input: LateAcceptInput<'_>) -> Result<LateAcceptDecision, Str
         .and_then(Value::as_str)
         .ok_or_else(|| "late preview is missing operation_id".to_string())?
         .to_string();
-    let checked_block = check_block(block).map_err(|refused| refused.0)?;
-    check_late_block(&checked_block)?;
+    // Validate only: the accepted edit carries the preview block as held, not a rewritten copy.
+    check_late_block(&check_block(block).map_err(|refused| refused.0)?)?;
     check_trace_lists(trace)?;
     let mut with_late = Vec::with_capacity(input.blocks.len() + 1);
     with_late.extend(input.blocks.iter().cloned());
-    with_late.push(checked_block);
+    with_late.push(block.clone());
     let blocks = apply_plan(
         &Value::Array(with_late),
         trace,

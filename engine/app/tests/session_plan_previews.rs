@@ -676,9 +676,34 @@ fn late_answer_and_accept_late_preserve_operation_id_and_check_guards() {
                 .find(|b| b["title"] == "Running late")
                 .unwrap();
             assert_eq!(late_block["duration_min"], 30);
+            // The held preview block is what lands, not a rewritten copy of it.
+            assert!(blocks.contains(&answered.preview["block"]));
         }
         other => panic!("expected Accept, got {other:?}"),
     }
+}
+
+#[test]
+fn accepting_running_late_hands_back_the_preview_block_unchanged() {
+    let essay = homework_session("essay-1", "essay", "Essay", vec![3], Some("18:45"), 60);
+    let held = json!({
+        "id": "b-late-1", "kind": "locked", "title": "Running late",
+        "days": [3], "start": "19:00", "duration_min": 30,
+    });
+    let decision = accept_late(LateAcceptInput {
+        preview: Some(&json!({
+            "week_start": WEEK, "stale": false, "operation_id": "op",
+            "block": held, "trace": {"placed": [], "unplaced": [], "moves": []},
+        })),
+        week_start: WEEK,
+        blocks: std::slice::from_ref(&essay),
+        assignments: &json!({}),
+    })
+    .unwrap();
+    let LateAcceptDecision::Accept { blocks, .. } = decision else {
+        panic!("expected Accept");
+    };
+    assert!(blocks.contains(&held), "{blocks:?}");
 }
 
 #[test]
