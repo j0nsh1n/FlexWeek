@@ -747,9 +747,18 @@ def test_homework_card_footer_survives_page_switch_and_menu_places_from_keyboard
     assert quick is not None
     card.forceActiveFocus()
     _pump(qapp)
+    # The menu must place a block that starts without a time; assert that first
+    # so the test cannot pass when the menu keys do nothing.
+    assert not next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
     QTest.keyClick(quick, Qt.Key.Key_Menu)
     _pump(qapp, 10)
     QTest.keyClick(quick, Qt.Key.Key_Down)
     _pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Return)
-    wait_until(qapp, lambda: any(b.get("assignment_id") == "sheet" for b in window.session.blocks))
+    wait_until(
+        qapp,
+        lambda: any(
+            b.get("start") for b in window.session.blocks if b.get("assignment_id") == "sheet"
+        ),
+    )
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
