@@ -165,7 +165,7 @@ pub(crate) fn study_window(value: &Value) -> Checked<Value> {
     Ok(Value::Object(out))
 }
 
-pub(crate) fn work_window(value: &Value) -> Checked<Value> {
+pub fn work_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a study hours window",
@@ -195,7 +195,7 @@ pub(crate) fn work_window(value: &Value) -> Checked<Value> {
     Ok(Value::Object(out))
 }
 
-pub(crate) fn protected_window(value: &Value) -> Checked<Value> {
+pub fn protected_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a protected window",

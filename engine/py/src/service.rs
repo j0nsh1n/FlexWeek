@@ -165,6 +165,28 @@ fn homework_fields() -> PyResult<Vec<&'static str>> {
     })
 }
 
+/// Refuses, with ValueError and why, the first protected time or Study hours window (JSON lists) that a
+/// preferences save would refuse (service/preferences.rs); `work` is None when Study hours are not sent.
+#[pyfunction]
+#[pyo3(signature = (protected, work=None))]
+fn check_hours_windows(protected: &str, work: Option<&str>) -> PyResult<()> {
+    guard(|| {
+        let list = |text: &str| -> PyResult<Vec<serde_json::Value>> {
+            serde_json::from_str(text).map_err(|error| PyValueError::new_err(error.to_string()))
+        };
+        let refused = |refused: blocks::BlockRefused| PyValueError::new_err(refused.0);
+        for window in list(protected)? {
+            preferences::protected_window(&window).map_err(refused)?;
+        }
+        if let Some(work) = work {
+            for window in list(work)? {
+                preferences::work_window(&window).map_err(refused)?;
+            }
+        }
+        Ok(())
+    })
+}
+
 /// The preference fields an account may save, in their order.
 #[pyfunction]
 fn preference_fields() -> PyResult<Vec<&'static str>> {
@@ -178,7 +200,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         preference_fields,
         checked_block,
         checked_homework,
-        homework_fields
+        homework_fields,
+        check_hours_windows
     );
     Ok(())
 }

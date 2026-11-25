@@ -14,6 +14,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - FlexWeek no longer runs a small web server on your computer. The app reads and saves your week itself and opens no network port (phone sync, once you pair a phone, still listens for it).
 - When signing in or creating an account gets no answer for 30 seconds, FlexWeek says "FlexWeek stopped responding. Close FlexWeek, open it again, then sign in." It used to say it couldn't reach its server, which it no longer has.
 
+- When Study hours or protected time can't be saved because a day or time is wrong, the status line says "Check the days and times of your study hours and protected time." instead of a technical error ("1 validation error for ProtectedWindow ...").
+
 ### Removed
 - The FLEXWEEK_ORIGIN and FLEXWEEK_DESKTOP_ORIGIN settings, which pointed the app at a hosted FlexWeek server. The app always uses the data saved on this computer.
 
