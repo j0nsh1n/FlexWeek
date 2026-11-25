@@ -15,6 +15,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QAccessible
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -29,6 +30,7 @@ from desktop.tests.account.support import (
     fill,
     light_launches,  # noqa: F401
     material_launches,  # noqa: F401
+    named,
     page,
     qml,
     shown,
@@ -308,8 +310,17 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     showcase.setProperty("slideIntervalMs", 60)
     wait_until(qapp, lambda: int(showcase.property("currentSlide")) > 0, timeout=3)
 
-    dot2 = qml(window, "signInDot2")
+    showcase_iface = QAccessible.queryAccessibleInterface(showcase)
+    assert showcase_iface is not None
+    assert showcase_iface.text(QAccessible.Text.Name) == "FlexWeek preview"
+
+    # Repeater delegates live in the visual item tree, not QObject.children(), so look them up via named().
+    dot2 = named(window, "signInDot2")[0]
     assert dot2.property("activeFocusOnTab") is True
+    dot2_iface = QAccessible.queryAccessibleInterface(dot2)
+    assert dot2_iface is not None
+    assert dot2_iface.role() == QAccessible.Role.RadioButton
+    assert "Show picture 3 of 5" in dot2_iface.text(QAccessible.Text.Name)
     spot = dot2.mapToScene(QPointF(dot2.width() / 2, dot2.height() / 2)).toPoint()
     QTest.mouseMove(quick, spot)
     pump(qapp, 5)
@@ -327,7 +338,7 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     assert showcase.property("autoAdvancing") is True
 
     # Claude #2: indicator dots are keyboard-operable and pause rotation while focused.
-    dot3 = qml(window, "signInDot3")
+    dot3 = named(window, "signInDot3")[0]
     dot3.forceActiveFocus()
     pump(qapp, 5)
     QTest.keyClick(quick, Qt.Key.Key_Space)
