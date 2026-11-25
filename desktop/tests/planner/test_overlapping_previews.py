@@ -72,7 +72,7 @@ def test_a_refused_preview_keeps_no_save_attempt(qapp: QApplication, window: Nat
     rows[0]["invalid"] = "taken"
     assert window.session.confirm_preview(rows, label="the copied block", attempt_key="paste-1") is False
     assert window.session.message == "Uncheck what can't be added before saving."
-    assert "paste-1" not in window.session._attempts
+    assert "paste-1" not in window.session.client.view("drafts.attempts")
 
 
 def test_pasting_signed_out_with_nothing_copied_says_to_copy_first(
