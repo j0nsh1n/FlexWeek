@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from desktop.tests.updater.release_workflows import release_text
+
 ROOT = Path(__file__).resolve().parents[3]
 LINUX = (ROOT / "desktop/build_linux.sh").read_text(encoding="utf-8")
 WINDOWS = (ROOT / "desktop/build_windows.ps1").read_text(encoding="utf-8")
 FINISH = (ROOT / "desktop/finish_linux_bundle.sh").read_text(encoding="utf-8")
-WORKFLOW = (ROOT / ".github/workflows/release-windows.yml").read_text(encoding="utf-8")
+WORKFLOW = release_text()
 
 GONE = (
     "desktop/webengine.py",

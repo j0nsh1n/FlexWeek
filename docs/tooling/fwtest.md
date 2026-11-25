@@ -222,7 +222,7 @@ One line per flaky test:
 }
 ```
 
-`place` is `local`, or `ci <job>` on GitHub Actions, where the flaky line is also added to the job's
+`place` is `local`, or `ci <job>` on CI (Depot CI since 2026-11-24, which runs the GitHub Actions workflow format), where the flaky line is also added to the job's
 summary. `how` is the failure's message and the start of its traceback, at most 2,000 characters.
 `beside` is what else ran: the full command (its worker count and paths), how many tests the run
 had and the other tests that failed in it. JUnit does not record which xdist worker ran a test, so
@@ -230,7 +230,8 @@ the log cannot name the tests that shared its worker.
 
 ## CI
 
-`.github/workflows/verify.yml` runs on every push and pull request:
+`.depot/workflows/verify.yml` runs on Depot CI on every push and pull request (it moved from GitHub Actions on
+2026-11-24; GitHub Actions keeps only CodeQL and the Windows release):
 
 | Job | What | Shards |
 |---|---|---|
