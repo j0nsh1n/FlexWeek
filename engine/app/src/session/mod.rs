@@ -14,6 +14,7 @@ pub mod account;
 pub mod autosave;
 pub mod frame;
 pub mod leaving;
+pub mod preferences;
 pub mod status;
 pub mod words;
 

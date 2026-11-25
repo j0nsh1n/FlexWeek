@@ -88,7 +88,7 @@ from desktop.native.history import capture_step, join_step, mark_stale, push_ste
 from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
 from desktop.native.kept_alerts import KeptReminders
-from desktop.native.look import pack_axis, sanitize_look
+from desktop.native.look import sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import (
     clock_parts,
@@ -536,9 +536,7 @@ class NativeSession(QObject):
         self._hand_waiting: tuple[str, int, int, int, int] | None = None
         # What setup has kept and not yet written, one request at a time: preferences, then study
         # hours, then the week. A second request would replace the first on this session.
-        self.setup_prefs: dict = {}
-        self.setup_work_windows: list[dict] | None = None
-        self.setup_week = False
+        self._setup = flexweek_engine.SetupQueue()
         # The app's one sync host. Pairing, removal and Sync now use it; this session does not start
         # another.
         self._sync_host: QObject | None = None
@@ -621,9 +619,32 @@ class NativeSession(QObject):
 
     def _drop_setup(self) -> None:
         """Unsent setup answers belong to the account that gave them."""
-        self.setup_prefs = {}
-        self.setup_work_windows = None
-        self.setup_week = False
+        self._setup.clear()
+
+    @property
+    def setup_prefs(self) -> dict:
+        return json.loads(self._setup.prefs())
+
+    @setup_prefs.setter
+    def setup_prefs(self, value: dict) -> None:
+        self._setup.set_prefs(json.dumps(value))
+
+    @property
+    def setup_work_windows(self) -> list[dict] | None:
+        windows = self._setup.windows()
+        return None if windows is None else json.loads(windows)
+
+    @setup_work_windows.setter
+    def setup_work_windows(self, value: list[dict] | None) -> None:
+        self._setup.set_windows(None if value is None else json.dumps(value))
+
+    @property
+    def setup_week(self) -> bool:
+        return self._setup.week()
+
+    @setup_week.setter
+    def setup_week(self, value: bool) -> None:
+        self._setup.set_week(value)
 
     def _drop_other_setup(self, account_id: object) -> None:
         """A different account does not keep the previous one's unsent setup answers."""
@@ -902,14 +923,19 @@ class NativeSession(QObject):
         """A new first day of the week: the month's rows change, so what was kept is asked for again,
         and the open week becomes the one from that day holding the selected day. Changes not yet
         saved are saved first, in the week they were made in."""
-        changed = first_weekday != self.first_weekday
+        follow = json.loads(
+            flexweek_engine.session_follow_first_weekday(
+                self.first_weekday, first_weekday, self.account is not None
+            )
+        )
         self.first_weekday = first_weekday
         self._month_cache.clear()
         self._month_gen += 1
         if self.account is None:
             self.week_start = self.shown_week_of(self.selected_day)
-        elif changed:
-            self._rebase_focus()
+        elif follow["refollow"]:
+            if follow["rebase_focus"]:
+                self._rebase_focus()
             self._refollow_week = True
             self._follow_week()
         if self.planner_view == "month":
@@ -1637,11 +1663,11 @@ class NativeSession(QObject):
         save_week: bool = False,
     ) -> None:
         """Remember what a setup page answered. The write goes out one request at a time."""
-        self.setup_prefs.update(updates)
-        if work_windows is not None:
-            self.setup_work_windows = deepcopy(work_windows)
-        if save_week:
-            self.setup_week = True
+        self._setup.keep(
+            json.dumps(updates),
+            None if work_windows is None else json.dumps(work_windows),
+            save_week,
+        )
         if self.preferences is not None:
             # Seen at once, as Settings does: the save that follows stores them.
             self.preferences = {**self.preferences, **self.setup_prefs}
@@ -1650,19 +1676,17 @@ class NativeSession(QObject):
     def flush_setup(self) -> None:
         """Write what setup kept. Preferences go first: the week's save can start a plan. While a
         request is out, this waits, and the next idle turn sends whatever is still kept."""
-        if self.account is None or self.busy:
-            return
-        if self.setup_prefs and self.preferences is not None:
-            updates, self.setup_prefs = self.setup_prefs, {}
-            self.save_preferences(updates)
-            return
-        if self.setup_work_windows is not None and self.preferences is not None:
-            windows, self.setup_work_windows = self.setup_work_windows, None
-            prefs = self.preferences
-            self.save_availability(prefs.get("protected") or [], prefs.get("day_cutoff"), windows)
-            return
-        if self.setup_week:
-            self.setup_week = False
+        step = json.loads(
+            self._setup.next(self.account is not None, self.busy, self.preferences is not None)
+        )
+        if step["step"] == "preferences":
+            self.save_preferences(step["updates"])
+        elif step["step"] == "windows":
+            prefs = self.preferences or {}
+            self.save_availability(
+                prefs.get("protected") or [], prefs.get("day_cutoff"), step["windows"]
+            )
+        elif step["step"] == "week":
             self.save()
 
     def set_setup_blocks(self, blocks: list[dict], edited: str = "keep") -> None:
@@ -4173,11 +4197,14 @@ class NativeSession(QObject):
             # its own rows first, so this is rarely reached.
             self._say(HOURS_REFUSED)
             return False
-        body = dict(self.preferences)
-        body["protected"] = protected
-        body["day_cutoff"] = day_cutoff or None
-        if work_windows is not None:
-            body["work_windows"] = work_windows
+        body = json.loads(
+            flexweek_engine.session_availability_body(
+                json.dumps(self.preferences),
+                json.dumps(protected),
+                json.dumps(day_cutoff),
+                None if work_windows is None else json.dumps(work_windows),
+            )
+        )
         ticket = self._begin()
         self._say("Saving availability…")
 
@@ -4880,10 +4907,11 @@ class NativeSession(QObject):
         """Send the changes. `then` is told whether the server kept them, once it has answered."""
         if self.account is None or self.preferences is None:
             return False
-        body = dict(self.preferences)
-        body.update(updates)
-        if "theme_pack" in body:
-            body["theme"] = pack_axis(body.get("theme_pack") or "system")
+        body = json.loads(
+            flexweek_engine.session_preferences_body(
+                json.dumps(self.preferences), json.dumps(updates)
+            )
+        )
         ticket = self._begin()
         self._say("Saving preferences…")
 
