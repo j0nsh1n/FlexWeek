@@ -131,6 +131,14 @@ fn find_block<'a>(items: &'a [Value], id: &str) -> Result<Option<&'a Value>, Eng
         .find(|item| item.get("id").and_then(Value::as_str) == Some(id)))
 }
 
+/// A block's end minute. The lengths arrive from the binding unchecked, and the old Python handed the sum to
+/// the engine as a 64-bit integer, which refused one too large; a wrapped end would slip past the hours check.
+fn end_of(start: i64, length: i64) -> Result<i64, EngineError> {
+    start
+        .checked_add(length)
+        .ok_or_else(|| EngineError::overflow("Python int too large to convert to C long"))
+}
+
 fn assignment_of<'a>(assignments: &'a Value, id: &str) -> Option<&'a Value> {
     assignments.as_object()?.get(id)
 }
@@ -345,7 +353,9 @@ pub fn date_problem(input: &DateProblemInput) -> Result<Option<String>, EngineEr
     {
         return Ok(Some(past));
     }
+    // `get(homework_id) or get(block_id)`: a null or empty record falls back like a missing one.
     let assignment = assignment_of(input.assignments, &homework_id)
+        .filter(|record| truthy(Some(record)))
         .or_else(|| assignment_of(input.assignments, input.block_id));
     let due_value = assignment
         .and_then(|assignment| assignment.get("due"))
@@ -356,14 +366,11 @@ pub fn date_problem(input: &DateProblemInput) -> Result<Option<String>, EngineEr
         Some((day, minute)) => (json!([day, minute]), "tuple"),
         None => (Value::Null, "NoneType"),
     };
-    Ok(grid::span_problem(
-        input.to_day,
-        start_min,
-        start_min + length,
-        &due_json,
-        due_type,
-    )?
-    .map(str::to_string))
+    let end_min = end_of(start_min, length)?;
+    Ok(
+        grid::span_problem(input.to_day, start_min, end_min, &due_json, due_type)?
+            .map(str::to_string),
+    )
 }
 
 /// What the relocation half of `_commit_move_to_date` needs: the resolved weeks and days, the
@@ -472,9 +479,8 @@ pub fn relocate(
         Some((day, minute)) => (json!([day, minute]), "tuple"),
         None => (Value::Null, "NoneType"),
     };
-    if let Some(problem) =
-        grid::span_problem(input.to_day, start, start + length, &due_json, due_type)?
-    {
+    let end = end_of(start, length)?;
+    if let Some(problem) = grid::span_problem(input.to_day, start, end, &due_json, due_type)? {
         return say(problem);
     }
     let dest_blocks = if same_week {

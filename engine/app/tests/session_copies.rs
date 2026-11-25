@@ -666,10 +666,23 @@ fn the_preview_refuses_an_empty_or_invalid_choice() {
 
 #[test]
 fn the_preview_groups_checked_rows_by_week() {
-    let mut second = preview_row(0, true, "");
-    second["week_start"] = json!("2026-09-28");
-    second["group_id"] = json!("group-2");
-    let rows = json!([preview_row(2, true, ""), preview_row(3, false, ""), second]);
+    // A later week comes first and the rows of one group are split up, as `merge_preview_rows` sees
+    // them from the preview: weeks keep the order they were first seen in, one group's days merge
+    // (sorted, unchecked rows left out), and the ids carry the operation id without dashes and the
+    // group's place in that order.
+    let later = |day: i64| {
+        let mut row = preview_row(day, true, "");
+        row["week_start"] = json!("2026-09-28");
+        row["group_id"] = json!("group-2");
+        row
+    };
+    let rows = json!([
+        later(0),
+        preview_row(4, true, ""),
+        preview_row(3, false, ""),
+        later(1),
+        preview_row(2, true, ""),
+    ]);
     match preview_groups(&rows, "op-1").unwrap() {
         PreviewGroups::Say(words) => panic!("rows are checked, it said: {words}"),
         PreviewGroups::Groups { by_week } => {
@@ -677,16 +690,52 @@ fn the_preview_groups_checked_rows_by_week() {
                 .as_object()
                 .map(|weeks| weeks.keys().map(String::as_str).collect())
                 .unwrap_or_default();
-            assert_eq!(weeks, vec![WEEK, "2026-09-28"]);
+            assert_eq!(weeks, vec!["2026-09-28", WEEK]);
+            assert_eq!(by_week["2026-09-28"].as_array().map(Vec::len), Some(1));
             assert_eq!(by_week[WEEK].as_array().map(Vec::len), Some(1));
-            assert_eq!(by_week[WEEK][0]["days"], json!([2]));
-            assert!(
-                by_week[WEEK][0]["id"]
-                    .as_str()
-                    .unwrap_or("")
-                    .starts_with("b-stage3-")
-            );
+            assert_eq!(by_week["2026-09-28"][0]["id"], json!("b-stage3-op1-0"));
+            assert_eq!(by_week["2026-09-28"][0]["days"], json!([0, 1]));
+            assert_eq!(by_week[WEEK][0]["id"], json!("b-stage3-op1-1"));
+            assert_eq!(by_week[WEEK][0]["days"], json!([2, 4]));
         }
+    }
+}
+
+#[test]
+fn a_length_too_large_for_an_end_time_is_refused_not_wrapped() {
+    // The old Python handed start + length to the engine as a 64-bit integer, which refused it.
+    let block = json!({"id": "soccer", "kind": "fixed", "days": [3], "start": "00:01",
+                       "duration_min": i64::MAX});
+    let mut input = problem_input(Some(&block), 3, 4, None);
+    input.to_iso = "2026-09-25";
+    input.now_iso = "2026-09-21";
+    let error = date_problem(&input).unwrap_err();
+    assert_eq!(error.kind, flexweek_engine::ErrorKind::Overflow);
+
+    let source = json!({"blocks": [block], "revision": 4});
+    let input = relocation_input(&source, None, WEEK, WEEK, 3, 4, None);
+    let mut ids = vec!["made-1".to_string()].into_iter();
+    match relocate(&input, &mut ids) {
+        Err(error) => assert_eq!(error.kind, flexweek_engine::ErrorKind::Overflow),
+        Ok(_) => panic!("an end past the largest integer went ahead"),
+    }
+}
+
+#[test]
+fn a_null_or_empty_homework_record_falls_back_to_the_blocks_own_record() {
+    // `get(homework_id) or get(block_id)`: an empty record under the homework id does not stop the
+    // lookup, so the due time under the block's own id still refuses a late end.
+    let block = json!({"id": "soccer", "kind": "flexible", "days": [3], "start": "16:00",
+               "duration_min": 120, "assignment_id": "essay"});
+    for empty in [Value::Null, json!({})] {
+        let assignments =
+            json!({"essay": empty, "soccer": {"id": "soccer", "due": "2026-09-22T17:00"}});
+        let mut input = problem_input(Some(&block), 3, 1, Some(&assignments));
+        input.now_iso = "2026-09-21";
+        assert_eq!(
+            date_problem(&input).unwrap(),
+            Some("That ends after it's due, so it stayed where it was.".to_string())
+        );
     }
 }
 
