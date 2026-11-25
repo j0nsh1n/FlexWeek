@@ -427,7 +427,6 @@ def test_a_second_pairing_start_waits_until_the_first_offer_is_ready(
 
     # A second activation while the first start is pending starts nothing new.
     _click(qapp, window, row)
-    _click(qapp, window, _named(root, "pairNewCode")[0])
     _pump(qapp, 10)
     assert len(pending) == 1
     assert _panel(window).property("state").get("pairStarting") is True
@@ -435,6 +434,25 @@ def test_a_second_pairing_start_waits_until_the_first_offer_is_ready(
     # When the first offer lands, the code shows and both buttons come back.
     pending.pop()({"display_code": "1111 2222"}, None)  # type: ignore[operator]
     wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "1111 2222")
+    _pump(qapp)
+    assert _panel(window).property("state").get("pairStarting") is False
+    assert _named(root, "pairCopy")[0].property("enabled") is True
+    assert _named(root, "pairNewCode")[0].property("enabled") is True
+
+    # Restart from the shown dialog, then activate again while that start is pending:
+    # the second activation starts nothing new.
+    assert _named(root, "pairingDialog")[0].property("visible") is True
+    _click(qapp, window, _named(root, "pairNewCode")[0])
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is True)
+    assert len(pending) == 1
+    _panel(window).pair()
+    _pump(qapp, 10)
+    assert len(pending) == 1
+    assert _panel(window).property("state").get("pairStarting") is True
+
+    # When the second offer lands, it replaces the shown code and frees both buttons.
+    pending.pop()({"display_code": "3333 4444"}, None)  # type: ignore[operator]
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "3333 4444")
     _pump(qapp)
     assert _panel(window).property("state").get("pairStarting") is False
     assert _named(root, "pairCopy")[0].property("enabled") is True
