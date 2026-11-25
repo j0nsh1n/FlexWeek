@@ -26,3 +26,12 @@ def test_depot_runs_the_checks_the_developer_build_and_the_linux_release() -> No
     for path in (ROOT / ".depot/workflows").glob("*.y*ml"):
         runners = re.findall(r"(?m)^\s*runs-on: (\S+)", path.read_text(encoding="utf-8"))
         assert runners and all(runner.startswith("depot-") for runner in runners), (path.name, runners)
+
+
+def test_a_developer_build_release_skips_the_windows_installers() -> None:
+    """Each developer build is published as a release (tag dev, and dev-<sha> for the ones kept), which
+    used to start the Windows job only for its tag check to fail and leave a red mark on main. Version
+    tags (v1.5.1), hand runs and pull requests still build."""
+    job = WINDOWS.read_text(encoding="utf-8").split("\n  windows:\n", 1)[1].split("\n    steps:\n", 1)[0]
+    conditions = re.findall(r"(?m)^    if: (.+)$", job)
+    assert conditions == ["github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')"]
