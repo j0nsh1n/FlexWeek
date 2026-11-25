@@ -28,7 +28,7 @@ from desktop.tests.account.support import (
     shown,
     through_recovery,
 )
-from desktop.tests.material_support import qml, quick_of, visuals
+from desktop.tests.material_support import named, qml, quick_of, visuals
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
@@ -419,3 +419,26 @@ def test_every_study_hours_card_ends_above_the_footer(
     assert len(cards) == 7
     for card in cards:
         assert _scene_rect(card)[3] <= footer_top, card.objectName()
+
+
+def test_the_high_contrast_preset_label_has_room(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    """The High contrast swatch is wide enough for its whole label, so the setup scroller's
+    edge never clips it to 'ligh contrast'."""
+    window, bridge = _start(qapp, material_launches, "preset_room")
+    bridge.setupNext()
+    bridge.setupNext()
+    wait_until(qapp, lambda: bridge.setupStep == REMINDERS)
+    settle(qapp, window)
+    flow = _setup_flow(window)
+    swatches = named(flow, "setupPreset-High contrast")
+    assert len(swatches) == 1
+    labels = [
+        item
+        for item in visuals(flow)
+        if str(item.property("text") or "") == "High contrast"
+    ]
+    assert len(labels) == 1
+    assert labels[0].property("truncated") is False
+    assert float(swatches[0].property("width")) >= float(labels[0].property("implicitWidth"))

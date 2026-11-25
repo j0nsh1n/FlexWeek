@@ -15,7 +15,15 @@ Item {
     property string accessName: ""
     signal clicked()
 
-    implicitWidth: 64
+    FontMetrics {
+        id: labelFont
+        font.family: M3Font.family
+        font.pixelSize: M3Font.px(12)
+        font.weight: 500
+    }
+    // The label is centred on the disc and may run wider than it ("High contrast"): the swatch
+    // keeps room for the whole label so a scroller's edge never clips it.
+    implicitWidth: Math.max(64, Math.ceil(labelFont.advanceWidth(root.label)) + 8)
     implicitHeight: 48 + (label === "" ? 0 : M3Font.px(24))
     width: implicitWidth
     height: implicitHeight
