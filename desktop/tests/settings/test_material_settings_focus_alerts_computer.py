@@ -254,6 +254,10 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert _panel(window).property("state")["pairCopied"] is True
 
     # Tab cycles inside the pairing dialog without escaping to the background page.
+    # The body fits at this size, so it is not a Tab stop and the cycle skips it.
+    body = _named(root, "pairingScroll")[0]
+    assert float(body.property("contentHeight")) <= float(body.property("height"))
+    assert body.property("activeFocusOnTab") is False
     _named(root, "pairCopy")[0].forceActiveFocus()
     _pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Tab)
@@ -262,9 +266,6 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     QTest.keyClick(quick, Qt.Key.Key_Tab)
     _pump(qapp)
     assert scene.activeFocusItem().objectName() == "pairClose"
-    QTest.keyClick(quick, Qt.Key.Key_Tab)
-    _pump(qapp)
-    assert scene.activeFocusItem().objectName() == "pairingScroll"
     QTest.keyClick(quick, Qt.Key.Key_Tab)
     _pump(qapp)
     assert scene.activeFocusItem().objectName() == "pairCopy"

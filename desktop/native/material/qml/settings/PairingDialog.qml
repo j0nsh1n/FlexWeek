@@ -151,9 +151,9 @@ FocusScope {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
-            // Keyboard scroll stop: Tab lands here after Close so keyboard users can
-            // scroll the capped body to the steps and relay note with arrows or paging.
-            activeFocusOnTab: true
+            // Keyboard scroll stop, only when the body overflows: Tab lands here after
+            // Close so keyboard users can scroll the capped body with arrows or paging.
+            activeFocusOnTab: contentHeight > height
             Accessible.role: Accessible.Pane
             Accessible.name: "Pairing instructions"
             Accessible.description: "Use Up and Down or Page Up and Page Down to scroll"
