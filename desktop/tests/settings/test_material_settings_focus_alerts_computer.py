@@ -252,6 +252,9 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert scene.activeFocusItem().objectName() == "pairClose"
     QTest.keyClick(quick, Qt.Key.Key_Tab)
     _pump(qapp)
+    assert scene.activeFocusItem().objectName() == "pairingScroll"
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
     assert scene.activeFocusItem().objectName() == "pairCopy"
 
     # Start a new code via real UI button replaces the displayed code.
@@ -295,6 +298,29 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
                 assert part.property("visible") is True, (size, part_name)
                 where = (size, part_name, p_bottom, card_bottom)
                 assert p_top >= card_top and p_bottom <= card_bottom + 1, where
+
+        # At Larger text 1024x640 the capped body scrolls from the keyboard to the
+        # steps and relay note while Close stays pinned in the foot.
+        window.resize(1024, 640)
+        _pump(qapp, 15)
+        flick = _named(root, "pairingScroll")[0]
+        assert flick.property("activeFocusOnTab") is True
+        assert float(flick.property("contentHeight")) > float(flick.property("height"))
+        flick.forceActiveFocus()
+        _pump(qapp)
+        assert scene.activeFocusItem().objectName() == "pairingScroll"
+        top = float(flick.property("contentY"))
+        QTest.keyClick(quick, Qt.Key.Key_End)
+        _pump(qapp)
+        limit = float(flick.property("contentHeight")) - float(flick.property("height"))
+        assert float(flick.property("contentY")) == pytest.approx(limit)
+        assert float(flick.property("contentY")) > top
+        QTest.keyClick(quick, Qt.Key.Key_PageUp)
+        _pump(qapp)
+        assert float(flick.property("contentY")) < limit
+        QTest.keyClick(quick, Qt.Key.Key_Home)
+        _pump(qapp)
+        assert float(flick.property("contentY")) == 0
     finally:
         _panel(window).setTextSize("normal")
         window.setMinimumWidth(WINDOW_MIN_WIDTH)

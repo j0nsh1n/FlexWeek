@@ -136,6 +136,36 @@ FocusScope {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
+            // Keyboard scroll stop: Tab lands here after Close so keyboard users can
+            // scroll the capped body to the steps and relay note with arrows or paging.
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Pane
+            Accessible.name: "Pairing instructions"
+            Accessible.description: "Use Up and Down or Page Up and Page Down to scroll"
+            Keys.onPressed: (event) => {
+                var page = Math.max(40, dialogFlick.height - 40)
+                var limit = Math.max(0, dialogFlick.contentHeight - dialogFlick.height)
+                if (event.key === Qt.Key_Up) {
+                    dialogFlick.contentY = Math.max(0, dialogFlick.contentY - 48)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Down) {
+                    dialogFlick.contentY = Math.min(limit, dialogFlick.contentY + 48)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_PageUp) {
+                    dialogFlick.contentY = Math.max(0, dialogFlick.contentY - page)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_PageDown) {
+                    dialogFlick.contentY = Math.min(limit, dialogFlick.contentY + page)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Home) {
+                    dialogFlick.contentY = 0
+                    event.accepted = true
+                } else if (event.key === Qt.Key_End) {
+                    dialogFlick.contentY = limit
+                    event.accepted = true
+                }
+            }
+
             Column {
                 id: inner
                 width: dialogFlick.width
@@ -535,6 +565,15 @@ FocusScope {
                 accessName: "Close pairing dialog"
                 onClicked: root.dismissed()
             }
+        }
+
+        // Keyboard focus ring for the scrollable body, drawn outside it so it never scrolls away.
+        M3FocusRing {
+            anchors.fill: dialogFlick
+            anchors.margins: 2
+            target: dialogFlick
+            ring: pal.focusRing
+            ringRadius: 8
         }
     }
 }
