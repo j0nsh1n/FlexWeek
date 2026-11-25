@@ -289,6 +289,18 @@ def test_update_now_starts_the_download_and_shows_progress_and_problems(
     assert _one(root, "updateInstall").property("enabled") is True
     assert _one(root, "updateProgress").property("visible") is False
 
+    # Claude #8: retrying after an indeterminate bar stops leaves determinate fill anchored at x == 0.
+    _click(quick, _one(root, "updateInstall"))
+    pump(qapp, 10)
+    fill = _one(root, "updateProgressFill")
+    fill.setProperty("x", 48.0)
+    window._on_update_problem("Lost connection.")
+    pump(qapp, 10)
+    _click(quick, _one(root, "updateInstall"))
+    window._on_update_progress(50, 200)
+    pump(qapp, 10)
+    assert float(fill.property("x")) == 0.0
+
 
 def test_not_now_and_esc_close_the_update_and_remember_nothing(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch

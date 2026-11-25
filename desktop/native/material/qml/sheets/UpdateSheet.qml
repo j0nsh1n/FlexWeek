@@ -237,14 +237,22 @@ SheetFrame {
                         Accessible.name: "Downloading the update"
                         Rectangle {
                             id: fill
+                            objectName: "updateProgressFill"
                             height: parent.height
                             radius: 4
                             color: pal.primary
                             width: track.value >= 0 ? track.width * track.value : track.width * 0.3
                             x: 0
+                            Binding {
+                                when: track.value >= 0
+                                target: fill
+                                property: "x"
+                                value: 0
+                            }
                             SequentialAnimation on x {
                                 running: track.visible && track.value < 0 && !root.reduceMotion && Motion.pace > 0
                                 loops: Animation.Infinite
+                                onStopped: fill.x = 0
                                 NumberAnimation { from: 0; to: track.width * 0.7; duration: Motion.travel(900, false) }
                                 NumberAnimation { from: track.width * 0.7; to: 0; duration: Motion.travel(900, false) }
                             }

@@ -7,17 +7,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from desktop.native.material.theme import (
+    DAY_SIDE_DEFAULT,
+    DAY_SIDE_RANGE,
     DEFAULT_PRESET,
     FONT_FILES,
     INTER,
     PRESETS,
+    SETTINGS_NAV_DEFAULT,
+    SETTINGS_NAV_RANGE,
     SIX_CLASSES,
     STATUS_COLORS,
+    advanced_default,
     bar_for_category,
+    pack_material,
     paint_for_category,
+    read_day_side_width,
     read_material_choice,
+    read_settings_nav_width,
     scheme,
+    store_material,
     theme_object,
 )
 from desktop.native.tokens import mix
@@ -201,3 +212,82 @@ def test_material_fonts_are_inter_and_roboto_flex_is_gone() -> None:
 
     for font_file in FONTS_DIR.glob("RobotoFlex*"):
         assert not font_file.exists(), f"RobotoFlex file {font_file} was not removed"
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected_day", "expected_nav"),
+    [
+        (None, DAY_SIDE_DEFAULT, SETTINGS_NAV_DEFAULT),
+        ({}, DAY_SIDE_DEFAULT, SETTINGS_NAV_DEFAULT),
+        ({"surface": "material", "material": {"preset": "Slate"}}, DAY_SIDE_DEFAULT, SETTINGS_NAV_DEFAULT),
+        (
+            {"material": {"daySideWidth": DAY_SIDE_RANGE[0], "settingsNavWidth": SETTINGS_NAV_RANGE[0]}},
+            DAY_SIDE_RANGE[0],
+            SETTINGS_NAV_RANGE[0],
+        ),
+        (
+            {"material": {"daySideWidth": DAY_SIDE_RANGE[1], "settingsNavWidth": SETTINGS_NAV_RANGE[1]}},
+            DAY_SIDE_RANGE[1],
+            SETTINGS_NAV_RANGE[1],
+        ),
+        (
+            {
+                "material": {
+                    "daySideWidth": DAY_SIDE_RANGE[0] - 1,
+                    "settingsNavWidth": SETTINGS_NAV_RANGE[1] + 1,
+                }
+            },
+            DAY_SIDE_DEFAULT,
+            SETTINGS_NAV_DEFAULT,
+        ),
+        (
+            {"material": {"daySideWidth": True, "settingsNavWidth": False}},
+            DAY_SIDE_DEFAULT,
+            SETTINGS_NAV_DEFAULT,
+        ),
+        (
+            {"material": {"daySideWidth": "340", "settingsNavWidth": 210.5}},
+            DAY_SIDE_DEFAULT,
+            SETTINGS_NAV_DEFAULT,
+        ),
+    ],
+)
+def test_saved_panel_widths_fall_back_to_defaults_on_missing_or_invalid_values(
+    stored: object, expected_day: int, expected_nav: int
+) -> None:
+    assert read_day_side_width(stored) == expected_day
+    assert read_settings_nav_width(stored) == expected_nav
+
+
+def test_pack_and_store_material_preserve_valid_panel_widths_and_drop_out_of_range(
+    tmp_path: Path,
+) -> None:
+    import json
+
+    choice = read_material_choice(None)
+    packed = pack_material(
+        choice,
+        advanced_default(),
+        True,
+        False,
+        [],
+        day_side_width=360,
+        settings_nav_width=260,
+    )
+    look = tmp_path / "look.json"
+    store_material(look, packed)
+    loaded = json.loads(look.read_text(encoding="utf-8"))
+    assert read_day_side_width(loaded) == 360
+    assert read_settings_nav_width(loaded) == 260
+
+    bad = pack_material(
+        choice,
+        advanced_default(),
+        True,
+        False,
+        [],
+        day_side_width=10,
+        settings_nav_width=9999,
+    )
+    assert "daySideWidth" not in bad
+    assert "settingsNavWidth" not in bad
