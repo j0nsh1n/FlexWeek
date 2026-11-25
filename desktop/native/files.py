@@ -7,29 +7,28 @@ from typing import cast
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-from backend.models import AssignmentContent, TimeBlock
 from desktop.native.wire import plain, restored
 
 EXPORT_FORMAT = "flexweek-week"
 DAY_FORMAT = "flexweek-day"
 EXPORT_VERSION = 2
+# The homework fields a file carries: the engine's homework save has these and the revision, which a
+# file never holds.
+_CONTENT_FIELDS = [name for name in flexweek_engine.homework_fields() if name != "revision"]
 
 
 def assignment_body(item: dict) -> dict:
-    fields = list(AssignmentContent.model_fields)
-    body = AssignmentContent.model_validate(
-        restored(flexweek_engine.files_assignment_input(plain(item), fields))
-    ).model_dump(mode="json")
-    return body
+    kept = flexweek_engine.files_assignment_input(plain(item), _CONTENT_FIELDS)
+    return cast(dict, restored(flexweek_engine.checked_homework_content(kept)))
 
 
 def exportable_block(block: dict, assignments: dict) -> dict:
-    copy = json.loads(flexweek_engine.files_export_input(json.dumps(block), json.dumps(assignments)))
-    return TimeBlock.model_validate(copy).model_dump(mode="json")
+    copy = flexweek_engine.files_export_input(json.dumps(block), json.dumps(assignments))
+    return cast(dict, restored(flexweek_engine.checked_block(copy)))
 
 
 def _block_models(items: list[dict]) -> list[dict]:
-    return [TimeBlock.model_validate(item).model_dump(mode="json") for item in items]
+    return [cast(dict, restored(flexweek_engine.checked_block(plain(item)))) for item in items]
 
 
 def _bodies(ids: str, failure: Exception | None, assignments: dict) -> list[dict]:
@@ -84,12 +83,22 @@ def _read_import(raw: str) -> tuple[bool, bool, str | None]:
         return False, False, None
 
 
+def _readable(items: list[dict]) -> list[dict]:
+    """Text in a file has to be real Unicode: a lone surrogate can be neither saved nor shown, and
+    pydantic refused it here before the engine's checks took over."""
+    try:
+        json.dumps(items, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError("The file has text that can't be read.") from None
+    return items
+
+
 def _checked_import(blocks: str, homework: str) -> tuple[list[dict], list[dict], str | None]:
-    """The models' version of the file's blocks and homework, or the first complaint they make."""
+    """The checked version of the file's blocks and homework, or the first complaint the checks make."""
     try:
         return (
-            _block_models(_read_list(blocks)),
-            [assignment_body(item) for item in _read_list(homework)],
+            _readable(_block_models(_read_list(blocks))),
+            _readable([assignment_body(item) for item in _read_list(homework)]),
             None,
         )
     except Exception as error:

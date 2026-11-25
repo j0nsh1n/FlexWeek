@@ -1,7 +1,7 @@
 //! Import and export of week and day files from `desktop/native/files.py`.
 //!
-//! The pydantic models stay in Python (`TimeBlock`, `AssignmentContent`); the Python wrappers run
-//! them at the points the original did. What is here is everything around them.
+//! The checks of a file's blocks and homework are the engine's (`checked_block`,
+//! `checked_homework_content`), which the Python wrappers run at the points the original did.
 
 use serde_json::{Value, json};
 
