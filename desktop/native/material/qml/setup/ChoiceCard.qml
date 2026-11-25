@@ -18,7 +18,7 @@ Item {
     signal chosen()
 
     implicitWidth: 260
-    implicitHeight: Math.max(72, words.implicitHeight + 28)
+    implicitHeight: Math.max(68, words.implicitHeight + 24)
 
     M3Palette { id: palette; theme: root.theme }
     property bool keyDown: false

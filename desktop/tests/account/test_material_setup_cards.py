@@ -14,6 +14,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QObject, QPointF
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.setup_steps import HOMEWORK, REMINDERS, WEEK
@@ -27,6 +28,7 @@ from desktop.tests.account.support import (
     shown,
     through_recovery,
 )
+from desktop.tests.material_support import qml, quick_of, visuals
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
@@ -384,3 +386,36 @@ def test_run_setup_again_on_a_week_with_sports_opens_the_detailed_controls(
     wait_until(qapp, lambda: bridge.phase == "setup")
     assert _picked(bridge.schoolCards) == ["custom"]
     assert bridge.power is True
+
+
+def _scene_rect(item: QObject) -> tuple:
+    top_left = item.mapToScene(QPointF(0.0, 0.0))
+    bottom_right = item.mapToScene(
+        QPointF(float(item.property("width")), float(item.property("height")))
+    )
+    return (top_left.x(), top_left.y(), bottom_right.x(), bottom_right.y())
+
+
+def _setup_flow(window) -> QObject:
+    return qml(quick_of(window).root, "setupFlow")
+
+
+def test_every_study_hours_card_ends_above_the_footer(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    """At 1280x800 the Study hours step shows all its cards above the pinned footer, as the
+    School hours step does, instead of cutting the last row off at it."""
+    window, bridge = _start(qapp, material_launches, "study_fits")
+    bridge.setupNext()
+    wait_until(qapp, lambda: bridge.setupStep == HOMEWORK)
+    settle(qapp, window)
+    flow = _setup_flow(window)
+    footer_top = _scene_rect(qml(flow, "setupFooterBar"))[1]
+    cards = [
+        item
+        for item in visuals(flow)
+        if str(item.objectName()).startswith(("setupPlanning-", "setupStudy-"))
+    ]
+    assert len(cards) == 7
+    for card in cards:
+        assert _scene_rect(card)[3] <= footer_top, card.objectName()

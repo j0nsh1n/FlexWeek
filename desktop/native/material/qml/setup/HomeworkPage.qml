@@ -14,7 +14,7 @@ Column {
     property bool reduceMotion: false
     property bool highContrast: false
     property bool phone: false
-    spacing: 12
+    spacing: 8
 
     M3Palette { id: m3Palette; theme: page.theme }
 
@@ -42,7 +42,7 @@ Column {
         width: parent.width
         columns: width >= 440 ? 2 : 1
         columnSpacing: 12
-        rowSpacing: 12
+        rowSpacing: 8
         Repeater {
             model: bridge ? bridge.studyCards : []
             ChoiceCard {
