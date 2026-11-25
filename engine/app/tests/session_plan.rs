@@ -1555,7 +1555,10 @@ fn share_minutes_must_be_whole_numbers_in_range_or_missing() {
         json!({"assignment_id": "sheet", "this_week_min": 20, "left_min": 1_000_001}),
     ];
     for share in wrong {
-        assert!(answer_for(&trace, &[share.clone()], now).is_err(), "{share}");
+        assert!(
+            answer_for(&trace, std::slice::from_ref(&share), now).is_err(),
+            "{share}"
+        );
     }
     // Missing and null minutes stay zero: 30 placed, nothing left.
     let loose = [
@@ -1574,4 +1577,41 @@ fn share_minutes_must_be_whole_numbers_in_range_or_missing() {
     let top = json!({"assignment_id": "sheet", "this_week_min": 0, "left_min": 1_000_000});
     let answer = answer_for(&trace, &[top], now).unwrap();
     assert_eq!(answer.trace["shares"][0]["left_min"], 999_970);
+}
+
+#[test]
+fn an_impossible_clock_is_refused_even_when_plan_is_busy_or_blocked() {
+    let assignments = Map::new();
+    let blocks: Vec<Value> = Vec::new();
+    let none: Vec<String> = Vec::new();
+    let bad = clock("2026-09-24", 24, 0);
+    for (planning, conflict, pending_save) in [
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+    ] {
+        let mut input = base_plan_input(WEEK, &blocks, &assignments, &blocks, &none, &none, bad);
+        input.planning = planning;
+        input.conflict = conflict;
+        input.pending_save = pending_save;
+        assert!(
+            prepare_plan(input).is_err(),
+            "planning {planning} conflict {conflict} saving {pending_save}"
+        );
+    }
+    // A real clock still gets the busy answer.
+    let mut input = base_plan_input(
+        WEEK,
+        &blocks,
+        &assignments,
+        &blocks,
+        &none,
+        &none,
+        clock("2026-09-24", 23, 59),
+    );
+    input.planning = true;
+    assert!(matches!(
+        prepare_plan(input).unwrap(),
+        PlanPreparation::Blocked { .. }
+    ));
 }

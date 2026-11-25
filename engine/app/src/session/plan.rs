@@ -303,7 +303,9 @@ fn placed_rows(trace: &Value) -> Result<&[Value], String> {
         if let Some(minutes) = opt_int(row, "duration_min")?
             && !(0..=WEEK_MINUTES).contains(&minutes)
         {
-            return Err(format!("duration_min must be 0 to {WEEK_MINUTES}, got {minutes}"));
+            return Err(format!(
+                "duration_min must be 0 to {WEEK_MINUTES}, got {minutes}"
+            ));
         }
         first_day_of(row)?;
     }
@@ -445,6 +447,7 @@ pub fn apply_auto_split(
 
 /// Prepare a Plan, Replan, Place now or Find a new time request.
 pub fn prepare_plan(input: PlanInput<'_>) -> Result<PlanPreparation, String> {
+    input.clock.check()?;
     if input.planning {
         return Ok(PlanPreparation::Blocked {
             message: PLANNING_BUSY.to_string(),
@@ -464,7 +467,6 @@ pub fn prepare_plan(input: PlanInput<'_>) -> Result<PlanPreparation, String> {
         });
     }
 
-    input.clock.check()?;
     let start = planning::plan_start_at(
         input.week_start,
         input.clock.today_iso,
