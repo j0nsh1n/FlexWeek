@@ -173,7 +173,8 @@ fn homework_the_account_already_has_is_not_made_again() {
     file["assignments"] = json!([{"id": "hw", "title": "Essay", "due": "2026-10-01"}]);
     let held = json!([]);
     let has = json!({"hw": {"id": "hw", "title": "Essay", "due": "2026-10-01"}});
-    let (blocks, create) = applied(import_week_decision(&file, &context(&held, &has, None)).unwrap());
+    let (blocks, create) =
+        applied(import_week_decision(&file, &context(&held, &has, None)).unwrap());
     assert!(create.is_empty());
     assert_eq!(blocks[0]["assignment_id"], "hw");
 }
@@ -223,7 +224,10 @@ fn export_and_import_wait_for_the_last_change_to_be_saved() {
 
 #[test]
 fn operation_keys_keep_their_shapes() {
-    assert_eq!(create_restore_key(7, "before exams"), "create-restore|7|before exams");
+    assert_eq!(
+        create_restore_key(7, "before exams"),
+        "create-restore|7|before exams"
+    );
     assert_eq!(restore_key(7, "p1"), "restore|7|p1");
     assert_eq!(import_key(7, &json!("tok")), "import|7|tok");
     assert_eq!(import_key(7, &Value::Null), "import|7|None");

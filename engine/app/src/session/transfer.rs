@@ -86,7 +86,10 @@ pub enum ImportDecision {
     /// Nothing is imported; these are the words to say.
     Say(String),
     /// Put these blocks in the week and add this homework (each already at revision 0).
-    Apply { blocks: Vec<Value>, create: Vec<Value> },
+    Apply {
+        blocks: Vec<Value>,
+        create: Vec<Value>,
+    },
 }
 
 impl ImportDecision {
