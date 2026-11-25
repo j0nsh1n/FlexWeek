@@ -2,8 +2,8 @@
 
 Status: implemented. This is the historical Phase 5 migration contract, proposed on 2026-09-08. The
 browser frontend and `backend/app.py` have since been removed; `backend/weeks.py` is now an engine adapter.
-For the current dated-week rules, including weeks shown from a day other than Monday, see `spec.md` and
-`docs/engine/contract.md`.
+For the current dated-week rules, including weeks shown from a day other than Monday, see `spec.md` (the week
+start and "a week on screen that starts on another day").
 
 Backend and frontend are built against this file in parallel. Neither side may
 change it alone.

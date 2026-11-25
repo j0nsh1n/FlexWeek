@@ -17,7 +17,7 @@
   `flexweek_engine.NativeCore`; the window still owns Qt callbacks, kept-session files, setup answers and week loading.
   Blocks, homework (#168) and study/protected hours (#178) are checked by the engine. The hours refusal is "Check the
   days and times of your study hours and protected time."
-- PR #181 is **in progress**, not merged on `origin/main`. Branch `feat/p4-history-reminders-transfer` (`b96d203e`)
+- PR #181 is **in progress**, not merged on `origin/main`. Branch `feat/p4-history-reminders-transfer` (head `f014162d` on 2026-11-25)
   adds undo-step rules in `engine/engine/src/desk/history.rs`, reminder-card and alarm-queue decisions, focus-timer
   decisions, the setup queue and preference bodies, and restore/import/export decisions in Rust. The window retains Qt,
   file and request work.
@@ -59,8 +59,7 @@ engine/service/src/desk_requests.rs  the window's requests by method and /api/ p
 desktop/main.py         launcher: opens the saved data, phone sync if paired, then the native window
 desktop/native/window.py     chrome, pages, dialogs, autosave, updater wiring
 desktop/native/controller.py session: saves, solve, focus, alarms, reminders; now_ms is the clock
-desktop/native/settings.py   Widgets Settings (Look preview side by side from 1000 px)
-desktop/native/layouts/      the Widgets designs; registry.py builds the dialog
+desktop/native/settings.py   the alarm dialog (the Widgets Settings and layouts/ were removed in 1.5.0)
 desktop/native/material/     Material 3 shell: bridges (Python) and qml/ (views, week, hours/HoursPane, month)
 desktop/native/look.py       packs, presets, palettes, the one stylesheet
 desktop/native/version.py    VERSION, kept equal to the newest CHANGELOG heading
@@ -68,7 +67,8 @@ desktop/{build_*,package_*}  Linux and Windows builds; packaging/ holds AppImage
 android/                the Android phone app (Kotlin + Compose)
 desktop/tests/<area>/, backend/tests/  the Python suites by area (areas.toml in tools/fwtest); light_app.py, waiting.py
 conftest.py             root: every test runs on backend/tests/fake_clock.CLOCK
-.github/workflows/      verify, codeql, release packages, dev-build
+.depot/workflows/       Depot CI: verify, dev-build, release-linux
+.github/workflows/      GitHub Actions: codeql, release-windows (Windows installers only)
 ```
 
 ## Domain Model
@@ -108,7 +108,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-25: local branch `docs/2026-11-25-refresh` updates the README, desktop and architecture guides, Material and
+- 2026-11-25: branch `docs/2026-11-25-refresh` (PR #183) updates the README, desktop and architecture guides, Material and
   Android notes, release checklist, engine maps and fwtest CI table. It records Depot CI, current P4 and the in-progress
   #181, plus the icon, feedback form, kept-sign-in and pairing fixes. Older migration contracts are labelled historical;
   release notes were not changed. No builds or tests were run for this docs-only pass. Next: coordinator review and
