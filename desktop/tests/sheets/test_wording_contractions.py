@@ -133,7 +133,14 @@ def test_user_facing_copy_uses_contractions() -> None:
 
 
 def test_the_controllers_notices_use_contractions() -> None:
-    source = (NATIVE / "controller.py").read_text(encoding="utf-8")
+    # The session's notices are moving into the engine (2.0.0, P4); each is checked wherever it is now.
+    engine = NATIVE.parents[1] / "engine"
+    places = [
+        NATIVE / "controller.py",
+        engine / "engine/src/desk/history.rs",
+        *sorted((engine / "app/src/session").glob("*.rs")),
+    ]
+    source = "\n".join(path.read_text(encoding="utf-8") for path in places)
     for wanted in (
         "There's nothing to copy from last week yet.",
         "That's outside the hours FlexWeek plans in, so it stayed where it was.",
