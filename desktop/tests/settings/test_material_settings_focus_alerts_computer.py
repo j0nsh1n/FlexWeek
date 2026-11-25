@@ -267,8 +267,8 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
             p_right = part.mapToScene(QPointF(part.width(), 0)).x()
             assert p_left >= s_left - 1 and p_right <= s_right + 1, part_name
 
-        # When Larger text makes the card taller than the window, the card is capped and its middle scrolls, but
-        # the foot with "Waiting for your phone…" and Close stays inside the card and the window.
+        # When Larger text makes the card taller than the window, the card is capped and its middle
+        # scrolls, but the foot with "Waiting for your phone…" and Close stays inside the card and window.
         for size in ((320, 640), (1024, 640)):
             window.resize(*size)
             _pump(qapp, 15)
@@ -281,7 +281,8 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
                 p_top = part.mapToScene(QPointF(0, 0)).y()
                 p_bottom = part.mapToScene(QPointF(0, part.height())).y()
                 assert part.property("visible") is True, (size, part_name)
-                assert p_top >= card_top and p_bottom <= card_bottom + 1, (size, part_name, p_bottom, card_bottom)
+                where = (size, part_name, p_bottom, card_bottom)
+                assert p_top >= card_top and p_bottom <= card_bottom + 1, where
     finally:
         _panel(window).setTextSize("normal")
         window.setMinimumWidth(WINDOW_MIN_WIDTH)

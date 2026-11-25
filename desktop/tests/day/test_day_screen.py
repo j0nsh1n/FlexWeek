@@ -263,3 +263,39 @@ def test_mini_month_edge_columns_stay_clickable_at_smallest_sidebar_width_and_la
     bridge.settingsBridge.setTextSize("normal")
     bridge.setDaySideWidth(312)
     pump(qapp)
+
+
+def _contrast(ink: str, paper: str) -> float:
+    def lum(colour: str) -> float:
+        text = colour.lstrip("#")[-6:]
+        lin = []
+        for i in (0, 2, 4):
+            value = int(text[i : i + 2], 16) / 255
+            lin.append(value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4)
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+    lighter, darker = sorted((lum(ink), lum(paper)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def test_the_now_label_reads_at_4_5_to_1_on_the_now_card(qapp: QApplication, window: NativeWindow) -> None:
+    """The small bold "NOW" was drawn in primary on the primary container: 3.80:1 light, 3.98:1 dark.
+    It is drawn in the card's own text colour, which reaches 4.5:1 in every look, light and dark,
+    standard and high contrast."""
+    from desktop.native.material.theme import CONTRASTS, MODES, ONE_MODE, PRESETS, scheme
+
+    root = show_material(qapp, window)
+    bridge_of(window).showPage("day")
+    pump(qapp)
+    by_name = {str(item.objectName()): item for item in visuals(root) if item.objectName()}
+    label, title, card = by_name["dayNowLabel"], by_name["dayNowTitle"], by_name["dayNow"]
+    assert label.property("color").name() == title.property("color").name()
+    shown = _contrast(label.property("color").name(), card.property("color").name())
+    assert shown >= 4.5, shown
+
+    for preset in PRESETS:
+        for mode in (ONE_MODE[preset],) if preset in ONE_MODE else MODES:
+            for contrast in CONTRASTS:
+                colours = scheme(preset, mode, contrast)
+                ratio = _contrast(colours["onPrimaryContainer"], colours["primaryContainer"])
+                assert ratio >= 4.5, (preset, mode, contrast, round(ratio, 2))

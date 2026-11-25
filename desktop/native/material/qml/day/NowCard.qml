@@ -144,7 +144,7 @@ Column {
                     Text {
                         objectName: root.wideHero ? root.scope + "NowLabel" : ""
                         text: "NOW"
-                        color: palette.primary
+                        color: palette.inkPrimaryContainer
                         font.family: M3Font.family
                         font.pixelSize: M3Font.px(11)
                         font.weight: 700
@@ -223,7 +223,7 @@ Column {
                     Text {
                         objectName: !root.wideHero ? root.scope + "NowLabel" : ""
                         text: "NOW"
-                        color: palette.primary
+                        color: palette.inkPrimaryContainer
                         font.family: M3Font.family
                         font.pixelSize: M3Font.px(11)
                         font.weight: 700
