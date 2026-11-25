@@ -188,6 +188,6 @@ def test_the_drawer_and_the_notice_count_the_same_homework_without_a_time(
     wait_until(qapp, lambda: _snack(window).startswith("Placed") and not session.busy)
     settled(qapp, window)
     pump(qapp)
-    assert _snack(window) == "Placed 1 of 2 sessions"
+    assert _snack(window) == "Placed 1 of 2"
     assert qml(root, "homeworkCount").property("text") == "1"
     assert qml(root, "homeworkEmpty").property("visible") is False

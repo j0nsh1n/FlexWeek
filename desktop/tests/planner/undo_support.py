@@ -54,7 +54,7 @@ def undo_still_offered(window: NativeWindow) -> tuple[bool, str, bool, str]:
     return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.accessibleName()
 
 
-MATERIAL_PLACED = "Placed 1 of 1 sessions"
+MATERIAL_PLACED = "Placed 1 of 1"
 
 
 def planned_in_material(qapp: QApplication, window: NativeWindow) -> QObject:

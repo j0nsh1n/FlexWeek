@@ -75,7 +75,7 @@ def test_three_homework_with_minutes_left_name_two_and_count_one(
     wait_until(qapp, lambda: not window.session.busy and _snack(window).startswith("Placed"))
     _pump(qapp)
     assert _snack(window) == (
-        "Placed 3 of 3 sessions. Art still has 10 min with no time. "
+        "Placed 3 of 3. Art still has 10 min with no time. "
         "Biology still has 10 min with no time. And 1 more."
     )
     assert window.session.plan_remainders == [("Art", 10), ("Biology", 10), ("Chemistry", 10)]
@@ -120,7 +120,7 @@ def test_a_focus_timer_shortens_what_is_still_needed(qapp: QApplication, window:
     session.solve()
     wait_until(qapp, lambda: not session.busy and _snack(window).startswith("Placed"))
     _pump(qapp)
-    assert _snack(window) == "Placed 1 of 1 sessions. Timer homework still has 5 min with no time."
+    assert _snack(window) == "Placed 1 of 1. Timer homework still has 5 min with no time."
     placed = [item for item in session.blocks if item.get("assignment_id") == "timer"]
     assert [item["duration_min"] for item in placed] == [30]
 

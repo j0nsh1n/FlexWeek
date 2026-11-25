@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 
 const TOKEN: &str = "abcdefghijklmnopqrstuvwxyz012345";
 const WEEK: &str = "2026-10-19";
-const WEEK_OVER: &str = "That week is over. Pass a date in this week or a later one.";
+const WEEK_OVER: &str = "This week is over, so nothing was planned. Plan this week or a later one.";
 
 struct World {
     data_arg: String,

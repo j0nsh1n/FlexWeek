@@ -693,7 +693,7 @@ class AccountBridge(QObject):
         else:
             said = "Sent. This computer shows no notifications, so reminders appear in FlexWeek instead."
         if opened:
-            said += " Your Spotify link is set. FlexWeek just opened it."
+            said += " FlexWeek asked Spotify to open your link."
         self._test_result = said
         self.changed.emit()
 

@@ -153,7 +153,7 @@ class UpdateViewModelTest {
         val vm = viewModel(FakeSource(), FakeInstaller(), FakePrefs())
         vm.checkNow()
         assertTrue("manual offline check was ${vm.state.value}", vm.state.value is UpdateState.Failed)
-        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("Couldn't check"))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("couldn't check", ignoreCase = true))
     }
 
     @Test fun checkNowFallsBackToTheReleasePageWhenTheApiRefuses() = main {

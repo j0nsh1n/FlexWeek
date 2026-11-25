@@ -61,7 +61,7 @@ def test_plan_places_the_queue_and_undo_puts_it_back(qapp, window) -> None:
     _click(window, plan)
     wait_until(qapp, lambda: _snack(window).startswith("Placed") and not window.session.busy)
 
-    assert _snack(window) == "Placed 2 of 2 sessions"
+    assert _snack(window) == "Placed 2 of 2"
     assert _qml(root, "homeworkCount").property("text") == "0"
     assert _qml(root, "homeworkEmptyText").property("text") == "Everything has a time."
     assert _qml(root, "homeworkEmpty").property("visible") is True
@@ -682,11 +682,11 @@ def test_tabbing_through_homework_cards_keeps_the_focused_card_in_view(qapp, win
         # essay have no session, so the notice names them and the drawer lists them.
         (
             5,
-            "Placed 2 of 2 sessions. History essay still has 10 min with no time.",
+            "Placed 2 of 2. History essay still has 10 min with no time.",
             "History essay · 10 min with no time",
         ),
         # 60 - 15 = 45: Plan places all 45 and the 30. Nothing is missing, and the notice says so.
-        (15, "Placed 2 of 2 sessions", "Everything has a time."),
+        (15, "Placed 2 of 2", "Everything has a time."),
     ],
 )
 def test_the_plan_notice_counts_what_the_plan_left(qapp, window, minutes: int, said: str, empty: str) -> None:
