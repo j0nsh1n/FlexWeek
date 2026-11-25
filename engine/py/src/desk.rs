@@ -151,6 +151,116 @@ fn history_mark_stale(steps: &Bound<'_, PyAny>, week_start: &Bound<'_, PyAny>) -
     })
 }
 
+fn object_of(text: &str) -> PyResult<Map<String, Value>> {
+    match parse(text)? {
+        Value::Object(fields) => Ok(fields),
+        _ => Err(PyTypeError::new_err("expected a JSON object")),
+    }
+}
+
+fn array_of(text: &str) -> PyResult<Vec<Value>> {
+    match parse(text)? {
+        Value::Array(items) => Ok(items),
+        _ => Err(PyTypeError::new_err("expected a JSON list")),
+    }
+}
+
+/// What Undo (or Redo) says when its next step was made stale by a change saved elsewhere.
+#[pyfunction]
+fn history_stale_words(redo: bool) -> PyResult<&'static str> {
+    guard(|| Ok(history::stale_words(redo)))
+}
+
+/// Why Undo (or Redo) of the step (JSON text) is refused with `open_week` on screen, or None.
+#[pyfunction]
+fn history_travel_refusal(
+    step: &str,
+    open_week: &str,
+    redo: bool,
+) -> PyResult<Option<&'static str>> {
+    guard(|| {
+        Ok(history::travel_refusal(
+            &Value::Object(object_of(step)?),
+            open_week,
+            redo,
+        ))
+    })
+}
+
+/// The revision (JSON text: a number, or a list for a week from another day) a week written with
+/// `deleted` homework will have once the server has taken their blocks out.
+#[pyfunction]
+fn history_revision_after_deletes(
+    stored_blocks: &str,
+    revision: &str,
+    deleted: Vec<String>,
+) -> PyResult<String> {
+    guard(|| {
+        let blocks = array_of(stored_blocks)?;
+        history::revision_after_deletes(&blocks, &parse(revision)?, &deleted)
+            .map(|revision| revision.to_string())
+            .map_err(raise)
+    })
+}
+
+/// The step (JSON text) once `homework` is deleted, or None when nothing else is left in it.
+#[pyfunction]
+fn history_step_without_homework(
+    step: &str,
+    homework: &str,
+    revisions: &str,
+) -> PyResult<Option<String>> {
+    guard(|| {
+        let step = Value::Object(object_of(step)?);
+        let cleaned = history::step_without_homework(&step, homework, &object_of(revisions)?);
+        Ok(cleaned.map(|step| step.to_string()))
+    })
+}
+
+/// A failed save's request (JSON text) once `homework` is deleted.
+#[pyfunction]
+fn history_request_without_homework(
+    request: &str,
+    draft: &str,
+    homework: &str,
+    revisions: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let (request, draft) = (
+            Value::Object(object_of(request)?),
+            Value::Object(object_of(draft)?),
+        );
+        history::request_without_homework(&request, &draft, homework, &object_of(revisions)?)
+            .map(|request| request.to_string())
+            .map_err(raise)
+    })
+}
+
+/// The step's weeks (JSON text) with the stored weeks a save of a week from another day changed.
+#[pyfunction]
+fn history_keep_stored_weeks(step: &str, before: &str, after: &str) -> PyResult<String> {
+    guard(|| {
+        let weeks = history::keep_stored_weeks(
+            &Value::Object(object_of(step)?),
+            &array_of(before)?,
+            &array_of(after)?,
+        );
+        Ok(Value::Array(weeks).to_string())
+    })
+}
+
+/// The step's weeks (JSON text) with the revisions a save's reply gave them.
+#[pyfunction]
+fn history_keep_step_revisions(step: &str, data: &str) -> PyResult<String> {
+    guard(|| {
+        let weeks = history::keep_step_revisions(
+            &Value::Object(object_of(step)?),
+            &Value::Object(object_of(data)?),
+        );
+        Ok(Value::Array(weeks).to_string())
+    })
+}
+
 #[pyfunction]
 fn week_set_clock_24h(on: bool) -> PyResult<()> {
     guard(|| {
@@ -917,6 +1027,13 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         history_push,
         history_join,
         history_mark_stale,
+        history_stale_words,
+        history_travel_refusal,
+        history_revision_after_deletes,
+        history_step_without_homework,
+        history_request_without_homework,
+        history_keep_stored_weeks,
+        history_keep_step_revisions,
         week_set_clock_24h,
         week_minute_of,
         week_clock_text,
