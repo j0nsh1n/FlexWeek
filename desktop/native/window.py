@@ -565,7 +565,8 @@ class NativeWindow(QObject):
         if page is None:
             return False
         bridge = page.bridge.account
-        if name == "authPage":
+        if name == "authPage" and bridge.phase != "opening":
+            # Opening: the kept session is still being tried; sign-in follows only if it fails.
             bridge.show_sign_in(clear=True)
         elif name == "recoveryPage":
             bridge.show_recovery(codes or [])

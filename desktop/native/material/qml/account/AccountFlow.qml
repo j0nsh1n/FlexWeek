@@ -26,7 +26,10 @@ FocusScope {
         id: loader
         anchors.fill: parent
         focus: true
-        sourceComponent: root.phase === "setup" ? setupFlow : (root.phase === "recovery" ? recoveryCard : authCard)
+        // Opening: a kept session is being tried, so only the background shows (no card to flash).
+        sourceComponent: root.phase === "opening" ? null
+                         : root.phase === "setup" ? setupFlow
+                         : root.phase === "recovery" ? recoveryCard : authCard
         onLoaded: item.forceActiveFocus()
     }
     Component {

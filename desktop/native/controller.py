@@ -362,6 +362,8 @@ class NativeSession(QObject):
     week_changed = Signal()
     busy_changed = Signal(bool)
     status = Signal(str)
+    # The session kept at the last sign-in no longer works: the launch goes to sign-in.
+    resume_failed = Signal()
     # Each save's outcome, for words that must wait for it: (stored, what the status line says).
     save_finished = Signal(bool, str)
     # Toast words for a hand move that has just been saved, including one that waited out a save.
@@ -391,6 +393,7 @@ class NativeSession(QObject):
         # card at the last sign-in. A session resumed at launch was kept, so it stays kept.
         self.kept = kept
         self.keep_signed_in = True
+        self._resuming = False
         self.week_start = current_week_start()
         self.blocks: list[dict] = []
         self.revision = 0
@@ -1047,6 +1050,7 @@ class NativeSession(QObject):
         if token is None or self.account is not None or self.busy:
             return
         self._start_flow({"cmd": "resume", "token": token})
+        self._resuming = True
 
     # Signing in, up and out, and the account's own changes, run in the session
     # (engine/app/src/session/account.rs): it sends the request,
@@ -1061,6 +1065,7 @@ class NativeSession(QObject):
     def _told(self, event: dict) -> None:
         kind = event["kind"]
         if kind == "signed_in":
+            self._resuming = False
             data = event["account"]
             self._drop_other_setup(data["id"])
             self._went_idle()
@@ -1083,6 +1088,10 @@ class NativeSession(QObject):
         elif kind == "auth_failed":
             if event["forget"]:
                 self._forget_session()
+            if self._resuming:
+                # Before the words, so the sign-in card is there to show them.
+                self._resuming = False
+                self.resume_failed.emit()
             if event["idle"]:
                 self._went_idle()
                 self.status.emit(self.message)
