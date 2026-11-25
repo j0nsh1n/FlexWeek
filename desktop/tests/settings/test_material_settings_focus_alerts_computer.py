@@ -199,7 +199,19 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     """Findings 3, 5, 6, 7: UI-driven Copy, Start a new code, Close, Escape, focus cycle/restore,
     service loss clearing stale code, pending-callback cancellation, and 320 px layout fit."""
     status: dict | None = {}
-    codes = iter(["1234 5678", "9012 3456", "1234 5678", "1234 5678", "1234 5678", "1234 5678", "1234 5678"])
+    codes = iter(
+        [
+            "1234 5678",
+            "9012 3456",
+            "1234 5678",
+            "1234 5678",
+            "1234 5678",
+            "1234 5678",
+            "1234 5678",
+            "1234 5678",
+            "1234 5678",
+        ]
+    )
     monkeypatch.setattr(
         window.session, "begin_pairing", lambda done: done({"display_code": next(codes)}, None) or True
     )
@@ -309,20 +321,32 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert _panel(window).property("state")["pairOpen"] is False
     assert scene.activeFocusItem().objectName() == "row_pair"
 
+    # Close via the real UI button closes the dialog, clears the code and restores focus.
+    status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
+    _click(qapp, window, row)
+    wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is True)
+    _click(qapp, window, _named(root, "pairClose")[0])
+    wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is False)
+    assert dialog.property("visible") is False
+    assert _panel(window).property("state")["pairCode"] == ""
+    assert subtitle() == "Show a code to link a phone."
+    assert scene.activeFocusItem().objectName() == "row_pair"
+
     # Service loss (pairing_status returns None) closes & clears stale code with no fake 5:00 countdown.
+    # The real watch timer observes it: no direct tick call.
     status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
     _click(qapp, window, row)
     wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is True)
     status = None
-    _panel(window)._pair_tick()
+    wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is False)
     _pump(qapp, 10)
-    assert _panel(window).property("state")["pairOpen"] is False
     assert _panel(window).property("state")["pairCode"] == ""
     assert _panel(window).property("state")["pairStatus"] == ""
     assert _panel(window).property("state")["pairError"] != ""
     assert scene.activeFocusItem().objectName() == "row_pair"
 
     # Countdown expiry and other terminal states close the dialog, clear code, and show the problem.
+    # The real watch timer observes each one: no direct tick call.
     for state, problem in (
         ("expired", "That code has expired. Start a new one."),
         ("too_many_tries", "Too many wrong tries. Start a new code."),
@@ -332,10 +356,9 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
         _click(qapp, window, row)
         wait_until(qapp, lambda: "1234 5678" in subtitle())
         status = {"state": state}
-        _panel(window)._pair_tick()
+        wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is False, what=state)
         _pump(qapp, 10)
         assert _panel(window).property("state")["pairError"] == problem, state
-        assert _panel(window).property("state")["pairOpen"] is False, state
         assert subtitle() == "Show a code to link a phone.", state
         assert problem in str(_named(root, "row_pairError")[0].property("subtitle")), state
 

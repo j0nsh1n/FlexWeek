@@ -2539,9 +2539,16 @@ class SettingsBridge(QObject):
 
     @Slot()
     def closePairing(self) -> None:
+        """Dismissing the pop-up stops the watch and clears the published code and countdown,
+        so the Settings row cannot show a frozen code."""
         self._pair_gen += 1
-        changed = self._pair_open
+        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status)
         self._pair_open = False
+        self._pair_code = ""
+        self._pair_status = ""
+        self._pair_seconds = 0
+        self._pair_tries = 0
+        self._pair_copied = False
         if self._pair_watch.isActive():
             self._pair_watch.stop()
         if changed:
