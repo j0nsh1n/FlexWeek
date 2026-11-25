@@ -32,7 +32,6 @@ from desktop.native.calendar import (
     date_for_day,
     day_full_names,
     day_in_week,
-    day_names,
     days_through,
     delete_occurrence,
     due_day_in_week,
@@ -56,7 +55,6 @@ from desktop.native.calendar import (
     span_problem,
     stored_weeks_of,
     week_start_on,
-    windows_on_week,
 )
 from desktop.native.client import SESSION_ENDED, ApiError, NativeClient
 from desktop.native.files import (
@@ -97,7 +95,6 @@ from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
 from desktop.native.kept_alerts import KeptReminders
 from desktop.native.look import sanitize_look
-from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import (
     clock_parts,
     due_alarms,
@@ -120,16 +117,12 @@ from desktop.native.reuse import (
     copy_label,
     done_minutes,
     due_point,
-    fair_share,
     is_planned,
     late_from_start,
     late_id,
     left_over_items,
     merge_preview_rows,
     missed_session_ids,
-    move_earlier_homework,
-    open_rest_sessions,
-    plan_open_counts,
     plan_start,
     proposals_from_clipboard,
     restore_point_label,
@@ -140,7 +133,6 @@ from desktop.native.reuse import (
     running_late_refusal,
     session_days,
     settle_placements,
-    solve_request,
     time_still_needed,
     time_still_needed_parts,
     uncovered_homework_minutes,
@@ -151,25 +143,27 @@ from desktop.native.weekmodel import (
     WeekModel,
     build_week,
     due_label,
-    hhmm_text,
     homework_time_sentence,
     length_label,
-    minute_of,
     moved_words,
 )
 
-WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
+WEEK_OVER = str(flexweek_engine.PLAN_WEEK_OVER)
+
+
+def _plan_clock(moment: datetime) -> dict[str, object]:
+    return {
+        "today_iso": moment.date().isoformat(),
+        "hour": moment.hour,
+        "minute": moment.minute,
+        "second": moment.second,
+        "microsecond": moment.microsecond,
+    }
 
 
 def first_placed(trace: dict, targets: object) -> tuple[int, int] | None:
     """Where the first homework a plan gave a time is, by day and then minute."""
-    spots = [
-        (day, minute_of(item["start"]))
-        for item in trace.get("placed") or []
-        if item["id"] in targets and item.get("start")
-        for day in (item.get("days") or [])[:1]
-    ]
-    return min(spots, default=None)
+    return flexweek_engine.session_plan_first_placed(json.dumps(trace), targets)
 
 
 LEFT_NAMED = 2
@@ -178,25 +172,13 @@ LEFT_NAMED = 2
 def left_sentence(left: object) -> str:
     """Homework with minutes the plan could not give a time, each named with its minutes: "History essay
     still has 10 min with no time." Nothing for no homework, so a plan that left nothing says nothing."""
-    items = list(left or [])
-    said = "".join(
-        f" {title} still has {length_label(minutes)} with no time." for title, minutes in items[:LEFT_NAMED]
-    )
-    if len(items) > LEFT_NAMED:
-        said += f" And {len(items) - LEFT_NAMED} more."
-    return said
+    return str(flexweek_engine.session_plan_left_sentence(left))
 
 
 def plan_sentence(placed: int, waiting: int, left: object = ()) -> str:
     """How much homework a plan placed, counting homework only. `waiting` is homework whose sessions
     found no room; `left` is homework with minutes no session holds, by title and minutes."""
-    if placed == 0:
-        said = "Nothing placed."
-    else:
-        said = f"Placed {placed} homework block{'s' if placed != 1 else ''}."
-    if waiting:
-        said += f" {waiting} with no time yet."
-    return said + left_sentence(left)
+    return str(flexweek_engine.session_plan_sentence(placed, waiting, left))
 
 
 def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str:
@@ -2825,30 +2807,45 @@ class NativeSession(QObject):
         placed before now. `earliest_first` (Place now) puts each named block at the first gap that
         fits all of it, instead of the planner's usual order, and says where it went in `placed_where`.
         """
-        if self.planning:
-            self._say("Planning… one moment.")
-            return
-        if self.conflict:
-            self._say("This week changed in another window. Choose More > Reload this week, then try again.")
-            return
-        if self.pending_save is not None:
-            if everything:
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        prepared = json.loads(
+            flexweek_engine.session_prepare_plan(
+                json.dumps(
+                    {
+                        "planning": self.planning,
+                        "conflict": self.conflict,
+                        "pending_save": self.pending_save is not None,
+                        "week_start": self.week_start,
+                        "blocks": self.blocks,
+                        "assignments": self.assignments,
+                        "assignments_basis": self._assignments_basis,
+                        "preferences": self.preferences,
+                        "saved_weeks": self.saved_weeks,
+                        "split_whole": list(self._split_whole),
+                        "clock": _plan_clock(clock),
+                        "everything": everything,
+                        "only": None if only is None else list(only),
+                        "earliest_first": earliest_first,
+                        "prepared_weeks": _prepared_weeks,
+                        "overdue": None if _overdue is None else list(_overdue),
+                    }
+                )
+            )
+        )
+        if prepared["kind"] == "blocked":
+            if prepared["replan_after_save"]:
                 self._replan_after_save = True
-                self._say("Saving your last change… Plan will work in a moment.")
-                return
-            self._say("Saving your last change… Plan will work in a moment.")
+            self._say(prepared["message"])
             return
         self.plan_asked_week = self.week_start
         self.placed_where = ""
         # Plan can move the block the outline is on, so the outline does not stay on it.
         self.select_block(None, None)
-        clock = datetime.fromtimestamp(self.now_ms() / 1000)
-        start = plan_start(self.week_start, clock)
-        if start is not None and start[0] > 6:
-            self._say(WEEK_OVER)
+        if prepared["kind"] == "week_over":
+            self._say(prepared["message"])
             return
         if _prepared_weeks is None:
-            earlier = [week for week in self.saved_weeks if week < self.week_start] if only is None else []
+            earlier = prepared["weeks"] if prepared["kind"] == "fetch_earlier" else []
             if earlier:
                 ticket = self._begin(planning=True)
                 fetched: dict[str, dict] = {}
@@ -2883,63 +2880,7 @@ class NativeSession(QObject):
                 return
             _prepared_weeks = {}
 
-        prior_input = [
-            {"week_start": week_start, **saved}
-            for week_start, saved in (_prepared_weeks or {}).items()
-        ]
-        planning_blocks, _moved, prior_updates = (
-            move_earlier_homework(self.blocks, prior_input, self.assignments, self.week_start)
-            if only is None
-            else (deepcopy(self.blocks), [], [])
-        )
-        earlier_blocks = [
-            block
-            for week in prior_input
-            for block in week.get("blocks", [])
-            if block.get("start") and not block.get("completed")
-        ]
-        open_blocks = planning_blocks if only is not None else open_rest_sessions(
-            planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis, clock
-        )
-        payload, targets = solve_request(
-            open_blocks,
-            self.assignments,
-            self.week_start,
-            everything=everything,
-            only=only,
-            not_before=start,
-            now=clock,
-            saved_week=self._assignments_basis,
-        )
-        # Work due after Sunday gets its fair share of this week; the rest waits for next week's Plan.
-        first_day = start[0] if start else 0
-        first_minute = start[1] if start else 0
-        week, shares = fair_share(
-            open_blocks,
-            self.assignments,
-            self._assignments_basis,
-            self.week_start,
-            first_day,
-            first_minute,
-            windows_on_week(self.week_start, self.preferences.get("work_windows") or []),
-            targets - self._split_whole,
-        )
-        if shares:
-            kept = {block["id"] for block in week}
-            payload, targets = solve_request(
-                week,
-                self.assignments,
-                self.week_start,
-                only=targets & kept,
-                not_before=start,
-                now=clock,
-                saved_week=self._assignments_basis,
-            )
-        if earliest_first:
-            payload = [
-                {**block, "prefer_earliest": True} if block["id"] in targets else block for block in payload
-            ]
-        if not targets:
+        if prepared["kind"] == "empty":
             # The window keeps a visible Undo toast when this is only Plan finding nothing new.
             self._plan_idle = True
             try:
@@ -2950,101 +2891,53 @@ class NativeSession(QObject):
             # Homework left in an earlier week is not this plan's to move; the window offers it.
             self.week_changed.emit()
             return
-        if _overdue:
-            # Only the solve copy loses its deadline link. Saved sessions keep their homework ID
-            # and the homework keeps its missed deadline.
-            payload = [
-                {**block, "assignment_id": None, "latest": None, "earliest": None, "pinned": False,
-                 "prefer_earliest": True,
-                 "days": list(range(first_day, 7))}
-                if block["id"] in _overdue else block
-                for block in payload
-            ]
+        body = prepared["body"]
+        targets = set(prepared["targets"])
+        prior_updates = prepared["prior_updates"]
+        shares = prepared["shares"]
+        week = prepared["week"]
         ticket = self._begin(planning=True)
         self._say("Planning…")
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            original_blocks = self.blocks
-            before = self._dump_blocks()
-            self.blocks = apply_plan(
-                week, data, targets=targets, assignments=self.assignments, week_start=self.week_start
-            )
-            if _overdue:
-                placed_ids = {item["id"] for item in data["placed"] if item.get("start")}
-                failed = _overdue - placed_ids
-                originals = {block["id"]: block for block in original_blocks}
-                self.blocks = [
-                    originals[block["id"]] if block["id"] in failed else block
-                    for block in self.blocks
-                    if block["id"] not in (failed & (_new_left or set()))
-                ]
-                for block in self.blocks:
-                    block.pop("prefer_earliest", None)
-            sources = {block["id"]: block for block in self.blocks}
-            for share in shares:
-                assigned = [
-                    item
-                    for item in data.get("placed") or []
-                    if item.get("assignment_id") == share["assignment_id"]
-                    and item.get("start")
-                ]
-                placed_min = sum(int(item.get("duration_min") or 0) for item in assigned)
-                total_min = share["this_week_min"] + share["left_min"]
-                share["this_week_min"] = placed_min
-                share["left_min"] = max(0, total_min - placed_min)
-                share["placed_days"] = sorted(
-                    {
-                        int(item["days"][0])
-                        for item in assigned
-                        if item.get("days")
-                    }
+            answer_clock = datetime.fromtimestamp(self.now_ms() / 1000)
+            answer = json.loads(
+                flexweek_engine.session_apply_plan_answer(
+                    json.dumps(
+                        {
+                            "original_blocks": self.blocks,
+                            "source_week": week,
+                            "trace": data,
+                            "targets": prepared["targets"],
+                            "assignments": self.assignments,
+                            "assignments_basis": self._assignments_basis,
+                            "week_start": self.week_start,
+                            "preferences": self.preferences,
+                            "shares": shares,
+                            "needs_time": self.needs_time,
+                            "clock": _plan_clock(answer_clock),
+                            "earliest_first": earliest_first,
+                            "overdue": None if _overdue is None else list(_overdue),
+                            "new_left": None if _new_left is None else list(_new_left),
+                        }
+                    )
                 )
-            data = {
-                **data,
-                "week_start": self.week_start,
-                "shares": shares,
-                "placed": [
-                    sources.get(item["id"], item)
-                    if (item.get("kind") == "locked" or item["id"] in (_overdue or set()))
-                    and item["id"] in sources
-                    else item
-                    for item in data.get("placed") or []
-                ],
-            }
-            self.trace = data
-            placed = sum(1 for item in data["placed"] if item["id"] in targets and item.get("start"))
-            # Why each target still has no time is what this plan found, not what the edit that first
-            # took its time said: kept, that sentence came back after the next edit and was wrong.
-            reasons = {
-                item["block_id"]: item["message"]
-                for item in data.get("explanations") or []
-                if item.get("reason") and item.get("message")
-            }
-            for block_id in targets:
-                if sources.get(block_id, {}).get("start"):
-                    self.needs_time.pop(block_id, None)
-                elif block_id in reasons:
-                    self.needs_time[block_id] = reasons[block_id]
-            self._fresh_plan = True
-            # Counted on the week as this plan left it, not on the server's number from before it: the
-            # sessions just given a time are already out of what is still needed.
-            counts = plan_open_counts(
-                self.assignments, self._open_week(), self.week_start, self._assignments_basis
             )
-            # A homework with minutes in no session is named with all it still needs, a session still waiting
-            # included, so it is left out of the plain "with no time yet" count.
-            self.plan_remainders = [
-                (item["title"], item["minutes"]) for item in self._time_split() if item["uncovered_min"]
-            ]
-            self.plan_counts = (placed, counts["waiting_only"])
-            self.plan_open = counts["open"]
-            self.plan_first = first_placed(data, targets)
-            split_note = self._apply_auto_split(data, week)
-            changed = self._dump_blocks() != before
-            if not changed:
-                self.blocks = original_blocks
+            self.blocks = answer["blocks"]
+            self.trace = answer["trace"]
+            self.needs_time = answer["needs_time"]
+            self._fresh_plan = True
+            self.plan_remainders = [tuple(item) for item in answer["plan_remainders"]]
+            self.plan_counts = tuple(answer["plan_counts"])
+            self.plan_open = answer["plan_open"]
+            self.plan_first = None if answer["plan_first"] is None else tuple(answer["plan_first"])
+            split_note = answer["split_note"]
+            if split_note:
+                self._history_label = "the focus split"
+                self.dirty = True
+            changed = answer["changed"]
             if changed and not split_note:
                 self._history_label = "planning the week"
             if changed and prior_updates:
@@ -3062,14 +2955,9 @@ class NativeSession(QObject):
                     self._pending_step["weeks"].extend(deepcopy(prior_updates))
                     self._pending_step["id"] = str(uuid4())
                     self._plan_step_id = self._pending_step["id"]
-            placed_note = plan_sentence(placed, self.plan_counts[1], self.plan_remainders)
-            if earliest_first and len(targets) == 1:
-                only_block = sources.get(next(iter(targets)), {})
-                placed_note = self._place_now_sentence(only_block)
-                if only_block.get("start"):
-                    self.placed_where = placed_note
-            if split_note:
-                placed_note += split_note
+            placed_note = answer["placed_note"]
+            if answer["placed_where"]:
+                self.placed_where = answer["placed_where"]
             if not changed and not self.dirty and not self.dirty_assignments:
                 self._say(placed_note)
                 self.week_changed.emit()
@@ -3096,22 +2984,14 @@ class NativeSession(QObject):
         self.client.request(
             "POST",
             "/api/solve",
-            {
-                "blocks": inflate_for_solve(payload, self.preferences),
-                "week_start": self.week_start,
-                "now_floor": list(start) if start is not None else None,
-            },
+            body,
             ok,
             err,
         )
 
     def _place_now_sentence(self, block: dict) -> str:
         """Where Place now put one block, or that it found no room this week."""
-        title = block.get("title") or "this homework"
-        if not (block.get("start") and block.get("days")):
-            return f"No free time this week for {title}."
-        day = day_names(self.week_start)[block["days"][0]]
-        return f"Placed {title} on {day} {hhmm_text(block['start'])}."
+        return str(flexweek_engine.session_place_now_sentence(json.dumps(block), self.week_start))
 
     def _apply_auto_split(self, trace: dict, sources: list[dict] | None = None) -> str:
         """Turn each placed homework block into focus chunks and breaks, when the student asked for
@@ -3119,21 +2999,20 @@ class NativeSession(QObject):
         the block rather than landing on whatever came next. `sources` is the week as planned (work
         minutes), not the inflated duration the solver reserved for breaks. Starts, pins, days and
         overdue rewrites stay the week after apply_plan."""
-        planned = sources if sources is not None else self.blocks
-        work_minutes = {block["id"]: block.get("duration_min") for block in planned}
-        week = [
-            {**block, "duration_min": work_minutes[block["id"]]}
-            if block["id"] in work_minutes
-            else dict(block)
-            for block in self.blocks
-        ]
-        split, count = split_solved(week, trace, self.preferences)
-        if not count:
+        result = json.loads(
+            flexweek_engine.session_apply_auto_split(
+                json.dumps(self.blocks),
+                json.dumps(trace),
+                json.dumps(sources),
+                json.dumps(self.preferences),
+            )
+        )
+        if not result["count"]:
             return ""
-        self.blocks = split
+        self.blocks = result["blocks"]
         self._history_label = "the focus split"
         self.dirty = True
-        return f" Split {count} into focus chunks."
+        return str(result["note"])
 
     def _operation(self, key: str) -> str:
         if key not in self._attempts:
