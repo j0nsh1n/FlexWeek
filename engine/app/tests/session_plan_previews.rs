@@ -707,6 +707,28 @@ fn accepting_running_late_hands_back_the_preview_block_unchanged() {
 }
 
 #[test]
+fn spread_answer_still_words_a_leftover_beyond_one_homework() {
+    // Spread never refused a large leftover before 5B; Allow splitting's minute ceiling is not its rule.
+    let reply = spread_answer(SpreadAnswerInput {
+        assignment_id: "project",
+        assignment: &project_assignment(),
+        data: &json!({"sessions": [], "remaining_min": 5000}),
+        from_date: WEEK,
+        session_min: 60,
+        today_iso: WEEK,
+        id_prefix: "tok",
+    })
+    .unwrap();
+    let SpreadPreview::Empty { message } = reply else {
+        panic!("expected Empty");
+    };
+    assert!(
+        message.ends_with(" remains, but it doesn't fit the 15-minute planning grid."),
+        "{message}"
+    );
+}
+
+#[test]
 fn spread_answer_keeps_assignment_identity_and_reports_leftovers() {
     let project = project_assignment();
 

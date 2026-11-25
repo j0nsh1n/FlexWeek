@@ -722,11 +722,7 @@ pub fn spread_answer(input: SpreadAnswerInput<'_>) -> Result<SpreadPreview, Stri
         Some(Value::Array(items)) => items.as_slice(),
         Some(_) => return Err("sessions must be a list".to_string()),
     };
-    let remaining = bounded_int(
-        data_fields.get("remaining_min"),
-        "remaining_min",
-        MAX_ESTIMATE_MIN as i64,
-    )?;
+    let remaining = optional_int(data_fields.get("remaining_min"), "remaining_min")?;
     if sessions.is_empty() {
         let message = if remaining != 0 {
             format!(
