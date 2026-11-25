@@ -96,6 +96,10 @@ SCREENS: list[Screen] = [
     _screen("focus", "Focus shows the timer choice and its switches under plain group titles."),
     _screen("planning", "Planning shows the planner rows, study hours and school hours under group titles."),
     _screen("look", "Look shows the presets, the accent and the font, with the group titles in primary."),
+    _screen(
+        "computer",
+        "This computer shows Startup & shortcuts and Account & updates under group titles.",
+    ),
     Screen(
         id="settings.m3_alerts_all",
         area="settings",
