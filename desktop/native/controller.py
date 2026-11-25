@@ -25,16 +25,12 @@ from backend.models import parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
-    apply_block_edit,
-    apply_repeat_changes,
-    block_family,
     blocks_by_weekday,
     date_for_day,
     day_full_names,
     day_in_week,
     day_names,
     days_through,
-    delete_occurrence,
     due_day_in_week,
     first_plannable_day,
     hand_move,
@@ -49,8 +45,6 @@ from desktop.native.calendar import (
     past_problem,
     relocate_block,
     repeat_changes,
-    repeat_leaves_week,
-    replaced_repeat_on_shown_week,
     routine_on_week,
     shifted_month,
     span_problem,
@@ -299,20 +293,6 @@ def _keep_step_revisions(step: dict, data: dict) -> None:
 ROUTINE_STATUS = frozenset(
     ("Saving…", "Saved.", "Saving preferences…", "Saved preferences.", "Loading…", "This week.")
 )
-
-
-def _stamp_edited(changes: list[dict], edited: str, today: str, first_weekday: int) -> list[dict]:
-    """The changes as the save sends them. `keep` stays as the form built it."""
-    if edited == "keep":
-        return changes
-    stamped = []
-    for change in changes:
-        item = {**change, "edited": edited}
-        if edited == "from_today":
-            item["today"] = today
-            item["first_weekday"] = first_weekday
-        stamped.append(item)
-    return stamped
 
 
 def _late_summary(moved: int) -> str:
@@ -1435,10 +1415,13 @@ class NativeSession(QObject):
         }
 
     def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
-        validated = _checked_block(block)
-        verb = "editing " if any(item["id"] == validated["id"] for item in self.blocks) else "adding "
-        self.blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
-        self._touch(verb + validated["title"], keep={validated["id"]})
+        edit = json.loads(
+            flexweek_engine.block_edit_json(
+                json.dumps(self.blocks), json.dumps(block), scope, day, str(uuid4())
+            )
+        )
+        self.blocks = edit["blocks"]
+        self._touch(edit["label"], keep={edit["block_id"]})
 
     def add_homework(
         self, assignment: dict, *, days: list[int] | None = None, spread: bool = False
@@ -1561,21 +1544,17 @@ class NativeSession(QObject):
         """Let a block go where the student dropped or picked it, by the one rule the phone shares.
         Homework moved this way is pinned, so no plan moves it back, and it is one Undo step."""
         answer = self.judge_hand_move(block_id, from_day, day, start, end)
-        if not answer["moved"]:
-            self._say(answer["problem"])
+        decision = json.loads(
+            flexweek_engine.block_hand_json(
+                json.dumps(self.blocks), json.dumps(answer), block_id
+            )
+        )
+        if not decision["moved"]:
+            self._say(decision["problem"])
             return False
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is not None and not block.get("start"):
-            label = "placing " + block["title"]
-        elif block is not None and is_series(block):
-            label = "moving " + block["title"] + " on one day"
-        elif block is not None:
-            label = "editing " + block["title"]
-        else:
-            label = None
-        self.blocks = answer["blocks"]
+        self.blocks = decision["blocks"]
         self.needs_time.pop(block_id, None)
-        self._touch(label, keep={answer["block_id"]})
+        self._touch(decision["label"], keep={decision["block_id"]})
         return True
 
     def place_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
@@ -1653,51 +1632,39 @@ class NativeSession(QObject):
     def setup_repeats(self, blocks: list[dict]) -> list[dict]:
         """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
         time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
-        made = [_checked_block(block) for block in blocks]
-        weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
-        return made + weekly
+        return json.loads(
+            flexweek_engine.setup_standing_json(
+                json.dumps(self.repeats), json.dumps(blocks)
+            )
+        )
 
     def change_repeats(self, after: list[dict], label: str, edited: str = "keep") -> None:
         """The repeats become `after` from this week on: the open week changes now by the rule the
         store applies to later weeks, and the next save sends the changes. `edited` is how a later
         week that has its own edit is treated."""
-        changes = repeat_changes(self.repeats, after, self.week_start)
-        if not changes:
+        edit = json.loads(
+            flexweek_engine.repeat_edit_json(
+                json.dumps(self.blocks),
+                json.dumps(self.repeats),
+                json.dumps(after),
+                json.dumps(self._saved_repeats),
+                json.dumps(self._repeat_send),
+                self.week_start,
+                edited,
+                self.today_iso(),
+                self.first_weekday,
+            )
+        )
+        if edit is None:
             return
-        stamped = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
-        send = self._against_saved(changes, after)
-        self._hold_repeats(_stamp_edited(send, edited, self.today_iso(), self.first_weekday))
+        self._hold_repeats(edit["stamped"])
         # From today on, this week and every earlier week stay exactly as they are.
-        if stamped and repeat_leaves_week(stamped[0], self.week_start):
+        if edit["leaves_week"]:
             self._touch(label)
             return
-        if edited in ("replace", "from_today"):
-            # Days on `after` count from Monday. The open week counts from its first day, so the
-            # engine turns them. A stop has no body and comes off the week.
-            by_id = {item["id"]: item for item in after}
-            blocks = self.blocks
-            for block_id in {item["id"] for item in changes}:
-                blocks = replaced_repeat_on_shown_week(
-                    blocks, self.week_start, block_id, by_id.get(block_id)
-                )
-            self.blocks = blocks
-            self.repeats = list(after)
-        else:
-            self.blocks, self.repeats = apply_repeat_changes(
-                self.blocks, self.repeats, changes, self.week_start
-            )
+        self.blocks = edit["blocks"]
+        self.repeats = edit["repeats"]
         self._touch(label)
-
-    def _against_saved(self, changes: list[dict], after: list[dict]) -> list[dict]:
-        """A repeat that already has a held intent changes again before the server took the first:
-        its intent is measured from what the server last said, so it carries both changes."""
-        held = {item["id"] for item in self._repeat_send or []}
-        if not held & {item["id"] for item in changes}:
-            return changes
-        from_saved = {
-            item["id"]: item for item in repeat_changes(self._saved_repeats, after, self.week_start)
-        }
-        return [from_saved.get(item["id"], item) if item["id"] in held else item for item in changes]
 
     def _hold_repeats(self, changes: list[dict]) -> None:
         """Stamped intents stay until the server has acknowledged the save that carries them.
@@ -2267,31 +2234,25 @@ class NativeSession(QObject):
         this week alone keeps it here missed on every day, or the standing week would bring it back;
         `every_week` takes it out of the standing week too. `label` names the Undo step when the delete
         is part of a larger change."""
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None:
+        decision = json.loads(
+            flexweek_engine.block_delete_json(
+                json.dumps(self.blocks),
+                json.dumps(self.repeats),
+                block_id,
+                scope,
+                day,
+                every_week,
+                self.selected_block_id,
+                label,
+            )
+        )
+        if decision is None:
             return
-        setup = is_standing_block(block)
-        family = block_family(block_id)
-        if block.get("assignment_id") or scope != "occurrence":
-            # School split at a week's seam is School on each side: all of it goes together.
-            going = {
-                item["id"] for item in self.blocks
-                if item["id"] == block_id or (setup and block_family(item["id"]) == family)
-            }
-            gone = [item for item in self.blocks if item["id"] in going]
-            self.blocks = [item for item in self.blocks if item["id"] not in going]
-        else:
-            self.blocks = delete_occurrence(self.blocks, block_id, day)
-            gone = [] if any(item["id"] == block_id for item in self.blocks) else [block]
-        if setup and gone:
-            if every_week:
-                self.repeats = [item for item in self.repeats if item["id"] != family]
-            else:
-                missed = [{**item, "missed_days": list(item.get("days") or [])} for item in gone]
-                self.blocks = [*self.blocks, *missed]
-        if self.selected_block_id == block_id:
+        self.blocks = decision["blocks"]
+        self.repeats = decision["repeats"]
+        if decision["clear_selection"]:
             self.select_block(None, None)
-        self._touch(label or "deleting " + block["title"])
+        self._touch(decision["label"])
 
     def delete_selected(self) -> bool:
         if self.selected_block_id is None:
