@@ -10,6 +10,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The phone's Settings has Report a problem. It opens an online form with your app version and phone model filled in.
 
 ### Changed
+- The app icon is the dumbbell on a lime square, with no light square around it, so it no longer shows as a white box on dark taskbars or in About. On the phone it takes your launcher's icon shape.
 - FlexWeek no longer runs a small web server on your computer. The app reads and saves your week itself and opens no network port (phone sync, once you pair a phone, still listens for it).
 - When signing in or creating an account gets no answer for 30 seconds, FlexWeek says "FlexWeek stopped responding. Close FlexWeek, open it again, then sign in." It used to say it couldn't reach its server, which it no longer has.
 
