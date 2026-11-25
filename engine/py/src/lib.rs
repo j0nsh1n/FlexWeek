@@ -23,6 +23,7 @@ mod session_focus;
 mod session_preferences;
 mod session_reminders;
 mod session_transfer;
+mod session_unfinished;
 mod sync;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
@@ -365,6 +366,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     session_transfer::add(m)?;
     session_preferences::add(m)?;
     session_focus::add(m)?;
+    session_unfinished::add(m)?;
     db::add(m)?;
     desk::add(m)?;
     desk_rest::add(m)?;
