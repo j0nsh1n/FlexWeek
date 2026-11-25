@@ -244,7 +244,9 @@ def test_splitting_rounds_lengths_to_the_grid_says_so_and_then_steps_in_fifteens
     prefs = _prefs(window)
     assert (prefs["timer_work_min"], prefs["timer_break_min"]) == (45, 15)
     state = _state(window)
-    assert state["timerNote"] == "Focus lengths rounded to 15 minutes, which splitting needs."
+    assert state["timerNote"] == (
+        "Focus lengths were rounded to 15 minutes so FlexWeek can split them into sessions and breaks."
+    )
     assert (state["timerStep"], state["timerFrom"]) == (15, 15)
     _panel(window).setTimerLength("work", 40)
     _pump(qapp)

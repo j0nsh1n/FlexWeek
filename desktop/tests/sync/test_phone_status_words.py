@@ -24,7 +24,7 @@ def test_the_last_sync_is_said_in_plain_words() -> None:
     assert seen_words(str(seen), seen + 30_000) == "Synced just now"
     assert seen_words(str(seen), seen + 2 * 60_000) == "Synced 2 min ago"
     assert seen_words(str(seen), seen + 3 * 3_600_000) == "Synced 3 h ago"
-    assert seen_words(str(seen), seen + 3 * 86_400_000) == "Not seen since Friday"
+    assert seen_words(str(seen), seen + 3 * 86_400_000) == "Last synced on Friday"
 
 
 def test_a_failed_call_stays_a_problem_until_one_call_works() -> None:

@@ -32,16 +32,16 @@ TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
 # password and an unknown username alike on purpose; the sign-in card's link says why.
 SIGN_IN_WRONG = "Wrong username or password. Try again, or choose Forgot password."
 SIGN_IN_WHY_LINK = "Why doesn't it say which?"
-SIGN_IN_WHY = "FlexWeek doesn't say which, so no one can find out who has an account."
+SIGN_IN_WHY = "FlexWeek doesn't say which one is wrong, so no one can use it to find out who has an account."
 SIGN_IN_NO_USERNAME = "Type your username."
 SIGN_IN_NO_PASSWORD = "Type your password."
 SIGN_IN_BAD_USERNAME = (
     "No FlexWeek username looks like that. Usernames are 3–32 letters, numbers or underscores."
 )
-SIGN_IN_SHORT_PASSWORD = "That isn't your password. FlexWeek passwords have at least 12 characters."
+SIGN_IN_SHORT_PASSWORD = "Passwords have at least 12 characters. Try again, or choose Forgot password."
 SIGN_UP_NO_USERNAME = "Choose a username."
 SIGN_UP_NO_PASSWORD = "Choose a password with at least 12 characters."
-SIGN_UP_SHORT_PASSWORD = "Add {n} more {unit}. Passwords need at least 12."
+SIGN_UP_SHORT_PASSWORD = "Add {n} more {unit}. Passwords need at least 12 characters."
 SIGN_UP_LONG_PASSWORD = "Use 128 characters or fewer."
 USERNAME_TAKEN = "That username is taken. Try another."
 # Said when a session ends; about no one field, though its words name two.
