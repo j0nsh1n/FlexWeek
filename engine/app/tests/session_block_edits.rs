@@ -449,13 +449,36 @@ fn a_rebased_change_carries_both_intents() {
     let input = repeat_input(&week, &before, &after, &saved, Some(&send), WEEK, "keep", TODAY);
     let edit = repeat_edit(&input).unwrap().expect("a day went");
     assert_eq!(edit.stamped.len(), 1, "one intent carries both changes");
-    assert_eq!(edit.stamped[0]["set"]["start"], json!("08:30"));
+    // The open week applies what it shows; the save carries what the server last said.
+    assert_eq!(
+        edit.preview[0],
+        json!({"id": "school", "scope": "from", "from_date": WEEK,
+            "set": {"duration_min": 360}, "add_days": [], "remove_days": [2], "stop": false})
+    );
+    assert_eq!(
+        edit.stamped[0]["set"],
+        json!({"start": "08:30", "duration_min": 360})
+    );
+    assert_ne!(edit.preview, edit.stamped);
     assert!(
         edit.stamped[0]["remove_days"]
             .as_array()
             .is_some_and(|days| days.contains(&json!(2))),
         "Wednesday goes too"
     );
+}
+
+#[test]
+fn a_held_repeat_with_no_change_passes_through() {
+    let week = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let before = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
+    let send = json!([{"id": "activity-9", "scope": "from", "from_date": WEEK,
+        "set": {}, "add_days": [], "remove_days": [], "stop": false}]);
+    let input = repeat_input(&week, &before, &after, &before, Some(&send), WEEK, "keep", TODAY);
+    let edit = repeat_edit(&input).unwrap().expect("the start moved");
+    assert_eq!(edit.stamped, edit.preview);
+    assert_eq!(edit.stamped[0]["id"], json!("school"));
 }
 
 #[test]
