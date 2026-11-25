@@ -214,7 +214,10 @@ fn a_card_whose_block_moved_or_went_is_dropped() {
     let gone = rows(&[(chess(), "Chess")]);
     let told = cards.sync(Some(&gone), M_1840).unwrap();
     assert!(told.changed);
-    assert!(told.released.is_empty(), "a moved block is not a started one");
+    assert!(
+        told.released.is_empty(),
+        "a moved block is not a started one"
+    );
     assert!(cards.is_empty());
 }
 
@@ -318,7 +321,10 @@ fn finishing_a_block_song_with_snooze_keeps_it_and_without_forgets_it() {
     assert_eq!(queue.songs().get("s1"), Some(&song("s1")));
     queue.enqueue(song("s1"));
     queue.finish(false, 0);
-    assert!(queue.songs().is_empty(), "a dismissed song would ring again");
+    assert!(
+        queue.songs().is_empty(),
+        "a dismissed song would ring again"
+    );
 }
 
 #[test]

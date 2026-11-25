@@ -236,7 +236,11 @@ impl AlarmQueue {
     /// Whether this alarm rings now. One already ringing or waiting, by id, changes nothing.
     pub fn enqueue(&mut self, alarm: Value) -> bool {
         let id = id_of(&alarm);
-        if self.active.as_ref().is_some_and(|active| id_of(active) == id) {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|active| id_of(active) == id)
+        {
             return false;
         }
         if self.waiting.iter().any(|item| id_of(item) == id) {
