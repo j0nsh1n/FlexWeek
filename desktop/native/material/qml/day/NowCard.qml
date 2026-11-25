@@ -104,9 +104,9 @@ Column {
                 color: palette.cardSurface
                 ProgressRing {
                     id: heroRing
-                    objectName: root.wideHero && root.showRing ? "myDayRing" : ""
-                    countName: root.wideHero && root.showRing ? "myDayCount" : ""
-                    captionName: root.wideHero && root.showRing ? "myDayCaption" : ""
+                    objectName: root.shown && root.wideHero && root.showRing ? "myDayRing" : ""
+                    countName: root.shown && root.wideHero && root.showRing ? "myDayCount" : ""
+                    captionName: root.shown && root.wideHero && root.showRing ? "myDayCaption" : ""
                     anchors.centerIn: parent
                     size: 132
                     theme: root.theme
@@ -192,9 +192,9 @@ Column {
                 radius: 74
                 color: palette.cardSurface
                 ProgressRing {
-                    objectName: !root.wideHero && root.showRing ? "myDayRing" : ""
-                    countName: !root.wideHero && root.showRing ? "myDayCount" : ""
-                    captionName: !root.wideHero && root.showRing ? "myDayCaption" : ""
+                    objectName: root.shown && !root.wideHero && root.showRing ? "myDayRing" : ""
+                    countName: root.shown && !root.wideHero && root.showRing ? "myDayCount" : ""
+                    captionName: root.shown && !root.wideHero && root.showRing ? "myDayCaption" : ""
                     anchors.centerIn: parent
                     size: 132
                     theme: root.theme
