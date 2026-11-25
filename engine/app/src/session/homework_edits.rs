@@ -8,6 +8,7 @@
 
 use flexweek_engine::desk::planning::{available_homework_minutes, session_days};
 use flexweek_engine::stored::truthy;
+use flexweek_engine::time::hhmm_to_minutes;
 use flexweek_service::blocks::check_block;
 use flexweek_service::homework_saves::check_homework;
 use serde_json::{Map, Value, json};
@@ -109,7 +110,7 @@ fn fix_session(session: &mut Map<String, Value>, fixed_at: &Value) -> Result<boo
 }
 
 /// A pin the dialog supplied: absent leaves the pins as they are, `null` takes them off, and an object holding
-/// a day and a start time that a pinned block accepts sets one. Anything else is refused whatever the sessions are, so Spread
+/// a day from 0 to 6 and an HH:MM start that a pinned block also accepts sets one. Anything else is refused whatever the sessions are, so Spread
 /// and a homework with no open session refuse it too.
 fn check_pin(assignment: &Value) -> Result<(), String> {
     let Some(pin) = assignment.get("fixed_at") else {
@@ -127,6 +128,17 @@ fn check_pin(assignment: &Value) -> Result<(), String> {
     let (Some(day), Some(start)) = (fields.get("day"), fields.get("start")) else {
         return Err("fixed_at needs a day and a start".into());
     };
+    // The block rule below checks a start's type and length but not its clock value, and it reads a string or
+    // boolean day as a number; a pin needs a whole-number day and a real HH:MM time as well.
+    if !day.as_i64().is_some_and(|day| (0..=6).contains(&day)) {
+        return Err("fixed_at needs a day from 0 to 6".into());
+    }
+    if !start
+        .as_str()
+        .is_some_and(|start| hhmm_to_minutes(start).is_ok())
+    {
+        return Err("fixed_at needs a start as HH:MM".into());
+    }
     // The block rule judges the day and start, as it will when the pin is put on a session: a probe block
     // pinned there holds exactly what a session would, so Spread and sessions all done refuse what a new or
     // open session would.
