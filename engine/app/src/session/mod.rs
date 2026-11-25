@@ -17,6 +17,7 @@ pub mod frame;
 pub mod leaving;
 pub mod preferences;
 pub mod reminders;
+pub mod spotify;
 pub mod status;
 pub mod transfer;
 pub mod words;
