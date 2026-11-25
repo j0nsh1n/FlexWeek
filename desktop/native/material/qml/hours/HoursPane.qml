@@ -846,7 +846,19 @@ Item {
                 width: Math.min(root.gutter - 8, nowLabelText.implicitWidth + 12)
                 height: Math.ceil(nowLabelText.implicitHeight) + 6
                 x: root.gutter - 6 - width
-                y: (root.bridge ? root.bridge.nowMinute : 0) / 60 * root.row + nowLine.height / 2 - height / 2
+                // The pill floats over the top of the hours. A now near the top would slide under it:
+                // the label waits below the pill instead, as an hour number it covers hides (see hourLabel).
+                y: {
+                    var natural = (root.bridge ? root.bridge.nowMinute : 0) / 60 * root.row
+                                  + nowLine.height / 2 - height / 2
+                    if (zoomPill.visible) {
+                        var pillTop = scroller.contentY + zoomPill.y - 2
+                        var pillBottom = scroller.contentY + zoomPill.y + zoomPill.height + 2
+                        if (natural < pillBottom && natural + height > pillTop)
+                            return pillBottom
+                    }
+                    return natural
+                }
                 radius: 4
                 color: root.now
                 z: 7

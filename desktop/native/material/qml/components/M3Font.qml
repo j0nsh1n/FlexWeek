@@ -23,6 +23,8 @@ Item {
         return regular.name !== "" ? regular.name : "Inter"
     }
     readonly property string family: face(bodyName)
+    // The bundled mono face for codes and timers: one loaded family name, never a fallback list.
+    readonly property string monoFamily: face("JetBrains Mono")
     // Titles and group titles. Serif is Newsreader here over Inter everywhere else.
     readonly property string heading: face(headingName)
     // The student's text size (Small to Larger). Main sets it from the theme; every Text sizes through px().

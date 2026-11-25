@@ -23,16 +23,35 @@ Rectangle {
 
     readonly property int pad: density === "compact" ? 8 : 12
     readonly property bool dragging: drag.active
+    readonly property color urgencyBar: {
+        if (card.tagKind === "cutting")
+            return m3.statusOverdue
+        if (card.tagKind === "tight")
+            return m3.statusDueSoon
+        if (card.tagKind === "plenty")
+            return m3.statusDone
+        return m3.outlineVariant
+    }
 
     M3Palette { id: m3; theme: card.theme }
 
-    implicitHeight: Math.max(56, row.implicitHeight + pad * 2)
+    implicitHeight: Math.max(64, contentCol.implicitHeight + pad * 2)
     height: implicitHeight
-    radius: 8
-    color: m3.surfaceContainer
-    border.width: highContrast ? 1.5 : 0
-    border.color: m3.outline
+    radius: m3.cornerFor(12)
+    color: m3.cardSurface
+    border.width: highContrast ? 1.5 : 1
+    border.color: highContrast ? m3.outline : m3.outlineVariant
+    clip: true
     opacity: dragging ? 0.4 : 1
+
+    Rectangle {
+        objectName: "homeworkUrgencyBar"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 4
+        color: card.urgencyBar
+    }
 
     M3StateLayer {
         anchors.fill: parent
@@ -43,62 +62,96 @@ Rectangle {
         reduceMotion: card.reduceMotion
     }
 
-    Row {
-        id: row
+    Column {
+        id: contentCol
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: card.pad
+        anchors.leftMargin: card.pad + 4
         anchors.rightMargin: card.pad
         spacing: 8
 
-        Grid {
-            id: grip
-            objectName: "grip"
-            anchors.verticalCenter: parent.verticalCenter
-            columns: 2
-            spacing: 3
-            Repeater {
-                model: 6
-                Rectangle { width: 3; height: 3; radius: 1.5; color: m3.inkMuted }
-            }
-        }
+        Row {
+            id: row
+            width: parent.width
+            spacing: 8
 
-        Column {
-            width: parent.width - grip.width - tagBox.width - parent.spacing * 2
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 0
-            Text {
-                objectName: "homeworkTitle"
-                width: parent.width
-                text: card.title
-                color: m3.inkSurface
-                wrapMode: Text.WordWrap
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(14)
-                font.weight: 500
+            Grid {
+                id: grip
+                objectName: "grip"
+                anchors.top: parent.top
+                anchors.topMargin: 4
+                columns: 2
+                spacing: 3
+                Repeater {
+                    model: 6
+                    Rectangle { width: 3; height: 3; radius: 1.5; color: m3.inkMuted }
+                }
             }
-            Text {
-                objectName: "homeworkDetail"
-                width: parent.width
-                text: card.detail
-                color: m3.inkMuted
-                wrapMode: Text.WordWrap
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(12)
-                font.weight: 400
+
+            Column {
+                width: Math.max(0, parent.width - grip.width - menuBtn.width - parent.spacing * 2)
+                spacing: 2
+                Text {
+                    objectName: "homeworkTitle"
+                    width: parent.width
+                    text: card.title
+                    color: m3.inkSurface
+                    wrapMode: Text.WordWrap
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(14)
+                    font.weight: 600
+                }
+                Text {
+                    objectName: "homeworkDetail"
+                    width: parent.width
+                    text: card.detail
+                    color: m3.inkMuted
+                    wrapMode: Text.WordWrap
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(12)
+                    font.weight: 400
+                }
+            }
+
+            Item {
+                id: menuBtn
+                objectName: "homeworkCardMenu"
+                width: card.passive ? 0 : 24
+                height: 24
+                visible: !card.passive
+                M3Icon {
+                    anchors.centerIn: parent
+                    name: "more_vert"
+                    width: 18
+                    height: 18
+                    color: m3.inkMuted
+                }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    gesturePolicy: TapHandler.WithinBounds
+                    onTapped: (point) => {
+                        var mapped = menuBtn.mapToItem(card, point.position.x, point.position.y)
+                        card.menuAsked(mapped.x, mapped.y)
+                    }
+                }
             }
         }
 
         Item {
-            id: tagBox
-            width: card.tag !== "" ? chip.width : 0
-            height: chip.height
-            anchors.verticalCenter: parent.verticalCenter
+            id: footerRow
+            readonly property bool showTag: card.tag !== ""
+            width: parent.width
+            height: showTag ? chip.height : 0
+            visible: showTag
+
             Tag {
                 id: chip
                 objectName: "homeworkTag"
-                visible: card.tag !== ""
+                anchors.left: parent.left
+                anchors.leftMargin: grip.width + 8
+                anchors.verticalCenter: parent.verticalCenter
+                visible: footerRow.showTag
                 theme: card.theme
                 density: card.density
                 reduceMotion: card.reduceMotion

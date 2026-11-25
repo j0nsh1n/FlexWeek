@@ -6,6 +6,7 @@ SettingsRow {
     id: row
     property string key: ""
     property string buttonText: ""
+    property string buttonKind: "tonal"
     property bool buttonEnabled: true
     signal activated()
     objectName: "row_" + key
@@ -16,7 +17,7 @@ SettingsRow {
         density: row.density
         reduceMotion: row.reduceMotion
         highContrast: row.highContrast
-        kind: "tonal"
+        kind: row.buttonKind
         enabled: row.buttonEnabled
         text: row.buttonText
         accessName: row.buttonText
