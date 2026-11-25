@@ -1642,21 +1642,20 @@ class NativeSession(QObject):
         """The repeats become `after` from this week on: the open week changes now by the rule the
         store applies to later weeks, and the next save sends the changes. `edited` is how a later
         week that has its own edit is treated."""
-        edit = json.loads(
-            flexweek_engine.repeat_edit_json(
-                json.dumps(self.blocks),
-                json.dumps(self.repeats),
-                json.dumps(after),
-                json.dumps(self._saved_repeats),
-                json.dumps(self._repeat_send),
-                self.week_start,
-                edited,
-                self.today_iso(),
-                self.first_weekday,
-            )
+        raw = flexweek_engine.repeat_edit_json(
+            json.dumps(self.blocks),
+            json.dumps(self.repeats),
+            json.dumps(after),
+            json.dumps(self._saved_repeats),
+            json.dumps(self._repeat_send),
+            self.week_start,
+            edited,
+            self.today_iso(),
+            self.first_weekday,
         )
-        if edit is None:
+        if raw is None:
             return
+        edit = json.loads(raw)
         self._hold_repeats(edit["stamped"])
         # From today on, this week and every earlier week stay exactly as they are.
         if edit["leaves_week"]:
@@ -2234,20 +2233,19 @@ class NativeSession(QObject):
         this week alone keeps it here missed on every day, or the standing week would bring it back;
         `every_week` takes it out of the standing week too. `label` names the Undo step when the delete
         is part of a larger change."""
-        decision = json.loads(
-            flexweek_engine.block_delete_json(
-                json.dumps(self.blocks),
-                json.dumps(self.repeats),
-                block_id,
-                scope,
-                day,
-                every_week,
-                self.selected_block_id,
-                label,
-            )
+        raw = flexweek_engine.block_delete_json(
+            json.dumps(self.blocks),
+            json.dumps(self.repeats),
+            block_id,
+            scope,
+            day,
+            every_week,
+            self.selected_block_id,
+            label,
         )
-        if decision is None:
+        if raw is None:
             return
+        decision = json.loads(raw)
         self.blocks = decision["blocks"]
         self.repeats = decision["repeats"]
         if decision["clear_selection"]:
