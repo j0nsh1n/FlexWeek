@@ -288,6 +288,95 @@ fn deleting_a_missing_block_changes_nothing() {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[test]
+fn a_replace_change_rewrites_the_week_and_stamps_replace() {
+    let week = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let before = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
+    let input = repeat_input(&week, &before, &after, &before, None, WEEK, "replace", TODAY);
+    let edit = repeat_edit(&input).unwrap().expect("the start moved");
+    assert!(!edit.leaves_week);
+    assert_eq!(edit.blocks, vec![school(vec![0, 1, 2, 3, 4], "08:30")]);
+    assert_eq!(edit.repeats, vec![after[0].clone()]);
+    assert_eq!(edit.stamped[0]["edited"], json!("replace"));
+    assert_eq!(edit.stamped[0].get("today"), None);
+}
+
+#[test]
+fn a_stop_takes_the_repeat_off_the_week() {
+    let week = json!([school(vec![0, 1, 2, 3, 4], "08:00"), activity("activity-1", vec![1])]);
+    let before = week.clone();
+    let after = json!([activity("activity-1", vec![1])]);
+    let input = repeat_input(&week, &before, &after, &before, None, WEEK, "replace", TODAY);
+    let edit = repeat_edit(&input).unwrap().expect("school stops");
+    assert!(!edit.leaves_week);
+    assert_eq!(edit.stamped[0]["stop"], json!(true));
+    assert_eq!(edit.blocks, vec![activity("activity-1", vec![1])]);
+    assert_eq!(edit.repeats, vec![activity("activity-1", vec![1])]);
+}
+
+#[test]
+fn a_replaced_week_shown_from_wednesday_turns_the_days() {
+    let shown = vec![5, 6, 0, 1, 2];
+    let week = json!([school(shown, "08:00")]);
+    let before = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
+    let input = repeat_input(&week, &before, &after, &before, None, "2026-09-23", "replace", TODAY);
+    let edit = repeat_edit(&input).unwrap().expect("the start moved");
+    assert!(!edit.leaves_week);
+    // Monday days come back to the week starting Wednesday, earliest first.
+    assert_eq!(edit.blocks, vec![school(vec![0, 1, 2, 5, 6], "08:30")]);
+    assert_eq!(edit.repeats, vec![after[0].clone()]);
+}
+
+#[test]
+fn a_from_today_change_applies_on_a_later_week() {
+    let shown = vec![5, 6, 0, 1, 2];
+    let week = json!([school(shown, "08:00")]);
+    let before = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let after = json!([school(vec![0, 1, 2, 3, 4], "08:30")]);
+    let mut input = repeat_input(
+        &week,
+        &before,
+        &after,
+        &before,
+        None,
+        "2026-09-30",
+        "from_today",
+        TODAY,
+    );
+    input.first_weekday = 3;
+    let edit = repeat_edit(&input).unwrap().expect("the start moved");
+    assert!(!edit.leaves_week);
+    assert_eq!(edit.stamped[0]["edited"], json!("from_today"));
+    assert_eq!(edit.stamped[0]["today"], json!(TODAY));
+    assert_eq!(edit.stamped[0]["first_weekday"], json!(3));
+    assert_eq!(edit.blocks, vec![school(vec![0, 1, 2, 5, 6], "08:30")]);
+    assert_eq!(edit.repeats, vec![after[0].clone()]);
+}
+
+#[test]
+fn deleting_the_last_occurrence_of_a_standing_block_marks_it_missed() {
+    let blocks = json!([school(vec![2], "08:00")]);
+    let repeats = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let input = BlockDeleteInput {
+        blocks: &blocks,
+        repeats: &repeats,
+        block_id: "school",
+        scope: "occurrence",
+        day: Some(2),
+        every_week: false,
+        selected_id: None,
+        label: None,
+    };
+    let gone = delete_block(&input).unwrap().expect("the block is there");
+    let mut missed = school(vec![2], "08:00");
+    missed["missed_days"] = json!([2]);
+    assert_eq!(gone.blocks, vec![missed]);
+    assert_eq!(gone.repeats, vec![school(vec![0, 1, 2, 3, 4], "08:00")]);
+}
+
+#[allow(clippy::too_many_arguments)]
 fn repeat_input<'a>(
     blocks: &'a Value,
     repeats: &'a Value,
