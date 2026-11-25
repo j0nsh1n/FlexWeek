@@ -1518,3 +1518,23 @@ fn every_entry_of_a_day_list_must_be_a_whole_number() {
         "No free time this week for Bio."
     );
 }
+
+#[test]
+fn a_placed_duration_outside_one_week_of_minutes_is_refused() {
+    // A week holds 7 x 24 x 60 = 10,080 minutes; a trace row outside 0 to that is not a real
+    // length. With no shares the old code carried the huge value into start-time arithmetic.
+    let targets = vec!["b-sheet".to_string()];
+    let now = clock("2026-09-24", 19, 0);
+    for bad in [i64::MAX, 10_081, -1, i64::MIN] {
+        let trace = json!({"placed": [placed_row(json!({"duration_min": bad}))]});
+        assert!(first_placed(&trace, &targets).is_err(), "first {bad}");
+        assert!(answer_for(&trace, &[], now).is_err(), "answer {bad}");
+    }
+    for fine in [0, 30, 10_080] {
+        let trace = json!({"placed": [placed_row(json!({"duration_min": fine}))]});
+        assert!(first_placed(&trace, &targets).is_ok(), "first {fine}");
+    }
+    // Missing and null durations keep counting as zero.
+    let loose = json!({"placed": [placed_row(json!({"duration_min": null}))]});
+    assert_eq!(first_placed(&loose, &targets).unwrap(), Some((3, 20 * 60)));
+}

@@ -14,6 +14,9 @@ pub const WEEK_OVER: &str =
     "This week is over, so nothing was planned. Plan this week or a later one.";
 pub const LEFT_NAMED: usize = 2;
 
+/// Minutes in a week: the longest length a placed block can have.
+const WEEK_MINUTES: i64 = 7 * 24 * 60;
+
 const PLANNING_BUSY: &str = "Planning\u{2026} one moment.";
 const WEEK_CONFLICT: &str =
     "This week changed in another window. Choose More > Reload this week, then try again.";
@@ -283,7 +286,11 @@ fn placed_rows(trace: &Value) -> Result<&[Value], String> {
         opt_text(row, "id")?;
         opt_text(row, "kind")?;
         opt_text(row, "start")?;
-        opt_int(row, "duration_min")?;
+        if let Some(minutes) = opt_int(row, "duration_min")?
+            && !(0..=WEEK_MINUTES).contains(&minutes)
+        {
+            return Err(format!("duration_min must be 0 to {WEEK_MINUTES}, got {minutes}"));
+        }
         first_day_of(row)?;
     }
     Ok(rows)
