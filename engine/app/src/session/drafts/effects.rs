@@ -75,12 +75,16 @@ impl Effects {
             ticket,
             answer,
         };
-        if ticket.is_some() {
+        self.wait_for(effect);
+        request
+    }
+
+    fn wait_for(&mut self, effect: PendingEffect) {
+        if effect.ticket.is_some() {
             self.active = Some(effect);
         } else {
             self.refresh = Some(effect);
         }
-        request
     }
 
     fn take(&mut self, id: u64) -> Option<PendingEffect> {
@@ -174,11 +178,26 @@ impl Drafts {
         if pending.epoch != epoch || pending.ticket.is_some_and(|expected| expected != ticket) {
             return Ok(json!({ "action": "ignore" }));
         }
+        let answer = self.apply_effect(command, &pending.answer, epoch, ticket);
+        if answer.is_err() {
+            // NativeClient reports an unreadable success through the same request's error callback.
+            self.effects.wait_for(pending);
+        }
+        answer
+    }
+
+    fn apply_effect(
+        &mut self,
+        command: &Value,
+        pending: &WaitFor,
+        epoch: u64,
+        ticket: u64,
+    ) -> Result<Value, String> {
         let data = &command["data"];
         let error = &command["error"];
         let failed = !error.is_null();
         let message = if failed { text(error, "message")? } else { "" };
-        match pending.answer {
+        match pending {
             WaitFor::Week { previous, said } => {
                 if failed {
                     return Ok(
@@ -188,8 +207,8 @@ impl Drafts {
                 let start = text(data, "week_start")?;
                 let request = assignments_request(start);
                 let answer = WaitFor::Assignments {
-                    previous,
-                    said,
+                    previous: previous.clone(),
+                    said: said.clone(),
                     week: data.clone(),
                 };
                 let effect = self.effects.send(request, answer, epoch, Some(ticket));
@@ -229,8 +248,8 @@ impl Drafts {
                     "shifted_week": flag(command, "shifted_week")?,
                 }))?;
                 answer["action"] = json!("saved");
-                answer["destination"] = destination;
-                answer["written"] = written;
+                answer["destination"] = destination.clone();
+                answer["written"] = written.clone();
                 answer["repeat_notice"] = data["repeats"]["notice"].clone();
                 answer["point_id"] =
                     json!(data["restore_point"]["id"].as_str().unwrap_or_default());
@@ -253,7 +272,7 @@ impl Drafts {
                 self.continue_delete(answer["request"].clone(), epoch, ticket, false)
             }
             WaitFor::Refresh { start, basis } => {
-                if failed || self.week_start() != start {
+                if failed || self.week_start() != *start {
                     return Ok(json!({ "action": "ignore" }));
                 }
                 self.refresh_assignments(

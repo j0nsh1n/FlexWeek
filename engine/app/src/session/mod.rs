@@ -7,8 +7,8 @@
 //! - `take_event()`: the next thing that happened, or `null`; one at a time, so what the window does with
 //!   one (signing out, say) counts before the next is read.
 //!
-//! So far: the frame (group 1), which sends requests and takes their answers back, and the status (which
-//! request is the latest, whether the session is busy, the status line).
+//! The frame sends requests and receives their answers. Week drafts and history stay with the session
+//! while the window dispatches the week's request effects on its own thread.
 
 pub mod account;
 pub mod autosave;

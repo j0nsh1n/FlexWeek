@@ -412,7 +412,7 @@ class NativeSession(QObject):
     week_start = _draft_field("week_start", writable=True)
     blocks = _draft_field("blocks", writable=True)
     revision = _draft_field("revision", writable=True)
-    assignments = _draft_field("assignments", writable=True)
+    assignments = _draft_field("assignments")
     dirty_assignments = _draft_field("dirty_assignments")
     trace = _draft_field("trace", writable=True)
     dirty = _draft_field("dirty", writable=True)

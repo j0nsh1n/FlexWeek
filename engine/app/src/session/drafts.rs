@@ -44,9 +44,7 @@ const WEEK_FIELDS: [&str; 21] = [
 ];
 
 /// The save under way and the retry attempts: the window's, whichever week is open.
-const SAVE_FIELDS: [&str; 9] = [
-    "traveling",
-    "travel_step",
+const SAVE_FIELDS: [&str; 7] = [
     "join_step",
     "plan_step_id",
     "save_status",
@@ -157,12 +155,39 @@ impl Default for WeekDraft {
     }
 }
 
+#[derive(Debug, Default)]
+enum HistoryAction {
+    #[default]
+    Save,
+    EarlierWeeks(Value),
+    Travel {
+        direction: Travel,
+        token: u64,
+        step: Value,
+    },
+}
+
+impl HistoryAction {
+    fn direction(&self) -> Option<Travel> {
+        match self {
+            Self::Travel { direction, .. } => Some(*direction),
+            _ => None,
+        }
+    }
+
+    fn step(&self) -> Option<&Value> {
+        match self {
+            Self::Save => None,
+            Self::EarlierWeeks(step) | Self::Travel { step, .. } => Some(step),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Drafts {
     week: WeekDraft,
     save: Map<String, Value>,
-    /// The token of the step an Undo or Redo under way took, so a failure puts back the same step.
-    travel_token: Option<u64>,
+    action: HistoryAction,
     parked: Vec<(String, Parked)>,
     versions: BTreeMap<String, u64>,
     clock: u64,
@@ -178,7 +203,7 @@ impl Default for Drafts {
                 .into_iter()
                 .map(|name| (name.to_string(), default_value(name)))
                 .collect(),
-            travel_token: None,
+            action: HistoryAction::Save,
             parked: Vec::new(),
             versions: BTreeMap::new(),
             clock: 0,
@@ -279,15 +304,6 @@ fn revision_json(revision: &Revision) -> Value {
     match revision {
         Revision::Stored(revision) => json!(revision),
         Revision::Shown(first, second) => json!([first, second]),
-    }
-}
-
-fn travel(value: &Value) -> Result<Option<Travel>, String> {
-    match value {
-        Value::Null => Ok(None),
-        Value::String(name) if name == "undo" => Ok(Some(Travel::Undo)),
-        Value::String(name) if name == "redo" => Ok(Some(Travel::Redo)),
-        _ => Err("traveling must be undo, redo or None".into()),
     }
 }
 
@@ -412,22 +428,13 @@ impl Drafts {
         }
     }
 
-    /// A stack given whole. With `keep`, a step equal to the one at its place keeps its token, as an
-    /// object the window left alone kept its identity; a restored week's steps are all new.
-    fn put_stack(&mut self, redo: bool, value: Value, keep: bool) {
+    fn restore_stack(&mut self, redo: bool, value: Value) {
+        // A parked copy used fresh Python objects, so restoring it gives its steps fresh tokens.
         let steps = match value {
             Value::Array(steps) => steps,
             _ => Vec::new(),
         };
-        let held = self.stack(redo).clone();
-        let mut stack = Vec::with_capacity(steps.len());
-        for (at, step) in steps.into_iter().enumerate() {
-            let token = match held.get(at) {
-                Some((token, was)) if keep && *was == step => *token,
-                _ => self.token(),
-            };
-            stack.push((token, step));
-        }
+        let stack = steps.into_iter().map(|step| (self.token(), step)).collect();
         self.set_stack(redo, stack);
     }
 
@@ -610,7 +617,7 @@ impl Drafts {
                 .cloned()
                 .unwrap_or_else(|| default_value(name));
             match name {
-                "undo" | "redo" => self.put_stack(name == "redo", value, false),
+                "undo" | "redo" => self.restore_stack(name == "redo", value),
                 "revision" => self.set_revision(checked_revision(&value)?),
                 "pending_save" => self.set_pending(PendingBatch::capture(value)?),
                 _ => self.put(name, value),
@@ -770,16 +777,10 @@ impl Drafts {
         self.set_stack(false, Vec::new());
         self.set_stack(true, Vec::new());
         self.put("week_start", json!(week_start));
-        for name in [
-            "plan_step_id",
-            "traveling",
-            "travel_step",
-            "preview_attempt",
-            "attempts",
-        ] {
+        for name in ["plan_step_id", "preview_attempt", "attempts"] {
             self.put(name, default_value(name));
         }
-        self.travel_token = None;
+        self.action = HistoryAction::Save;
         self.parked.clear();
         self.deleting = None;
         self.effects.clear();
@@ -987,23 +988,25 @@ impl Drafts {
     fn remote_change(&mut self, command: &Value, busy: bool) -> Result<Value, String> {
         let signed_in = flag(command, "signed_in")?;
         let who = text(command, "who")?;
-        Ok(
-            match week::remote_change(signed_in, busy, self.flags(), who) {
-                week::RemoteChange::Ignore => {
-                    json!({ "accepted": true, "conflict": false, "words": null })
-                }
-                week::RemoteChange::Wait => {
-                    json!({ "accepted": false, "conflict": false, "words": null })
-                }
-                week::RemoteChange::Conflict => {
-                    self.put("conflict", json!(true));
-                    json!({ "accepted": true, "conflict": true, "words": null })
-                }
-                week::RemoteChange::Reload(words) => {
-                    json!({ "accepted": true, "conflict": false, "words": words })
-                }
-            },
-        )
+        let flags = DraftFlags {
+            pending_save: self.week.pending.is_some(),
+            ..self.flags()
+        };
+        Ok(match week::remote_change(signed_in, busy, flags, who) {
+            week::RemoteChange::Ignore => {
+                json!({ "accepted": true, "conflict": false, "words": null })
+            }
+            week::RemoteChange::Wait => {
+                json!({ "accepted": false, "conflict": false, "words": null })
+            }
+            week::RemoteChange::Conflict => {
+                self.put("conflict", json!(true));
+                json!({ "accepted": true, "conflict": true, "words": null })
+            }
+            week::RemoteChange::Reload(words) => {
+                json!({ "accepted": true, "conflict": false, "words": words })
+            }
+        })
     }
 
     fn wrote_open(&self, command: &Value) -> Result<Value, String> {
@@ -1110,7 +1113,7 @@ impl Drafts {
         {
             let prior_rows = rows(prior, "prior_updates")?;
             if !prior_rows.is_empty() {
-                self.put("travel_step", json!({ "weeks": prior_rows }));
+                self.action = HistoryAction::EarlierWeeks(json!({ "weeks": prior_rows }));
                 let dirty = self.dirty_ids();
                 let label = self
                     .field("history_label")
@@ -1242,9 +1245,6 @@ impl Drafts {
             self.append_step(redo, token, step);
             return Ok(json!({ "go": false, "words": refused }));
         }
-        self.put("traveling", json!(if redo { "redo" } else { "undo" }));
-        self.put("travel_step", step.clone());
-        self.travel_token = Some(token);
         let applied = history::travel_side(
             &step,
             redo,
@@ -1275,7 +1275,14 @@ impl Drafts {
         let mut dirty = self.dirty_ids();
         dirty.extend(applied.dirty);
         self.set_dirty_ids(dirty);
-        Ok(json!({ "go": true, "label": step.get("label").cloned().unwrap_or(Value::Null) }))
+        let label = step.get("label").cloned().unwrap_or(Value::Null);
+        let direction = if redo { Travel::Redo } else { Travel::Undo };
+        self.action = HistoryAction::Travel {
+            direction,
+            token,
+            step,
+        };
+        Ok(json!({ "go": true, "label": label }))
     }
 
     fn save_draft<'a>(
@@ -1325,12 +1332,12 @@ impl Drafts {
             return Ok(json!({ "post": true }));
         }
         let dirty = self.dirty_ids();
-        let traveling = travel(self.field("traveling"))?;
-        let travel_step = self.field("travel_step").clone();
-        if !travel_step.is_null() {
-            object(&travel_step, "travel step")?;
-        }
-        let travel_weeks = optional_rows(&travel_step["weeks"], "travel weeks")?.to_vec();
+        let traveling = self.action.direction();
+        let travel_weeks = self
+            .action
+            .step()
+            .map_or(&Value::Null, |step| &step["weeks"]);
+        let travel_weeks = optional_rows(travel_weeks, "travel weeks")?;
         let operation_id = optional_text(command, "operation_id")?.unwrap_or_default();
         let snapshot_label = optional_text(command, "snapshot_label")?;
         let label = self
@@ -1344,13 +1351,13 @@ impl Drafts {
             let draft = self.save_draft(
                 &dirty,
                 traveling == Some(Travel::Undo),
-                &travel_weeks,
+                travel_weeks,
                 &revision,
             )?;
             let request =
                 changes::freeze_save(&draft, operation_id, snapshot_label).map_err(engine)?;
             let step = if wants_step && !truthy(request.get("stay")) {
-                let plain = self.save_draft(&dirty, false, &travel_weeks, &revision)?;
+                let plain = self.save_draft(&dirty, false, travel_weeks, &revision)?;
                 changes::save_step(&plain, &label).map_err(engine)?
             } else {
                 None
@@ -1406,8 +1413,6 @@ impl Drafts {
             .map(str::to_string)
             .collect();
         let open = self.week_start();
-        let traveling = travel(self.field("traveling"))?;
-        let travel_step = self.field("travel_step").clone();
         let pending_step = self.field("pending_step").clone();
         let plan_step_id = self.field("plan_step_id").clone();
         let sent = self.field("repeat_ack").clone();
@@ -1424,8 +1429,8 @@ impl Drafts {
                 "committed assignments",
             )?,
             stored_parts: rows(self.field("stored_parts"), "stored parts")?,
-            traveling,
-            travel_step: (!travel_step.is_null()).then_some(&travel_step),
+            traveling: self.action.direction(),
+            travel_step: self.action.step(),
             pending_step: (!pending_step.is_null()).then_some(&pending_step),
             plan_step_id: plan_step_id.as_str(),
             join: truthy(Some(self.field("join_step"))),
@@ -1497,18 +1502,11 @@ impl Drafts {
         if acknowledged.clear_redo {
             self.set_stack(true, Vec::new());
         }
-        for name in [
-            "traveling",
-            "travel_step",
-            "pending_step",
-            "plan_step_id",
-            "repeat_ack",
-            "save_status",
-        ] {
+        for name in ["pending_step", "plan_step_id", "repeat_ack", "save_status"] {
             self.put(name, Value::Null);
         }
         self.set_pending(None);
-        self.travel_token = None;
+        self.action = HistoryAction::Save;
         self.put("join_step", json!(false));
         self.put(
             "repeat_send",
@@ -1583,12 +1581,11 @@ impl Drafts {
             .ok_or("status is a whole number")?;
         let message = text(command, "message")?;
         self.put("join_step", json!(false));
-        let traveling = travel(self.field("traveling"))?;
         let refusal = changes::refuse_save(
             status,
             message,
-            traveling,
-            !self.field("travel_step").is_null(),
+            self.action.direction(),
+            self.action.step().is_some(),
         );
         if refusal.roll_back {
             self.put("blocks", self.field("committed_blocks").clone());
@@ -1598,16 +1595,10 @@ impl Drafts {
             self.set_pending(None);
             self.put("conflict", json!(false));
         }
-        if let Some(back) = refusal.step_back {
-            let step = self.field("travel_step").clone();
-            let token = match self.travel_token {
-                Some(token) => token,
-                None => self.token(),
-            };
+        if let Some(back) = refusal.step_back
+            && let HistoryAction::Travel { token, step, .. } = std::mem::take(&mut self.action)
+        {
             self.append_step(back == Travel::Redo, token, step);
-            self.put("traveling", Value::Null);
-            self.put("travel_step", Value::Null);
-            self.travel_token = None;
         }
         self.put("conflict", json!(refusal.conflict));
         if refusal.conflict {
@@ -1861,12 +1852,12 @@ impl Drafts {
             .cloned()
             .collect();
         deleting.removed = removed;
-        let next = self.next_read(&mut deleting);
+        let next = Self::next_read(&mut deleting);
         self.deleting = Some(deleting);
         Ok(json!({ "request": next }))
     }
 
-    fn next_read(&self, deleting: &mut Deleting) -> Value {
+    fn next_read(deleting: &mut Deleting) -> Value {
         deleting.reading = deleting.others.pop_front();
         match &deleting.reading {
             Some(start) => json!({
@@ -1881,7 +1872,7 @@ impl Drafts {
     /// A week read back for the delete's Undo step, or null when it could not be read (Undo still
     /// brings the homework back, with its sessions in every week that could be read).
     fn delete_read(&mut self, command: &Value) -> Result<Value, String> {
-        let mut deleting = self.deleting.take().ok_or("no delete is reading weeks")?;
+        let deleting = self.deleting.as_mut().ok_or("no delete is reading weeks")?;
         let week = &command["week"];
         if let (Some(start), false) = (deleting.reading.clone(), week.is_null()) {
             let kept = match week.get("blocks") {
@@ -1911,8 +1902,7 @@ impl Drafts {
                 }));
             }
         }
-        let next = self.next_read(&mut deleting);
-        self.deleting = Some(deleting);
+        let next = Self::next_read(deleting);
         Ok(json!({ "request": next }))
     }
 

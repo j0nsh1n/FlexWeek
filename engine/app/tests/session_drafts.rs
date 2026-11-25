@@ -38,6 +38,7 @@ impl Host for Clock {
 struct Desk {
     session: Session,
     _db: TestDb,
+    first_weekday: u32,
 }
 
 impl Desk {
@@ -46,7 +47,11 @@ impl Desk {
         let mut session =
             Session::new(db.path.clone(), Arc::new(Clock::default()), Arc::new(|| {}));
         session.frame().answer_inline();
-        let mut desk = Self { session, _db: db };
+        let mut desk = Self {
+            session,
+            _db: db,
+            first_weekday: 0,
+        };
         desk.send(json!({
             "cmd": "register", "username": "ana", "password": "a-long-test-password", "keep": true
         }));
@@ -96,7 +101,7 @@ impl Desk {
         };
         self.send(json!({
             "cmd": "drafts_reply", "effect_id": effect["id"], "data": event["body"], "error": error,
-            "now": NOW, "shifted_week": false, "selection": selection, "ids": ["renewed-parked-save"],
+            "now": NOW, "shifted_week": self.first_weekday != 0, "selection": selection, "ids": ["renewed-parked-save"],
         }))
     }
 
@@ -107,7 +112,7 @@ impl Desk {
 
     fn choose(&mut self, start: &str) -> Value {
         self.send(json!({
-            "cmd": "drafts_load", "requested": start, "first_weekday": 0, "discard": false,
+            "cmd": "drafts_load", "requested": start, "first_weekday": self.first_weekday, "discard": false,
             "selection": { "selected_day": self.view("week_start"), "selected_block_id": "band" },
         }))
     }
@@ -154,7 +159,7 @@ impl Desk {
     fn post(&mut self) -> (Value, Value) {
         let ticket = self.ticket();
         let post = self.send(json!({
-            "cmd": "drafts_post", "ticket": ticket, "shifted_week": false,
+            "cmd": "drafts_post", "ticket": ticket, "shifted_week": self.first_weekday != 0,
         }));
         (ticket, post["effect"].clone())
     }
@@ -381,4 +386,123 @@ fn an_answer_from_an_old_ticket_or_account_does_not_change_the_week() {
     desk.send(json!({ "cmd": "set_account", "id": 2, "username": "bo" }));
     assert_eq!(desk.reply(&read, &landed, &Value::Null)["action"], "ignore");
     assert_eq!(desk.view("week_start"), "");
+}
+
+#[test]
+fn a_wednesday_week_can_save_three_edits_and_undo_each_without_a_conflict() {
+    let mut desk = Desk::signed_in("draft-shifted-undo");
+    desk.first_weekday = 2;
+    desk.load("2026-11-04");
+    assert_eq!(desk.view("revision"), json!([0, 0]));
+    let mut first = band();
+    first["days"] = json!([0]);
+    let mut second = band();
+    second["id"] = json!("later");
+    second["days"] = json!([5]);
+    let mut third = first.clone();
+    third["title"] = json!("Band rehearsal");
+    for (blocks, id) in [
+        (json!([first]), "add-first"),
+        (json!([first, second]), "add-second"),
+        (json!([third, second]), "rename-first"),
+    ] {
+        desk.edit(blocks, json!([]), Value::Null);
+        desk.save_to_store(id);
+        assert_eq!(desk.view("revision").as_array().unwrap().len(), 2);
+        assert_eq!(desk.view("conflict"), false);
+    }
+    assert_eq!(desk.stored(FIRST)["blocks"][0]["title"], "Band rehearsal");
+    assert_eq!(desk.stored(NEXT)["blocks"][0]["id"], "later");
+
+    desk.undo();
+    desk.save_to_store("undo-rename");
+    assert_eq!(desk.stored(FIRST)["blocks"][0]["title"], "Band");
+    assert_eq!(desk.stored(NEXT)["blocks"][0]["id"], "later");
+    desk.undo();
+    desk.save_to_store("undo-later");
+    assert_eq!(desk.stored(FIRST)["blocks"][0]["id"], "band");
+    assert_eq!(desk.stored(NEXT)["blocks"], json!([]));
+    desk.undo();
+    desk.save_to_store("undo-first");
+    assert_eq!(desk.stored(FIRST)["blocks"], json!([]));
+    assert_eq!(desk.view("redo").as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn a_malformed_week_reply_can_still_finish_as_a_read_failure() {
+    let mut desk = Desk::signed_in("draft-unreadable-answer");
+    desk.load(FIRST);
+    let (ticket, effect) = desk.fetch(NEXT);
+    let malformed = json!({
+        "cmd": "drafts_reply", "effect_id": effect["id"], "data": { "assignments": "not rows" },
+    });
+    let rejected: Value = serde_json::from_str(&desk.session.send(&malformed.to_string())).unwrap();
+    assert_eq!(rejected["ok"], false);
+    assert_eq!(
+        desk.reply(&effect, &offline(), &Value::Null)["action"],
+        "load_failed"
+    );
+    desk.idle(ticket);
+    assert_eq!(desk.view("week_start"), FIRST);
+    assert_eq!(desk.view("meta")["parked_count"], 0);
+}
+
+#[test]
+fn a_failed_delete_read_back_still_leaves_an_undo_for_the_homework() {
+    let mut desk = Desk::signed_in("draft-delete-read-refused");
+    desk.load(FIRST);
+    desk.edit(
+        json!([essay("first-session")]),
+        json!([homework()]),
+        Value::Null,
+    );
+    desk.save_to_store("first-session");
+    desk.load(NEXT);
+    desk.edit(json!([essay("second-session")]), json!([]), Value::Null);
+    desk.save_to_store("second-session");
+
+    let (ticket, delete) = desk.start_delete();
+    let answer = desk.carry(&delete, &Value::Null);
+    assert_eq!(
+        answer["effect"]["path"],
+        format!("/api/week?week_start={FIRST}")
+    );
+    let failed_read = desk.reply(&answer["effect"], &offline(), &Value::Null);
+    desk.end_delete(ticket, failed_read);
+    desk.undo();
+    desk.save_to_store("undo-delete");
+    assert_eq!(desk.view("assignments")["essay"]["title"], "Essay");
+    assert_eq!(desk.stored(NEXT)["blocks"][0]["id"], "second-session");
+    assert_eq!(desk.stored(FIRST)["blocks"], json!([]));
+}
+
+#[test]
+fn fixture_fields_are_saved_through_the_same_draft_and_retry_path() {
+    let mut desk = Desk::signed_in("draft-fixture-fields");
+    desk.load(FIRST);
+    desk.send(json!({
+        "cmd": "drafts_set", "fields": {
+            "blocks": [essay("first-session")], "assignments": { "essay": homework() },
+            "dirty_assignments": ["essay", "essay"], "dirty": true,
+        },
+    }));
+    assert_eq!(desk.view("dirty_assignments"), json!(["essay"]));
+    desk.save_to_store("fixture-save");
+    assert_eq!(desk.stored(FIRST)["blocks"][0]["assignment_id"], "essay");
+    assert_eq!(desk.view("assignments")["essay"]["revision"], 1);
+    assert_eq!(desk.view("dirty_assignments"), json!([]));
+}
+
+#[test]
+fn a_phone_change_cannot_replace_even_an_empty_held_batch() {
+    let mut desk = Desk::signed_in("draft-empty-pending");
+    desk.load(FIRST);
+    desk.send(json!({ "cmd": "drafts_set", "fields": { "pending_save": {} } }));
+    let decision = desk.send(json!({
+        "cmd": "drafts_remote_change", "signed_in": true, "who": "your phone",
+    }));
+    assert_eq!(decision["accepted"], true);
+    assert_eq!(decision["conflict"], true);
+    assert_eq!(decision["words"], Value::Null);
+    assert_eq!(desk.view("pending_save"), json!({}));
 }
