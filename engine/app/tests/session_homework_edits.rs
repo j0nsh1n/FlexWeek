@@ -684,3 +684,79 @@ fn a_cleared_pin_and_an_absent_pin_stay_different_and_both_are_accepted() {
     let cleared = request.run(&cleared).unwrap();
     assert!(cleared.blocks[0].get("pinned").is_none());
 }
+
+fn counted(key: &str, count: Value) -> Request {
+    let mut saved = saved_essay(60);
+    saved["essay"][key] = count;
+    Request::new(vec![], saved)
+}
+
+#[test]
+fn a_server_count_that_is_not_a_whole_number_of_minutes_from_0_is_refused() {
+    for key in ["planned_min", "unplanned_min", "done_min"] {
+        for bad in [
+            json!(-1),
+            json!(30.5),
+            json!(30.0),
+            json!("30"),
+            json!(true),
+            json!([30]),
+            json!(1e30),
+        ] {
+            let request = counted(key, bad.clone());
+            let said = request
+                .run(&homework(60))
+                .expect_err(&format!("{key} = {bad} must be refused"));
+            assert!(said.contains(key), "the words name the count: {said}");
+        }
+    }
+}
+
+#[test]
+fn a_server_count_of_0_a_whole_number_or_null_is_accepted() {
+    for key in ["planned_min", "unplanned_min", "done_min"] {
+        for good in [json!(0), json!(45), Value::Null] {
+            assert!(
+                counted(key, good).run(&homework(60)).is_ok(),
+                "{key} was refused"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_basis_session_length_that_is_not_minutes_is_refused_for_this_homework_only() {
+    let mut other = session("other", json!([0]), Some("16:00"), 30);
+    other["assignment_id"] = json!("reading");
+    other["duration_min"] = json!("long");
+    for bad in [
+        json!(-5),
+        json!(7141),
+        json!(30.5),
+        json!("30"),
+        Value::Null,
+    ] {
+        let mut ours = session("old", json!([0]), Some("16:00"), 30);
+        ours["duration_min"] = bad.clone();
+        let mut request = Request::new(vec![], saved_essay(60));
+        request.basis = Some(vec![ours]);
+        assert!(request.run(&homework(60)).is_err(), "{bad} was accepted");
+    }
+    let mut request = Request::new(vec![], saved_essay(60));
+    request.basis = Some(vec![other, session("old", json!([0]), Some("16:00"), 7140)]);
+    assert!(request.run(&homework(60)).is_ok());
+}
+
+#[test]
+fn a_done_count_at_the_top_of_what_a_number_holds_is_refused_not_wrapped() {
+    let mut saved = saved_essay(60);
+    saved["essay"]["done_min"] = json!(i64::MAX);
+    let mut ticked = session("one", json!([0]), Some("16:00"), 30);
+    ticked["completed"] = json!(true);
+    let mut request = Request::new(vec![ticked], saved);
+    request.basis = Some(vec![]);
+    let said = request
+        .run(&homework(60))
+        .expect_err("30 more than the largest count cannot be counted");
+    assert!(said.contains("too many"), "{said}");
+}

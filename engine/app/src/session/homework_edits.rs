@@ -13,6 +13,9 @@ use flexweek_service::blocks::check_block;
 use flexweek_service::homework_saves::check_homework;
 use serde_json::{Map, Value, json};
 
+/// The longest a block may be (the block rule): a day less a minute.
+const MAX_SESSION_MIN: i64 = 7140;
+
 /// The fields a homework save keeps from what the window hands over (the engine's `homework_fields`).
 fn homework_fields() -> Vec<&'static str> {
     let mut fields = flexweek_engine::validate::ASSIGNMENT_FIELDS.to_vec();
@@ -139,6 +142,36 @@ fn check_pin(assignment: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The server's counts of the homework as known, and the lengths of its sessions in the basis week, are minutes:
+/// whole numbers from 0 (a session is at most a day less a minute), or absent. The counts add up in the week's
+/// remaining time, so a value no minute count can be is refused here.
+fn check_counts(known: Option<&Value>, basis: Option<&[Value]>, id: &Value) -> Result<(), String> {
+    if let Some(known) = known {
+        for key in ["planned_min", "unplanned_min", "done_min"] {
+            match known.get(key) {
+                None | Some(Value::Null) => {}
+                Some(count) if count.as_i64().is_some_and(|minutes| minutes >= 0) => {}
+                Some(_) => return Err(format!("{key} is a whole number of minutes from 0")),
+            }
+        }
+    }
+    for block in basis.unwrap_or_default() {
+        if block.get("assignment_id") != Some(id) {
+            continue;
+        }
+        let length = block.get("duration_min");
+        if !length
+            .and_then(Value::as_i64)
+            .is_some_and(|minutes| (0..=MAX_SESSION_MIN).contains(&minutes))
+        {
+            return Err(format!(
+                "a session's duration_min is a whole number of minutes from 0 to {MAX_SESSION_MIN}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn checked_session(session: Map<String, Value>) -> Result<Value, String> {
     check_block(&Value::Object(session)).map_err(|refused| refused.0)
 }
@@ -231,6 +264,7 @@ pub fn edit_homework(input: &HomeworkEditInput) -> Result<HomeworkEdit, String> 
     let body = homework_body(input, known)?;
     check_pin(input.assignment)?;
     let body_id = body["id"].clone();
+    check_counts(known, input.basis, &body_id)?;
     let linked = |block: &Value| block.get("assignment_id") == Some(&body_id);
 
     let sessions = input.blocks.iter().filter(|block| linked(block)).count();
