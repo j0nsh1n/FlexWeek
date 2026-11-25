@@ -3259,6 +3259,10 @@ class NativeSession(QObject):
             .get("done_sessions_min", 0)
         )
 
+    def homework_counts(self) -> dict[str, Any]:
+        """One engine count, for a caller that reads several of its parts at the same clock reading."""
+        return self._homework_counts()
+
     def homework_minutes(self) -> dict[str, dict[str, Any]]:
         """Every homework's counts from one engine call, for lists that would otherwise ask once per row."""
         return self._homework_counts()["per_assignment"]
@@ -3409,7 +3413,8 @@ class NativeSession(QObject):
         if destination is None:
             self._say("Select a block or open Day view before pasting into this week.")
             return None
-        minutes = self.homework_minutes()
+        # No homework, nothing to count.
+        minutes = self.homework_minutes() if self.assignments else {}
         available = {
             item_id: int(minutes.get(item_id, {}).get("uncovered_min", 0)) for item_id in self.assignments
         }

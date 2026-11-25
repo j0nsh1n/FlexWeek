@@ -1142,7 +1142,8 @@ class SheetsBridge(QObject):
         session = self._session
         left = session.unfinished()
         seen = {item["id"] for item in left}
-        minutes = session.homework_minutes()
+        counts = session.homework_counts()
+        minutes = counts["per_assignment"]
         counted = [
             {
                 "id": item["assignment_id"],
@@ -1150,7 +1151,7 @@ class SheetsBridge(QObject):
                 "remaining_min": item["minutes"],
                 "plannable": minutes.get(item["assignment_id"], {}).get("remaining_min", 0) >= 15,
             }
-            for item in session.homework_time_needed()
+            for item in counts["needed"]
         ]
         return left + [item for item in counted if item["id"] not in seen]
 
