@@ -60,6 +60,14 @@ fn validate_clock(now: &ClockNow<'_>) -> Result<(), String> {
     Ok(())
 }
 
+/// Every block row, and every saved-week row, must carry a text id before any date branch reads them.
+fn check_blocks(blocks: &[Value], basis: &[Value]) -> Result<(), String> {
+    for block in blocks.iter().chain(basis) {
+        block_id(block)?;
+    }
+    Ok(())
+}
+
 fn screen_now(week_start: &str, now: &ClockNow<'_>) -> Result<Option<Value>, String> {
     Ok(
         planning::screen_point(week_start, now.today, now.hour, now.minute)
@@ -294,6 +302,7 @@ impl HomeworkCounts {
 /// the open week and clock.
 pub fn homework_counts(input: HomeworkCountsInput<'_>) -> Result<HomeworkCounts, String> {
     validate_clock(&input.now)?;
+    check_blocks(input.blocks, input.assignments_basis)?;
     let now_point = screen_now(input.week_start, &input.now)?;
     let assignments_val = Value::Object(input.assignments.clone());
     let open_week = planning::without_missed_times(
@@ -464,6 +473,7 @@ pub struct UnfinishedInput<'a> {
 /// holds today; overdue homework shows on every week.
 pub fn unfinished_items(input: UnfinishedInput<'_>) -> Result<Vec<Value>, String> {
     validate_clock(&input.now)?;
+    check_blocks(input.blocks, input.assignments_basis)?;
     let today_week =
         time::week_start_on(input.now.today, input.first_weekday).map_err(|err| err.message)?;
     let here = input.week_start == today_week;
@@ -569,6 +579,7 @@ pub fn unfinished_preview(
     block_id_str: &str,
 ) -> Result<UnfinishedPreview, String> {
     validate_clock(&input.now)?;
+    check_blocks(input.blocks, input.assignments_basis)?;
     if !time::is_calendar_date(input.plannable_today) {
         return Err(format!(
             "plannable_today must be YYYY-MM-DD, got {:?}",
@@ -697,6 +708,7 @@ pub fn plan_unfinished(
     ids: &mut impl Iterator<Item = String>,
 ) -> Result<UnfinishedPlan, String> {
     validate_clock(&input.now)?;
+    check_blocks(input.blocks, input.assignments_basis)?;
     let start = planning::plan_start_at(
         input.week_start,
         input.now.today,

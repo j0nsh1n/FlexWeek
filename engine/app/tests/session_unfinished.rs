@@ -803,3 +803,72 @@ fn a_clock_past_the_last_deadline_year_still_counts_and_plans() {
         .is_err()
     );
 }
+
+#[test]
+fn a_block_without_a_text_id_is_refused_before_any_date_branch() {
+    // A future week with no homework skips missed-session work, so the id-less row used to pass through
+    // into open_week untouched.
+    let blocks = vec![json!({})];
+    let no_homework = Map::new();
+    let counts = homework_counts(HomeworkCountsInput {
+        week_start: NEXT_WEEK,
+        first_weekday: 0,
+        blocks: &blocks,
+        assignments: &no_homework,
+        assignments_basis: &[],
+        now: ClockNow::at(WEEK, 9, 0),
+    });
+    assert_eq!(counts.unwrap_err(), "block is missing a text id");
+
+    // The saved-week rows are blocks too.
+    let basis = vec![json!({"id": 7})];
+    let counts = homework_counts(HomeworkCountsInput {
+        week_start: NEXT_WEEK,
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &no_homework,
+        assignments_basis: &basis,
+        now: ClockNow::at(WEEK, 9, 0),
+    });
+    assert_eq!(counts.unwrap_err(), "block is missing a text id");
+
+    let mut ids = std::iter::empty();
+    let plan = plan_unfinished(
+        UnfinishedPlanInput {
+            week_start: NEXT_WEEK,
+            blocks: &blocks,
+            assignments: &no_homework,
+            assignments_basis: &[],
+            assignment_ids: &[],
+            now: ClockNow::at(WEEK, 9, 0),
+        },
+        &mut ids,
+    );
+    assert_eq!(plan.unwrap_err(), "block is missing a text id");
+
+    let items = unfinished_items(UnfinishedInput {
+        week_start: NEXT_WEEK,
+        first_weekday: 0,
+        blocks: &blocks,
+        assignments: &no_homework,
+        assignments_basis: &[],
+        saved_weeks: &[],
+        stored_parts: &[],
+        now: ClockNow::at(WEEK, 9, 0),
+    });
+    assert_eq!(items.unwrap_err(), "block is missing a text id");
+
+    let preview = unfinished_preview(
+        UnfinishedPreviewInput {
+            week_start: NEXT_WEEK,
+            blocks: &blocks,
+            assignments: &no_homework,
+            assignments_basis: &[],
+            assignment_id: "none",
+            now: ClockNow::at(WEEK, 9, 0),
+            plannable_today: WEEK,
+        },
+        "new-1",
+    );
+    assert_eq!(preview.unwrap_err(), "block is missing a text id");
+}
