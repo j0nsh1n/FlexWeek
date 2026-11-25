@@ -29,24 +29,24 @@ EXPECTED_NEUTRALS = {
     "light": {
         "surface": "#eef1f5",
         "surfaceContainerLowest": "#ffffff",
-        "surfaceContainerLow": "#ffffff",
-        "surfaceContainer": "#ffffff",
-        "surfaceContainerHigh": "#ffffff",
-        "surfaceContainerHighest": "#ffffff",
-        "surfaceVariant": "#ffffff",
-        "outlineVariant": "#e5e9f0",
+        "surfaceContainerLow": "#f6f8fc",
+        "surfaceContainer": "#edf0f7",
+        "surfaceContainerHigh": "#e3e8f2",
+        "surfaceContainerHighest": "#d8dfec",
+        "surfaceVariant": "#e3e8f2",
+        "outlineVariant": "#d4dce8",
         "outline": "#64748b",
         "onSurface": "#0f172a",
         "onSurfaceVariant": "#475569",
     },
     "dark": {
         "surface": "#0b0d10",
-        "surfaceContainerLowest": "#14171c",
+        "surfaceContainerLowest": "#0e1116",
         "surfaceContainerLow": "#14171c",
-        "surfaceContainer": "#14171c",
-        "surfaceContainerHigh": "#14171c",
-        "surfaceContainerHighest": "#14171c",
-        "surfaceVariant": "#14171c",
+        "surfaceContainer": "#1b202a",
+        "surfaceContainerHigh": "#232936",
+        "surfaceContainerHighest": "#2c3444",
+        "surfaceVariant": "#232936",
         "outlineVariant": "#252a33",
         "outline": "#6b7280",
         "onSurface": "#ececec",
@@ -179,7 +179,7 @@ def test_the_focus_ring_is_the_primary_colour_on_the_card_and_page() -> None:
         assert str(t["focusRing"]) == t["primary"]
         assert str(t["card"]) == ("#ffffff" if mode == "light" else "#14171c")
         assert str(t["page"]) == ("#eef1f5" if mode == "light" else "#0b0d10")
-        assert str(t["edge"]) == ("#e5e9f0" if mode == "light" else "#252a33")
+        assert str(t["edge"]) == ("#d4dce8" if mode == "light" else "#252a33")
 
 
 def test_material_fonts_are_inter_and_roboto_flex_is_gone() -> None:

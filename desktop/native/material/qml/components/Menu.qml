@@ -26,18 +26,18 @@ Item {
     Rectangle {
         anchors.fill: parent
         anchors.topMargin: 4
-        radius: 4
-        color: "#4d000000"
+        radius: palette.cornerFor(12)
+        color: "#33000000"
         z: -1
     }
     Rectangle {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 4
-        color: palette.surfaceContainer
-        border.width: root.highContrast ? 1.5 : 0
-        border.color: palette.outlineVariant
+        radius: palette.cornerFor(12)
+        color: palette.dialogSurface
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: root.highContrast ? palette.outline : palette.outlineVariant
         clip: true
         // Each row sets its own y. A Column places its rows only when the next frame is drawn, so a scripted
         // click sent before that found every row at the top and chose the last one.

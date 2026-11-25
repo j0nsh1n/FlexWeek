@@ -66,16 +66,17 @@ DENSITY = {
     "compact": {"hour_row": 44, "settings_row_pad": 10, "card_pad": 8},
 }
 
-# B3a3 neutral surfaces for every preset, and fixed accents for Slate
+# B3a3 neutral surfaces for every preset (with Material 3 five-step tonal container hierarchy),
+# and fixed accents for Slate.
 B3A3 = {
     "surface": {"light": "#eef1f5", "dark": "#0b0d10"},
-    "surfaceContainerLowest": {"light": "#ffffff", "dark": "#14171c"},
-    "surfaceContainerLow": {"light": "#ffffff", "dark": "#14171c"},
-    "surfaceContainer": {"light": "#ffffff", "dark": "#14171c"},
-    "surfaceContainerHigh": {"light": "#ffffff", "dark": "#14171c"},
-    "surfaceContainerHighest": {"light": "#ffffff", "dark": "#14171c"},
-    "surfaceVariant": {"light": "#ffffff", "dark": "#14171c"},
-    "outlineVariant": {"light": "#e5e9f0", "dark": "#252a33"},
+    "surfaceContainerLowest": {"light": "#ffffff", "dark": "#0e1116"},
+    "surfaceContainerLow": {"light": "#f6f8fc", "dark": "#14171c"},
+    "surfaceContainer": {"light": "#edf0f7", "dark": "#1b202a"},
+    "surfaceContainerHigh": {"light": "#e3e8f2", "dark": "#232936"},
+    "surfaceContainerHighest": {"light": "#d8dfec", "dark": "#2c3444"},
+    "surfaceVariant": {"light": "#e3e8f2", "dark": "#232936"},
+    "outlineVariant": {"light": "#d4dce8", "dark": "#252a33"},
     "outline": {"light": "#64748b", "dark": "#6b7280"},
     "onSurface": {"light": "#0f172a", "dark": "#ececec"},
     "onSurfaceVariant": {"light": "#475569", "dark": "#9a9fa8"},
@@ -103,14 +104,14 @@ STATUS_COLORS = {
 }
 
 CLASS_COLORS = {
-    "class": "#3d6fc4",       # School
-    "exercise": "#2b9665",    # Sports (darker than the spec's #2f9e6b: 3:1 on the page, Jonathan 11-04)
-    "extra": "#0f8a8a",       # Clubs
-    "assignments": "#a87512", # Work
-    "study": "#c2557a",       # Personal
-    "meals": "#64748b",       # Other
-    "sleep": "#64748b",       # Other
-    "free": "#64748b",        # Other
+    "class": "#3d6fc4",  # School
+    "exercise": "#2b9665",  # Sports (darker than the spec's #2f9e6b: 3:1 on the page, Jonathan 11-04)
+    "extra": "#0f8a8a",  # Clubs
+    "assignments": "#a87512",  # Work
+    "study": "#c2557a",  # Personal
+    "meals": "#64748b",  # Other
+    "sleep": "#64748b",  # Other
+    "free": "#64748b",  # Other
 }
 OTHER_CLASS_COLOR = "#64748b"
 SIX_CLASSES = ("class", "exercise", "extra", "assignments", "study", "other")
@@ -139,7 +140,7 @@ def qml_path() -> Path:
 def _schemes() -> dict[str, dict[str, str]]:
     try:
         loaded = json.loads(tokens_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     if not isinstance(loaded, dict):
         raise ValueError("Material tokens must be a JSON object of schemes")
@@ -397,9 +398,13 @@ def theme_object(
     theme["highContrast"] = high_contrast
 
     mode = "dark" if luminance(colours.get("surface", "#ffffff")) < 0.18 else "light"
-    card = colours.get("surfaceContainer", "#ffffff" if mode == "light" else "#14171c")
+    card = (
+        colours.get("surfaceContainerLowest", "#ffffff")
+        if mode == "light"
+        else colours.get("surfaceContainerLow", "#14171c")
+    )
     page = colours.get("surface", "#eef1f5" if mode == "light" else "#0b0d10")
-    edge = colours.get("outlineVariant", "#e5e9f0" if mode == "light" else "#252a33")
+    edge = colours.get("outlineVariant", "#d4dce8" if mode == "light" else "#252a33")
     theme["page"] = page
     theme["card"] = card
     theme["edge"] = edge
@@ -614,6 +619,10 @@ def advanced_overrides(advanced: dict[str, Any]) -> dict[str, Any]:
 
 
 LOOK_TIERS = ("simple", "more", "all")
+DAY_SIDE_RANGE = (240, 480)
+DAY_SIDE_DEFAULT = 312
+SETTINGS_NAV_RANGE = (72, 340)
+SETTINGS_NAV_DEFAULT = 220
 
 
 def read_look_tier(stored: object) -> str:
@@ -624,6 +633,22 @@ def read_look_tier(stored: object) -> str:
     return tier if isinstance(tier, str) and tier in LOOK_TIERS else ""
 
 
+def read_day_side_width(stored: object) -> int:
+    """Remembered width of the Day right sidebar (Now card + mini month) on this computer."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    raw = material.get("daySideWidth") if isinstance(material, dict) else None
+    found = _int_in(raw, DAY_SIDE_RANGE)
+    return found if found is not None else DAY_SIDE_DEFAULT
+
+
+def read_settings_nav_width(stored: object) -> int:
+    """Remembered width of the Settings section list on this computer."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    raw = material.get("settingsNavWidth") if isinstance(material, dict) else None
+    found = _int_in(raw, SETTINGS_NAV_RANGE)
+    return found if found is not None else SETTINGS_NAV_DEFAULT
+
+
 def pack_material(
     choice: dict[str, str],
     advanced: dict[str, Any],
@@ -632,6 +657,8 @@ def pack_material(
     saved: list[dict[str, Any]],
     font: str = "",
     tier: str = "",
+    day_side_width: int | None = None,
+    settings_nav_width: int | None = None,
 ) -> dict[str, Any]:
     """The `material` object written into the look file."""
     body: dict[str, Any] = {
@@ -649,6 +676,10 @@ def pack_material(
         body["font"] = font
     if tier in LOOK_TIERS:
         body["lookTier"] = tier
+    if day_side_width is not None and _int_in(day_side_width, DAY_SIDE_RANGE) is not None:
+        body["daySideWidth"] = int(day_side_width)
+    if settings_nav_width is not None and _int_in(settings_nav_width, SETTINGS_NAV_RANGE) is not None:
+        body["settingsNavWidth"] = int(settings_nav_width)
     return body
 
 
@@ -656,7 +687,7 @@ def store_material(path: Path, material: dict[str, Any]) -> None:
     """Put `material` on the look file and leave every other key where it was."""
     try:
         stored = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         stored = {}
     if not isinstance(stored, dict):
         stored = {}
@@ -669,7 +700,7 @@ def kept_material(path: Path) -> dict[str, Any] | None:
     """The material object already in the look file, so a later save of the widgets look keeps it."""
     try:
         stored = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     material = stored.get("material") if isinstance(stored, dict) else None
     return material if isinstance(material, dict) else None

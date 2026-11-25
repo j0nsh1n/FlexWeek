@@ -107,8 +107,8 @@ FocusScope {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: root.phone ? undefined : parent.verticalCenter
         anchors.bottom: root.phone ? parent.bottom : undefined
-        color: pal.surfaceContainerHigh
-        radius: 8
+        color: pal.dialogSurface
+        radius: pal.cornerFor(24)
         // A bottom sheet is square where it meets the screen edge.
         Rectangle {
             visible: root.phone
