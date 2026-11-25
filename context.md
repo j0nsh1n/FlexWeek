@@ -1,6 +1,15 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-23)
+## Current State (2026-11-25)
+- Material 3 desktop redesign ("2.0 richer", branch `feat/design-2-richer`, PR #182) updates all main Material
+  screens: 5-step tonal surfaces in `theme.py` (`B3A3`), `M3Palette` semantic surfaces/corners/scrim/shadow tokens,
+  Week Option A (elevated calendar card, tonal homework drawer, category icons), Day Option B (full-height timeline
+  with draggable/keyboard-resizable right Now + mini-month sidebar remembered as `material.daySideWidth`), My day
+  Option B (horizontal hero banner with ring + side-by-side Up next and Done cards), Settings Option A (icons,
+  group headers on all cards, resizable section list remembered as `material.settingsNavWidth`, separate `Phone &
+  sync` section, centered A+C `PairingDialog`), Sign in Option B (animated 5-scene QML showcase pausing on hover
+  and static under Reduce motion/Off), Setup (top stepper, 2x2 choice grids, pinned footer), and Update (centered
+  B+C hybrid pop-up). Proposed `spec.md` updates are staged for approval outside git.
 - 2.0.0 (the Rust overhaul; plan `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`) is under way on main,
   developer builds only until 2.0.0. P0 (#142) and P1 (#143-#152) are merged. P2 parts 1-3 are merged (#154-#156):
   the window asks the Rust service in its own process (`flexweek_service::desk_requests` through
