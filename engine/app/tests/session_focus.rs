@@ -90,7 +90,10 @@ fn another_homework_asks_to_replace_and_replace_begins() {
     let running = json!({ "phase": "work", "assignmentId": "a1", "blockId": null });
     assert_eq!(decision(&running, &homework_target("a2"), false), "ask");
     assert_eq!(decision(&running, &homework_target("a2"), true), "begin");
-    assert_eq!(decision(&Value::Null, &homework_target("a2"), false), "begin");
+    assert_eq!(
+        decision(&Value::Null, &homework_target("a2"), false),
+        "begin"
+    );
 }
 
 #[test]
@@ -211,7 +214,8 @@ fn a_homework_asked_for_on_a_day_is_looked_up_as_a_block() {
 }
 
 fn tick(state: &Value, waiting: bool, busy: bool, now_ms: i64) -> Value {
-    let args = json!({ "focus": state, "credits_waiting": waiting, "busy": busy, "now_ms": now_ms });
+    let args =
+        json!({ "focus": state, "credits_waiting": waiting, "busy": busy, "now_ms": now_ms });
     focus::tick_step(&args).unwrap()
 }
 
@@ -242,11 +246,20 @@ fn begin(state: &Value, busy: bool, completed: bool) -> Value {
 #[test]
 fn advancing_credits_only_a_completed_work_phase() {
     let work = work_timer(true);
-    assert_eq!(begin(&work, false, true), json!({ "go": true, "credit": true }));
-    assert_eq!(begin(&work, false, false), json!({ "go": true, "credit": false }));
+    assert_eq!(
+        begin(&work, false, true),
+        json!({ "go": true, "credit": true })
+    );
+    assert_eq!(
+        begin(&work, false, false),
+        json!({ "go": true, "credit": false })
+    );
     let mut resting = work_timer(true);
     resting["phase"] = json!("break");
-    assert_eq!(begin(&resting, false, true), json!({ "go": true, "credit": false }));
+    assert_eq!(
+        begin(&resting, false, true),
+        json!({ "go": true, "credit": false })
+    );
 }
 
 #[test]
@@ -316,7 +329,10 @@ fn a_break_ends_into_a_bright_work_phase_with_the_current_length() {
         planned["alert"],
         json!({ "title": "Focus session", "body": "Essay", "kind": "focus", "tone": "bright" })
     );
-    assert!(planned.get("cycles").is_none(), "a break leaves the cycles alone");
+    assert!(
+        planned.get("cycles").is_none(),
+        "a break leaves the cycles alone"
+    );
     assert_eq!(planned["state"]["cycles"], 1);
 }
 
@@ -336,13 +352,20 @@ fn a_completed_homework_session_ends_the_timer_and_tells_after_keeping_it() {
 
 #[test]
 fn a_homework_that_is_not_loaded_or_a_skip_goes_on_to_a_break() {
-    assert_eq!(plan(&work_timer(true), true, false, &json!({}))["state"]["phase"], "break");
-    assert_eq!(plan(&work_timer(true), false, true, &json!({}))["state"]["phase"], "break");
+    assert_eq!(
+        plan(&work_timer(true), true, false, &json!({}))["state"]["phase"],
+        "break"
+    );
+    assert_eq!(
+        plan(&work_timer(true), false, true, &json!({}))["state"]["phase"],
+        "break"
+    );
 }
 
 #[test]
 fn entering_a_phase_names_its_notice() {
-    let args = json!({ "state": work_timer(false), "phase": "long_break", "prefs": {}, "now_ms": 0 });
+    let args =
+        json!({ "state": work_timer(false), "phase": "long_break", "prefs": {}, "now_ms": 0 });
     let entered = focus::enter_phase(&args).unwrap();
     assert_eq!(entered["state"]["phase"], "long_break");
     assert_eq!(entered["alert"]["title"], "Long break");
@@ -391,7 +414,10 @@ fn a_credit_goes_to_the_block_only_from_its_own_week() {
     assert_eq!(planned["updated"]["focus_minutes"], 25);
     let mut elsewhere = work_timer(false);
     elsewhere["weekStart"] = json!("2026-09-21");
-    assert_eq!(credit(&elsewhere, json!({}), blocks, 25), json!({ "skip": true }));
+    assert_eq!(
+        credit(&elsewhere, json!({}), blocks, 25),
+        json!({ "skip": true })
+    );
 }
 
 #[test]
@@ -425,7 +451,13 @@ fn open_homework() -> Value {
 
 #[test]
 fn auto_complete_marks_the_worked_block_done_and_leaves_a_homework_with_sessions_open() {
-    let planned = auto(&work_timer(true), blocks_of_a_homework(), open_homework(), true, true);
+    let planned = auto(
+        &work_timer(true),
+        blocks_of_a_homework(),
+        open_homework(),
+        true,
+        true,
+    );
     assert_eq!(
         planned["block"],
         json!({ "id": "b1", "start": "09:00", "completed_day": 0 })
@@ -437,7 +469,13 @@ fn auto_complete_marks_the_worked_block_done_and_leaves_a_homework_with_sessions
 fn auto_complete_finishes_the_homework_with_its_last_unfinished_session() {
     let mut blocks = blocks_of_a_homework();
     blocks[1]["completed"] = json!(true);
-    let planned = auto(&work_timer(true), blocks.clone(), open_homework(), true, true);
+    let planned = auto(
+        &work_timer(true),
+        blocks.clone(),
+        open_homework(),
+        true,
+        true,
+    );
     assert_eq!(planned["block"]["id"], "b1");
     assert_eq!(planned["complete_homework"], "a1");
     // A break block of the homework is not a work session.
@@ -471,8 +509,14 @@ fn a_quick_timer_never_auto_completes() {
 fn auto_complete_needs_the_setting_and_the_material_screens() {
     let nothing = json!({ "block": null, "complete_homework": null });
     let state = work_timer(true);
-    assert_eq!(auto(&state, blocks_of_a_homework(), open_homework(), true, false), nothing);
-    assert_eq!(auto(&state, blocks_of_a_homework(), open_homework(), false, true), nothing);
+    assert_eq!(
+        auto(&state, blocks_of_a_homework(), open_homework(), true, false),
+        nothing
+    );
+    assert_eq!(
+        auto(&state, blocks_of_a_homework(), open_homework(), false, true),
+        nothing
+    );
 }
 
 #[test]
@@ -496,9 +540,17 @@ fn held(kinds: Value, state: &Value, prefs: Value, material: bool) -> Value {
 fn a_hold_keeps_only_notices_that_are_not_about_focus() {
     let kinds = json!(["reminder", "focus", "alarm", null]);
     let work = work_timer(false);
-    assert_eq!(held(kinds.clone(), &work, json!({}), true), json!([true, false, true, true]));
     assert_eq!(
-        held(kinds.clone(), &work, json!({ "focus_auto_mute": false }), true),
+        held(kinds.clone(), &work, json!({}), true),
+        json!([true, false, true, true])
+    );
+    assert_eq!(
+        held(
+            kinds.clone(),
+            &work,
+            json!({ "focus_auto_mute": false }),
+            true
+        ),
         json!([false, false, false, false])
     );
     let mut resting = work.clone();
@@ -528,7 +580,8 @@ fn focus_mutes_alerts_in_a_paused_work_phase_too() {
 }
 
 fn dropped(state: &Value, week: &str, blocks: Value, announce: bool) -> Value {
-    let args = json!({ "focus": state, "week_start": week, "blocks": blocks, "announce": announce });
+    let args =
+        json!({ "focus": state, "week_start": week, "blocks": blocks, "announce": announce });
     focus::drop_missing(&args).unwrap()
 }
 
@@ -551,7 +604,10 @@ fn a_timer_whose_block_is_still_there_survives() {
 #[test]
 fn a_block_that_now_belongs_to_another_homework_does_not_keep_the_timer() {
     let blocks = json!([{ "id": "b1", "assignment_id": "a2" }]);
-    assert_eq!(dropped(&work_timer(true), WEEK, blocks, false)["drop"], true);
+    assert_eq!(
+        dropped(&work_timer(true), WEEK, blocks, false)["drop"],
+        true
+    );
 }
 
 #[test]
@@ -561,7 +617,16 @@ fn a_homework_or_quick_timer_or_another_week_is_left_alone() {
     homework["blockId"] = Value::Null;
     assert_eq!(dropped(&homework, WEEK, json!([]), true), kept);
     assert_eq!(dropped(&Value::Null, WEEK, json!([]), true), kept);
-    assert_eq!(dropped(&work_timer(false), "2026-10-05", json!([]), true), kept);
+    assert_eq!(
+        dropped(&work_timer(false), "2026-10-05", json!([]), true),
+        kept
+    );
+}
+
+fn on_wednesday() -> Value {
+    let mut timer = work_timer(true);
+    timer["day"] = json!(2);
+    timer
 }
 
 fn rebased(state: &Value, first_weekday: u32) -> Value {
@@ -572,21 +637,22 @@ fn rebased(state: &Value, first_weekday: u32) -> Value {
 #[test]
 fn a_new_first_day_moves_the_timer_to_the_same_date_in_its_new_week() {
     // The timer points at Wednesday 2026-09-30 (day 2 of the week from Monday 2026-09-28).
-    let from_sunday = rebased(&work_timer(true), 6);
+    let wednesday = on_wednesday();
+    let from_sunday = rebased(&wednesday, 6);
     assert_eq!(from_sunday["weekStart"], "2026-09-27");
     assert_eq!(from_sunday["day"], 3);
-    let from_wednesday = rebased(&work_timer(true), 2);
+    let from_wednesday = rebased(&wednesday, 2);
     assert_eq!(from_wednesday["weekStart"], "2026-09-30");
     assert_eq!(from_wednesday["day"], 0);
-    let from_monday = rebased(&work_timer(true), 0);
+    let from_monday = rebased(&wednesday, 0);
     assert_eq!(from_monday["weekStart"], WEEK);
     assert_eq!(from_monday["day"], 2);
 }
 
 #[test]
 fn a_rebased_timer_keeps_everything_else() {
-    let moved = rebased(&work_timer(true), 6);
-    let mut expected = work_timer(true);
+    let moved = rebased(&on_wednesday(), 6);
+    let mut expected = on_wednesday();
     expected["weekStart"] = json!("2026-09-27");
     expected["day"] = json!(3);
     assert_eq!(moved, expected);

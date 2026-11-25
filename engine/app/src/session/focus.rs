@@ -138,11 +138,15 @@ pub fn start_target(args: &Value) -> EngineResult<Value> {
     let mut placed = truthy(&block["start"]).then_some(block);
     if placed.is_none() && truthy(&args["trace"]) {
         let on_day = |item: &Value| {
-            day.is_null() || item["days"].as_array().is_some_and(|days| days.contains(day))
+            day.is_null()
+                || item["days"]
+                    .as_array()
+                    .is_some_and(|days| days.contains(day))
         };
-        placed = args["trace"]["placed"]
-            .as_array()
-            .and_then(|list| list.iter().find(|item| item["id"] == *block_id && on_day(item)));
+        placed = args["trace"]["placed"].as_array().and_then(|list| {
+            list.iter()
+                .find(|item| item["id"] == *block_id && on_day(item))
+        });
     }
     let Some(placed) = placed.filter(|item| truthy(&item["start"])) else {
         return refused();
@@ -189,7 +193,9 @@ pub fn elapsed_min(args: &Value) -> EngineResult<Value> {
     }
     let now = now_of(args)?;
     let spent = timer::phase_total_ms(state, &args["prefs"])? - timer::remaining_ms(state, now)?;
-    Ok(json!(i64::try_from(spent.max(0) / 60_000).unwrap_or(i64::MAX)))
+    Ok(json!(
+        i64::try_from(spent.max(0) / 60_000).unwrap_or(i64::MAX)
+    ))
 }
 
 /// What one tick of the clock means: `credit` (credits waited on a save, which is over, go in first) and
@@ -329,7 +335,9 @@ pub fn auto_complete_plan(args: &Value) -> EngineResult<Value> {
             && item["kind"] == "flexible"
             && truthy(&state["start"])
             && is_whole(day)
-            && item["days"].as_array().is_some_and(|days| days.contains(day))
+            && item["days"]
+                .as_array()
+                .is_some_and(|days| days.contains(day))
     });
     let done = marked_block(marked, state);
     let own = &state["assignmentId"];
@@ -338,11 +346,14 @@ pub fn auto_complete_plan(args: &Value) -> EngineResult<Value> {
     } else {
         block.map_or(&NULL, |item| &item["assignment_id"])
     };
-    let open = assignment_id.as_str().filter(|id| !id.is_empty()).filter(|id| {
-        args["assignments"]
-            .get(*id)
-            .is_some_and(|item| !item.is_null() && !truthy(&item["completed"]))
-    });
+    let open = assignment_id
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .filter(|id| {
+            args["assignments"]
+                .get(*id)
+                .is_some_and(|item| !item.is_null() && !truthy(&item["completed"]))
+        });
     let Some(id) = open else {
         return Ok(json!({ "block": done, "complete_homework": null }));
     };
@@ -388,10 +399,7 @@ pub fn mutes_alerts(args: &Value) -> EngineResult<Value> {
 pub fn hold_alerts(args: &Value) -> EngineResult<Value> {
     let muting = mutes(args);
     let kinds = args["kinds"].as_array().cloned().unwrap_or_default();
-    let hold: Vec<bool> = kinds
-        .iter()
-        .map(|kind| muting && kind != "focus")
-        .collect();
+    let hold: Vec<bool> = kinds.iter().map(|kind| muting && kind != "focus").collect();
     Ok(json!({ "hold": hold }))
 }
 

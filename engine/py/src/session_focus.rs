@@ -12,8 +12,8 @@ use crate::guard;
 
 fn run(args: &str, decide: fn(&Value) -> EngineResult<Value>) -> PyResult<String> {
     guard(|| {
-        let args: Value = serde_json::from_str(args)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let args: Value =
+            serde_json::from_str(args).map_err(|error| PyValueError::new_err(error.to_string()))?;
         decide(&args)
             .map(|answer| answer.to_string())
             .map_err(crate::raise)
