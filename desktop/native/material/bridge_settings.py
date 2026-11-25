@@ -1024,7 +1024,11 @@ class SettingsBridge(QObject):
         """Leaving Settings hides the pop-up and clears the published code and countdown,
         like dismissing it, so the row cannot show a frozen code."""
         self._pair_gen += 1
-        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status)
+        # A start left pending belongs to the older gen: drop the guard so a new Pair
+        # works, while the late answer is still ignored as stale.
+        was_starting = self._pair_starting
+        self._pair_starting = False
+        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status) or was_starting
         self._pair_open = False
         self._pair_code = ""
         self._pair_status = ""
@@ -1589,6 +1593,7 @@ class SettingsBridge(QObject):
         if name != "sync":
             self._pair_gen += 1
             self._pair_open = False
+            self._pair_starting = False
             if self._pair_watch.isActive():
                 self._pair_watch.stop()
         self._section = name
@@ -1600,6 +1605,7 @@ class SettingsBridge(QObject):
     def openAdvanced(self) -> None:
         self._pair_gen += 1
         self._pair_open = False
+        self._pair_starting = False
         if self._pair_watch.isActive():
             self._pair_watch.stop()
         self._draft_choice = dict(self._choice)
@@ -2560,7 +2566,11 @@ class SettingsBridge(QObject):
         """Dismissing the pop-up stops the watch and clears the published code and countdown,
         so the Settings row cannot show a frozen code."""
         self._pair_gen += 1
-        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status)
+        # A start left pending belongs to the older gen: drop the guard so a new Pair
+        # works, while the late answer is still ignored as stale.
+        was_starting = self._pair_starting
+        self._pair_starting = False
+        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status) or was_starting
         self._pair_open = False
         self._pair_code = ""
         self._pair_status = ""

@@ -494,3 +494,68 @@ def test_dismissing_or_leaving_settings_cancels_a_pending_pairing_callback(
     _pump(qapp, 10)
     assert _panel(window).property("state")["pairOpen"] is False
     assert _panel(window).property("promptOpen") is False
+
+
+def test_dismissing_a_pending_start_lets_a_new_pair_show_a_code(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX-LIST-4 item 2: dismissing while a start is pending resets the guard so a new
+    Pair works, and the late answer of the old start must not reopen or replace anything."""
+    pending: list[object] = []
+    monkeypatch.setattr(window.session, "begin_pairing", lambda done: pending.append(done) or True)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 1
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is True)
+
+    # Dismiss while the first start is still pending, then Pair again: a new start goes out.
+    _panel(window).closePairing()
+    _pump(qapp)
+    assert _panel(window).property("state").get("pairStarting") is False
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 2
+
+    # The new offer shows; the late first answer is stale and changes nothing.
+    pending[1]({"display_code": "2222 3333"}, None)  # type: ignore[index]
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "2222 3333")
+    assert _panel(window).property("state")["pairOpen"] is True
+    pending[0]({"display_code": "1111 0000"}, None)  # type: ignore[index]
+    _pump(qapp, 10)
+    assert _panel(window).property("state")["pairCode"] == "2222 3333"
+    assert _panel(window).property("state")["pairOpen"] is True
+
+
+def test_leaving_settings_during_a_pending_start_lets_a_new_pair_work(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX-LIST-4 item 2: leaving Settings while a start is pending resets the guard too."""
+    pending: list[object] = []
+    monkeypatch.setattr(window.session, "begin_pairing", lambda done: pending.append(done) or True)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 1
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is True)
+
+    _bridge(window).showPage("week")
+    _pump(qapp)
+    assert _panel(window).property("state").get("pairStarting") is False
+
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 2
+    pending[1]({"display_code": "4444 5555"}, None)  # type: ignore[index]
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "4444 5555")
+    pending[0]({"display_code": "0000 1111"}, None)  # type: ignore[index]
+    _pump(qapp, 10)
+    assert _panel(window).property("state")["pairCode"] == "4444 5555"
+    assert _panel(window).property("state")["pairOpen"] is True
