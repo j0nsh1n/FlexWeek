@@ -125,7 +125,7 @@ def now_next_line(result: dict, minute: int) -> str:
 
 def _decide(name: str, **args: object) -> Any:
     """One of the session's focus decisions, made in Rust from the arguments as JSON."""
-    ask = getattr(flexweek_engine, "session_focus_" + name)
+    ask = getattr(flexweek_engine, f"session_focus_{name}")
     return json.loads(ask(json.dumps(args)))
 
 
@@ -261,5 +261,4 @@ def drop_missing(state: dict | None, week_start: str, blocks: list[dict], announ
 
 def rebase_state(state: dict | None, first_weekday: int) -> dict | None:
     """The timer in the week from the new first day, keeping its date; None when it has no week."""
-    moved: dict | None = _decide("rebase", focus=state, first_weekday=first_weekday)["state"]
-    return moved
+    return _decide("rebase", focus=state, first_weekday=first_weekday)["state"]
