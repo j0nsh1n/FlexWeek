@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub const ASSIGNMENT_CONFLICT: &str =
-    "This assignment changed in another window. Reload before saving.";
+    "This homework changed in another window. Reload before saving.";
 pub const ASSIGNMENT_LIMIT: &str = "An account holds at most 1000 assignments";
 pub const ASSIGNMENT_UNKNOWN: &str = "assignment_id must name an assignment of this account";
 pub const ASSIGNMENT_MISSING: &str = "Assignment not found";

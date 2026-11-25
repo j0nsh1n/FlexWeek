@@ -45,19 +45,16 @@ pub const REASON_COPY: &[(&str, &str)] = &[
     ),
     (
         "ENERGY_MISMATCH",
-        "Planned outside its preferred time of day.",
+        "Planned outside the time of day you chose for it.",
     ),
     (
         "SLEEP_GUARD",
         "It doesn't fit in the day on the days left for it.",
     ),
-    (
-        "WORK_WINDOW_MISS",
-        "That doesn't fit in the times you set aside for work.",
-    ),
+    ("WORK_WINDOW_MISS", "That doesn't fit in your study hours."),
     (
         "NO_STUDY_TIME_TODAY",
-        "Due today and no study time is left today.",
+        "It's due today, and there's no study time left today.",
     ),
     (
         "RESHUFFLE_AFTER_MISS",

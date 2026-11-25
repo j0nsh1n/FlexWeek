@@ -275,9 +275,8 @@ fn a_request_past_its_limit_fails_as_unanswered_and_its_late_answer_is_dropped()
             number,
             outcome: Outcome::Failed {
                 status: 0,
-                message:
-                    "Could not reach FlexWeek. Your changes may not have been saved. Try again."
-                        .into()
+                message: "FlexWeek didn't answer. Your changes may not have been saved. Try again."
+                    .into()
             }
         })
     );
@@ -432,7 +431,7 @@ fn a_failure_inside_a_worker_is_a_server_error_and_the_workers_carry_on() {
     for event in &events {
         assert_eq!(
             failed(event),
-            (500, "FlexWeek could not complete this request. Try again.")
+            (500, "FlexWeek couldn't finish that action. Try again.")
         );
     }
     rig.host.broken.store(false, Ordering::SeqCst);
@@ -635,7 +634,7 @@ fn the_words_for_each_failure_are_the_windows() {
         (
             0,
             Value::Null,
-            "Could not reach FlexWeek. Your changes may not have been saved. Try again.",
+            "FlexWeek didn't answer. Your changes may not have been saved. Try again.",
         ),
         (
             401,
@@ -665,7 +664,7 @@ fn the_words_for_each_failure_are_the_windows() {
         (
             401,
             json!("Please sign in"),
-            "Please sign in again, or check your username and password.",
+            "Your session ended. Sign in again.",
         ),
         (
             422,
@@ -685,12 +684,12 @@ fn the_words_for_each_failure_are_the_windows() {
         (
             503,
             Value::Null,
-            "Storage is unavailable. Keep your changes and try again shortly.",
+            "FlexWeek can't open its saved data right now. Keep your changes and try again in a minute.",
         ),
         (
             418,
             Value::Null,
-            "FlexWeek could not complete this request. Try again.",
+            "FlexWeek couldn't finish that action. Try again.",
         ),
     ];
     for (status, detail, said) in cases {

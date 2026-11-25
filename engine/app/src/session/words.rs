@@ -1,5 +1,5 @@
 //! What a student reads when a request fails: the words `desktop/native/client.py` (`_error`) gives each
-//! answer today, moved here unchanged so the window says the same things once the session is in Rust.
+//! answer today, moved here so the window says the same things once the session is in Rust.
 
 use serde_json::Value;
 
@@ -11,10 +11,11 @@ pub const SIGN_IN_WRONG: &str = "Wrong username or password. Try again, or choos
 pub const USERNAME_TAKEN: &str = "That username is taken. Try another.";
 pub const WRONG_RECOVERY_CODE: &str =
     "Wrong username or recovery code. Each code works once; try another one.";
-/// Said when a session ends; about no one field, though its words name two.
-pub const SIGN_IN_AGAIN: &str = "Please sign in again, or check your username and password.";
+/// Said when a session ends.
+pub const SIGN_IN_AGAIN: &str = "Your session ended. Sign in again.";
 pub const SESSION_ENDED: &str = "Your session ended. Sign in again.";
-pub const UNREADABLE: &str = "FlexWeek returned an unreadable response.";
+pub const UNREADABLE: &str =
+    "FlexWeek couldn't read its own answer. Close and reopen it, then try again.";
 
 /// The service's details that are a wrong answer at sign-in, not a session that ended.
 pub const NOT_AN_EXPIRY: [&str; 3] = [
@@ -43,16 +44,18 @@ pub fn error_words(status: u16, detail: Option<&Value>) -> &'static str {
         }
     }
     match status {
-        0 => "Could not reach FlexWeek. Your changes may not have been saved. Try again.",
+        0 => "FlexWeek didn't answer. Your changes may not have been saved. Try again.",
         401 => SIGN_IN_AGAIN,
-        403 => "This request was refused. Restart FlexWeek and try again.",
+        403 => "FlexWeek refused that change. Close and reopen FlexWeek, then try again.",
         404 => "This item is no longer available. Reload and try again.",
         409 => "The saved data changed or that name is already in use. Reload and try again.",
         413 => "This request is too large. Reduce its size and try again.",
         422 => "Check the required fields, dates, times and lengths, then try again.",
         429 => TOO_MANY_TRIES,
-        503 => "Storage is unavailable. Keep your changes and try again shortly.",
-        _ => "FlexWeek could not complete this request. Try again.",
+        503 => {
+            "FlexWeek can't open its saved data right now. Keep your changes and try again in a minute."
+        }
+        _ => "FlexWeek couldn't finish that action. Try again.",
     }
 }
 

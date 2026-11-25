@@ -26,7 +26,7 @@ use super::week::{self, WeekTarget};
 use super::write::{self, REACHES_PHONE};
 use crate::session;
 
-const WEEK_OVER: &str = "This week is over, so nothing was planned. Plan this week or a later one.";
+const WEEK_OVER: &str = "That week is over. Open this week or a later one, then plan again.";
 const NOT_THAT_DAY: &str = "It cannot go on that day: its due date or its days leave that day out.";
 
 #[derive(Deserialize, JsonSchema)]

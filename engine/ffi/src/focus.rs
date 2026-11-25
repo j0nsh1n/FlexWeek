@@ -262,7 +262,9 @@ fn credit_with_revision(
         flexweek_store::AssignmentSave::Ready(_) => (),
         flexweek_store::AssignmentSave::Conflict => {
             let _ = db.execute_batch("ROLLBACK");
-            return Err(failure("homework changed on another device"));
+            return Err(failure(
+                "This homework changed on another device. Sync, then try again.",
+            ));
         }
         flexweek_store::AssignmentSave::OverLimit => {
             let _ = db.execute_batch("ROLLBACK");
@@ -450,7 +452,7 @@ mod tests {
         assert!(result.is_err(), "credit refuses a stale homework revision");
         assert_eq!(
             result.unwrap_err().to_string(),
-            "homework changed on another device",
+            "This homework changed on another device. Sync, then try again.",
             "credit returns the conflict message"
         );
     }
