@@ -439,18 +439,19 @@ def test_cancel_and_esc_keep_the_student_signed_in_and_the_keyboard_goes_back(
 
 
 
-def test_the_about_logo_sits_on_a_rounded_tile_so_no_white_square_shows_in_dark(
+def test_the_about_logo_shows_on_its_own_with_no_light_tile_behind_it(
     qapp: QApplication, window: NativeWindow
 ) -> None:
+    """The light tile hid the old logo's grey square in dark; it would now be the white box Jonathan
+    asked to lose (2026-11-24). The logo brings its own rounded lime square."""
     root, _quick = _material(qapp, window)
     _sheets(window).openAbout()
     pump(qapp, 40)
-    tile = named(root, "aboutLogoTile")[0]
     logo = named(root, "aboutLogo")[0]
-    assert float(tile.property("radius")) >= 12
-    # The logo's square corner must lie inside the tile's curve: its inset is at least r * (1 - 1/sqrt 2).
-    inset = (float(tile.property("width")) - float(logo.property("width"))) / 2
-    assert inset >= float(tile.property("radius")) * 0.2929
+    assert named(root, "aboutLogoTile") == []
+    assert (float(logo.property("width")), float(logo.property("height"))) == (56.0, 56.0)
+    behind = logo.parentItem()
+    assert behind.metaObject().className() != "QQuickRectangle", "something is drawn behind the logo"
 
 
 def test_in_dark_the_page_behind_a_sheet_is_dimmed_harder_and_the_card_has_an_edge(

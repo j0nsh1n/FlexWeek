@@ -1,5 +1,5 @@
-# The Linux build machine, as a container: Ubuntu 24.04 like the GitHub runner in
-# .github/workflows/dev-build.yml, so a tarball built on a newer-glibc desktop still
+# The Linux build machine, as a container: Ubuntu 24.04 like the Depot runner in
+# .depot/workflows/dev-build.yml, so a tarball built on a newer-glibc desktop still
 # keeps the glibc 2.38 promise (spec.md). scripts/build-linux-local.sh builds and runs it.
 FROM docker.io/library/ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
