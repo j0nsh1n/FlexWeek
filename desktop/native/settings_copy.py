@@ -36,7 +36,7 @@ SPOTIFY_TONE_NOTE = f"{SPOTIFY_LINK_HINT} {SPOTIFY_TONE_REST}"
 # widgets.py; the Widgets originals go with the Widgets styles).
 STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
 SCHOOL_HOURS_NOTE = "The days and times you're at school, so nothing is planned then."
-NO_SCHOOL_DAYS = "No school days picked means no school on the calendar."
+NO_SCHOOL_DAYS = "No school days picked: School won't appear on the calendar."
 NO_STUDY_HOURS = "No study hours yet, so homework can go at any time of day."
 NO_PROTECTED = "Nothing protected yet. Add practice, family time or a job."
 PROTECTED_WORDS = {"downtime": "Downtime", "commute": "Commute", "meal": "Meal"}

@@ -82,7 +82,7 @@ Item {
                     x: 16
                     y: 12
                     width: parent.width - 32
-                    text: "Based on the " + (root.st.draftPreset || "") + " preset. Done applies what you change here."
+                    text: "Based on the " + (root.st.draftPreset || "") + " preset. Choose Done to apply your changes."
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(14)
@@ -136,7 +136,7 @@ Item {
                             ? "This preset is a light look, so it stays light."
                             : "Follow this device, or choose.")
                     choices: [
-                        { label: "Auto", value: "system", enabled: !root.st.draftOneMode },
+                        { label: "Same as this computer", value: "system", enabled: !root.st.draftOneMode },
                         { label: "Light", value: "light", enabled: !root.st.draftOneMode || root.st.draftOneMode === "light" },
                         { label: "Dark", value: "dark", enabled: !root.st.draftOneMode || root.st.draftOneMode === "dark" }
                     ]
@@ -232,7 +232,7 @@ Item {
                 visible: root.showMore
                 GroupHeader { title: "Calendar"; resetKey: "calendar"; onReset: root.panel.resetGroup("calendar") }
                 ChoiceRow {
-                    key: "lines"; title: "Hour lines"; subtitle: "The rules across the week."
+                    key: "lines"; title: "Hour lines"; subtitle: "Lines between the hours."
                     choices: [{ label: "None", value: "None" }, { label: "Faint", value: "Faint" }, { label: "Clear", value: "Clear" }]
                     current: root.st.lines || "Faint"
                     onChosen: (v) => root.panel.setLines(v)
@@ -292,7 +292,7 @@ Item {
                 SettingsRow {
                     objectName: "row_readable"
                     visible: (root.st.problems || []).length === 0
-                    title: "Everything you set reads clearly."
+                    title: "All text is easy to read."
                     subtitle: "Colours you set are checked against their text."
                 }
                 Repeater {
@@ -400,7 +400,7 @@ Item {
                 objectName: "draftState"
                 visible: root.wide
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.st.dirty ? "Draft. Done applies it." : "Same as the preset"
+                text: root.st.dirty ? "Unsaved changes. Choose Done to apply them." : "Same as the preset"
                 color: palette.inkMuted
                 font.family: M3Font.family
                 font.pixelSize: M3Font.px(12)

@@ -54,7 +54,7 @@ def test_routines_apply_to_the_open_week_through_the_session(
     assert sheets.form["intro"] == "Pick a routine, the week to copy it into and the days to copy."
     assert sheets.form["rows"][0]["name"] == "Weekend"
     assert sheets.form["rows"][0]["detail"] == "1 fixed times"
-    assert find_named(shell._material_page.root, "routinesApply").property("text") == "Apply"
+    assert find_named(shell._material_page.root, "routinesApply").property("text") == "Apply routine"
     sheets.applyRoutine()
     assert sheets.form["error"] == "Choose a saved routine."
     sheets.selectRoutine("r-1")

@@ -496,7 +496,7 @@ def test_a_one_mode_preset_shows_the_mode_in_use_and_cannot_pick_another(
     seg = _named(root, "mode")[0]
     assert str(seg.property("current")) == shown.lower(), "the highlighted choice is the mode in use"
     by_label = {c["label"]: c["enabled"] for c in seg.property("choices").toVariant()}
-    assert by_label == {"Auto": False, "Light": shown == "Light", "Dark": shown == "Dark"}
+    assert by_label == {"Same as this computer": False, "Light": shown == "Light", "Dark": shown == "Dark"}
     _click_segment(qapp, window, seg, other)
     _pump(qapp, 10)
     assert _material_file().get("mode") == "system", "the disabled choice does nothing"

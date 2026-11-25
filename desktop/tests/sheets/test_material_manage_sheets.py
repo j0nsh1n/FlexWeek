@@ -188,7 +188,7 @@ def test_the_account_sheet_has_the_widgets_words_and_hides_the_passwords(
         for item in named(_root(shell), name)
     ]
     assert shown == [
-        "Replace password",
+        "Change password",
         "Replace recovery codes",
         "Export backup file",
         "Import backup file",

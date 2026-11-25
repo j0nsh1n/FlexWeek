@@ -90,11 +90,11 @@ def test_mode_preset_contrast_and_density_apply_at_once(qapp: QApplication, wind
 
 
 def test_choosing_auto_mode_keeps_system_in_the_look_file(qapp: QApplication, window: NativeWindow) -> None:
-    """Auto is the label; the look file keeps the account's system mode, not the word auto."""
+    """Same as this computer is the label; the look file keeps system mode, not the word auto."""
     root = _open_settings(qapp, window)
     _click_segment(qapp, window, _named(root, "mode")[0], "Dark")
     wait_until(qapp, lambda: _material_file().get("mode") == "dark")
-    _click_segment(qapp, window, _named(root, "mode")[0], "Auto")
+    _click_segment(qapp, window, _named(root, "mode")[0], "Same as this computer")
     wait_until(qapp, lambda: _material_file().get("mode") == "system")
     assert _material_file().get("mode") != "auto"
 

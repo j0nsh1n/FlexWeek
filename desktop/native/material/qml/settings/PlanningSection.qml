@@ -70,7 +70,7 @@ SectionPage {
         ChoiceRow {
             key: "buffer"
             visible: !!page.st.showBuffer
-            title: "Smart buffer time"
+            title: "Empty time between scheduled blocks"
             subtitle: "Breathing room between planned blocks."
             choices: [{ label: "None", value: "0" }, { label: "15m", value: "15" }, { label: "30m", value: "30" }]
             current: String(page.st.buffer === undefined ? 15 : page.st.buffer)
@@ -79,7 +79,7 @@ SectionPage {
         ToggleRow {
             key: "urgent"
             visible: !!page.st.showUrgent
-            title: "Prioritize urgent deadlines first"
+            title: "Plan urgent homework first"
             subtitle: "Tight work gets the earliest open slots."
             isOn: !!page.st.urgent
             onFlipped: (value) => page.panel.setUrgent(value)
@@ -87,7 +87,7 @@ SectionPage {
         ToggleRow {
             key: "split"
             visible: !!page.st.showSplit
-            title: "Split long tasks"
+            title: "Split long homework into sessions"
             subtitle: "Tasks over 60 minutes, other than homework, can divide into shorter sessions. Homework keeps its own In one go or Spread over days choice."
             isOn: !!page.st.split
             onFlipped: (value) => page.panel.setSplit(value)
@@ -98,7 +98,7 @@ SectionPage {
         ChoiceRow {
             key: "cutoff"
             visible: !!page.st.showCutoff
-            title: "Study window cutoff"
+            title: "No homework after"
             subtitle: "No homework planned after this hour."
             choices: page.st.cutoffChoices ? page.st.cutoffChoices : []
             current: page.st.cutoff || ""
