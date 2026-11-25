@@ -91,7 +91,7 @@ FocusScope {
         id: scrim
         objectName: "pairingScrim"
         anchors.fill: parent
-        color: "#000000"
+        color: pal.scrim
         opacity: pal.dark ? 0.6 : 0.32
         TapHandler {
             onTapped: (eventPoint) => {

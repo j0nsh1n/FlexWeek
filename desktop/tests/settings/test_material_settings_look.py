@@ -317,3 +317,39 @@ def test_dragging_the_settings_nav_divider_resizes_collapses_and_remembers_width
     _pump(qapp)
     assert panel.property("state")["navWidth"] == 220
     _pump(qapp)
+
+
+def test_positive_saved_corner_override_applies_to_shared_cards_and_buttons(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Finding 14: M3Palette.cornerFor honors positive saved corner overrides (within bounds) as well as 0."""
+    root = _open_settings(qapp, window, "sync")
+    panel = _panel(window)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 16.0
+
+    # Positive custom radius (24 px) updates shared cards above their default 16 px.
+    panel.openAdvanced()
+    panel.setCorner(24)
+    panel.done()
+    panel.setSection("sync")
+    _pump(qapp, 10)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 24.0
+
+    # Sharp (0 px) flattens corners completely; reset (-1) restores the default 16 px.
+    panel.openAdvanced()
+    panel.setCorner(0)
+    panel.done()
+    panel.setSection("sync")
+    _pump(qapp, 10)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 0.0
+
+    panel.openAdvanced()
+    panel.setCorner(-1)
+    panel.done()
+    panel.setSection("sync")
+    _pump(qapp, 10)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 16.0

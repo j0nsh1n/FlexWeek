@@ -27,7 +27,7 @@ Item {
         anchors.fill: parent
         anchors.topMargin: 4
         radius: palette.cornerFor(12)
-        color: "#33000000"
+        color: palette.menuShadow
         z: -1
     }
     Rectangle {

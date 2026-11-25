@@ -80,7 +80,7 @@ FocusScope {
         id: scrim
         anchors.fill: parent
         objectName: "sheetScrim"
-        color: "#000000"
+        color: pal.scrim
         // In dark a card and the page are close greys, so the page is dimmed harder, which also separates
         // a question from the sheet it sits over (both are this frame, each with its own scrim).
         opacity: pal.dark ? 0.6 : 0.32

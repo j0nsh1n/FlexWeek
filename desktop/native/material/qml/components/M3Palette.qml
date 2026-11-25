@@ -57,10 +57,18 @@ QtObject {
     readonly property color panelSurface: dark ? surfaceContainer : surfaceContainerLow
     readonly property color dialogSurface: dark ? surfaceContainerHigh : surfaceContainerLowest
     readonly property color wellSurface: dark ? surfaceContainerHighest : surfaceContainerHigh
-    readonly property bool sharpCorners: theme && theme.corner !== undefined && theme.corner === 0
-    function cornerFor(wanted) {
-        return sharpCorners ? 0 : wanted
+    readonly property bool hasCornerOverride: theme != null && theme.corner !== undefined && theme.corner !== null
+    readonly property bool sharpCorners: hasCornerOverride && Number(theme.corner) === 0
+    function cornerFor(wanted, maxRadius) {
+        if (!hasCornerOverride)
+            return wanted
+        var saved = Math.max(0, Number(theme.corner))
+        if (maxRadius !== undefined && maxRadius !== null)
+            return Math.min(saved, maxRadius)
+        return saved
     }
+    readonly property color scrim: tone("scrim", "#000000")
+    readonly property color menuShadow: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(0, 0, 0, 0.2)
     // Status colours: dark from spec; light values proposed, not in the spec
     readonly property color statusDone: tone("statusDone", "#276b3f")
     readonly property color statusDueSoon: tone("statusDueSoon", "#8a5a00")

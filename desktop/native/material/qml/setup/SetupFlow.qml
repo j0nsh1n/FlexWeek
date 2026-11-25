@@ -129,14 +129,14 @@ FocusScope {
 
                             Rectangle {
                                 anchors.fill: parent
-                                radius: m3Palette.cornerFor(20)
+                                radius: m3Palette.cornerFor(20, height / 2)
                                 color: railRow.current ? m3Palette.secondaryContainer : "transparent"
                                 border.width: railRow.current && root.highContrast ? 1.5 : 0
                                 border.color: m3Palette.outline
                             }
                             M3StateLayer {
                                 anchors.fill: parent
-                                radius: m3Palette.cornerFor(20)
+                                radius: m3Palette.cornerFor(20, height / 2)
                                 color: m3Palette.inkSurface
                                 hovered: railHover.hovered
                                 down: railTap.pressed || railRow.keyDown
@@ -146,7 +146,7 @@ FocusScope {
                                 anchors.fill: parent
                                 anchors.margins: -4
                                 ring: m3Palette.focusRing
-                                ringRadius: m3Palette.cornerFor(20) + 4
+                                ringRadius: m3Palette.cornerFor(20, parent.height / 2) + 4
                             }
                             Row {
                                 id: stepContent

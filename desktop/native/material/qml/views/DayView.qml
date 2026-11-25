@@ -99,7 +99,7 @@ Item {
                     id: dayNavPill
                     height: 36
                     width: dayNavRow.implicitWidth + 8
-                    radius: palette.cornerFor(18)
+                    radius: palette.cornerFor(18, height / 2)
                     color: palette.cardSurface
                     border.width: root.highContrast ? 1.5 : 1
                     border.color: root.highContrast ? palette.outline : palette.outlineVariant

@@ -53,12 +53,12 @@ Item {
                 Accessible.onPressAction: root.picked(modelData.name)
                 Rectangle {
                     anchors.fill: parent
-                    radius: m3.cornerFor(pill.height / 2)
+                    radius: m3.cornerFor(pill.height / 2, pill.height / 2)
                     color: pill.on ? m3.secondaryContainer : "transparent"
                 }
                 M3StateLayer {
                     anchors.fill: parent
-                    radius: m3.cornerFor(pill.height / 2)
+                    radius: m3.cornerFor(pill.height / 2, pill.height / 2)
                     color: m3.inkSurface
                     hovered: hover.hovered && !pill.on
                     down: tap.pressed
@@ -68,7 +68,7 @@ Item {
                     anchors.fill: parent
                     anchors.margins: -4
                     ring: m3.focusRing
-                    ringRadius: m3.cornerFor(parent.height / 2) + 4
+                    ringRadius: m3.cornerFor(parent.height / 2, parent.height / 2) + 4
                 }
                 M3Icon {
                     id: iconGlyph

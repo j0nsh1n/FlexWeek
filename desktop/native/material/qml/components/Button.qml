@@ -17,7 +17,7 @@ Item {
 
     readonly property bool quiet: kind === "text"
     readonly property int padH: quiet ? 12 : 20
-    readonly property real btnRadius: palette.cornerFor(20)
+    readonly property real btnRadius: palette.cornerFor(20, height / 2)
     height: 40
     implicitHeight: 40
     // The icon grows with the label (18 px beside 14 px text) and shares its centre line.

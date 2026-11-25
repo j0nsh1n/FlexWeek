@@ -46,7 +46,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: "#000000"
+        color: palette.scrim
         opacity: 0.32
         TapHandler { onTapped: root.dismissed() }
     }
