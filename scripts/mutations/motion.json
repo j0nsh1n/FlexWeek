@@ -23,8 +23,8 @@
   {
     "name": "a plan's words are toasted before its Undo again",
     "file": "desktop/native/controller.py",
-    "old": "                if planned:\n                    # `planned` says it, with Undo.\n",
-    "new": "                if False:\n                    # `planned` says it, with Undo.\n",
+    "old": "            if planned:\n                # `planned` says it, with Undo.\n",
+    "new": "            if False:\n                # `planned` says it, with Undo.\n",
     "test": "desktop/tests/sheets/test_plan_undo.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
   }
 ]
