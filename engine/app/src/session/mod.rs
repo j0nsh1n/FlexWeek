@@ -12,6 +12,7 @@
 
 pub mod account;
 pub mod autosave;
+pub mod focus;
 pub mod frame;
 pub mod leaving;
 pub mod preferences;

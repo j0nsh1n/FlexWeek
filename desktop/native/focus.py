@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import flexweek_engine  # type: ignore[import-untyped]
 
@@ -120,3 +121,145 @@ def now_and_next(blocks: list[dict], day: int, minute: int) -> dict:
 
 def now_next_line(result: dict, minute: int) -> str:
     return str(flexweek_engine.focus_now_next_line(json.dumps(result), minute))
+
+
+def _decide(name: str, **args: object) -> Any:
+    """One of the session's focus decisions, made in Rust from the arguments as JSON."""
+    ask = getattr(flexweek_engine, "session_focus_" + name)
+    return json.loads(ask(json.dumps(args)))
+
+
+def start_target(
+    *,
+    block_id: str | None,
+    day: int | None,
+    quick: bool,
+    week_start: str,
+    assignments: dict,
+    blocks: list[dict],
+    trace: dict | None,
+    overdue: list[str],
+) -> dict:
+    """`{"target": ...}` for what a start would time, or `{"refuse": words}` when nothing can start."""
+    found: dict = _decide(
+        "start_target",
+        block_id=block_id,
+        day=day,
+        quick=quick,
+        week_start=week_start,
+        assignments=assignments,
+        blocks=blocks,
+        trace=trace,
+        overdue=overdue,
+    )
+    return found
+
+
+def start_decision(running: dict | None, target: dict, replace: bool) -> str:
+    """Starting what is already going is "same", another start "ask"s to replace it, else "begin"."""
+    return str(_decide("start_decision", focus=running, target=target, replace=replace))
+
+
+def elapsed_minutes(state: dict | None, week_start: str, prefs: dict | None, now_ms: int) -> int:
+    return int(_decide("elapsed_min", focus=state, week_start=week_start, prefs=prefs, now_ms=now_ms))
+
+
+def tick_step(state: dict | None, *, credits_waiting: bool, busy: bool, now_ms: int) -> dict:
+    """`credit` (credit the sessions waiting first) and `action`: "none", "ended" or "changed"."""
+    step: dict = _decide(
+        "tick_step", focus=state, credits_waiting=credits_waiting, busy=busy, now_ms=now_ms
+    )
+    return step
+
+
+def advance_begin(state: dict | None, *, focus_busy: bool, completed: bool) -> dict:
+    """`go` (there is a timer to move) and `credit` (credit the work phase that just ended first)."""
+    begun: dict = _decide("advance_begin", focus=state, focus_busy=focus_busy, completed=completed)
+    return begun
+
+
+def advance_plan(
+    state: dict, *, completed: bool, assignment_known: bool, prefs: dict | None, now_ms: int
+) -> dict:
+    """The timer's `state` after a phase, the `alert` to tell and whether it goes out first
+    (`alert_first`), and the `cycles` when a work phase was left."""
+    plan: dict = _decide(
+        "advance_plan",
+        focus=state,
+        completed=completed,
+        assignment_known=assignment_known,
+        prefs=prefs,
+        now_ms=now_ms,
+    )
+    return plan
+
+
+def enter_phase(state: dict, phase: str, prefs: dict | None, now_ms: int) -> dict:
+    """The timer's `state` in a phase and the `alert` that announces it."""
+    entered: dict = _decide("enter_phase", state=state, phase=phase, prefs=prefs, now_ms=now_ms)
+    return entered
+
+
+def credit_plan(
+    state: dict, *, week_start: str, assignments: dict, blocks: list[dict], work_min: int
+) -> dict:
+    """Where a credit goes: `to` ("assignment" or "block") with the `updated` item, a `say`, or a `skip`."""
+    plan: dict = _decide(
+        "credit_plan",
+        state=state,
+        week_start=week_start,
+        assignments=assignments,
+        blocks=blocks,
+        work_min=work_min,
+    )
+    return plan
+
+
+def auto_complete_plan(
+    state: dict,
+    *,
+    prefs: dict | None,
+    material_owns: bool,
+    week_start: str,
+    assignments: dict,
+    blocks: list[dict],
+) -> dict:
+    """The `block` to mark Done and the homework to complete (`complete_homework`), each or null."""
+    plan: dict = _decide(
+        "auto_complete_plan",
+        state=state,
+        prefs=prefs,
+        material_owns=material_owns,
+        week_start=week_start,
+        assignments=assignments,
+        blocks=blocks,
+    )
+    return plan
+
+
+def mutes_alerts(state: dict | None, prefs: dict | None, material_owns: bool) -> bool:
+    return bool(_decide("mutes_alerts", focus=state, prefs=prefs, material_owns=material_owns))
+
+
+def alerts_held(
+    kinds: list, state: dict | None, prefs: dict | None, material_owns: bool
+) -> list[bool]:
+    """For each notice, by its kind, whether focus keeps it back."""
+    held: list[bool] = _decide(
+        "hold_alerts", kinds=kinds, focus=state, prefs=prefs, material_owns=material_owns
+    )["hold"]
+    return held
+
+
+def drop_missing(state: dict | None, week_start: str, blocks: list[dict], announce: bool) -> dict:
+    """`drop` (the timer's block is gone) and the words to `say`, or null."""
+    found: dict = _decide(
+        "drop_missing", focus=state, week_start=week_start, blocks=blocks, announce=announce
+    )
+    return found
+
+
+def rebase_state(state: dict | None, first_weekday: int) -> dict | None:
+    """The timer in the week from the new first day, keeping its date; None when it has no week."""
+    moved: dict | None = _decide("rebase", focus=state, first_weekday=first_weekday)["state"]
+    return moved
