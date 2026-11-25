@@ -94,7 +94,7 @@ def test_replan_all_moves_the_missed_essay_to_a_time_ahead_by_the_planners_usual
     assert not moved.get("pinned")
     assert session.homework_time_needed() == []
     assert _sentence(session) == EVERYTHING
-    assert session.message == "Placed 1 homework session."
+    assert session.message == "Placed 1 session."
     fresh = {key: value for key, value in moved.items() if key != "start"}
     fresh["days"] = [0, 1, 2, 3, 4, 5]
     session.add_block(fresh)
@@ -135,7 +135,7 @@ def test_plan_moves_the_missed_essay_to_a_time_ahead_as_replan_all_does(
     assert moved["duration_min"] == 60
     assert session.homework_time_needed() == []
     assert _sentence(session) == EVERYTHING
-    assert session.message == "Placed 1 homework session."
+    assert session.message == "Placed 1 session."
 
 
 def test_plan_leaves_a_passed_session_with_no_time_when_none_fits_before_it_is_due(
