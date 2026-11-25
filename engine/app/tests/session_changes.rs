@@ -637,3 +637,54 @@ fn a_late_answer_after_a_newer_save_gives_no_second_completion() {
     assert!(status.idle(retry));
     assert!(!status.idle(first));
 }
+
+#[test]
+fn a_done_session_moved_off_screen_moves_its_done_minutes_with_it() {
+    let mut moved = session("s1", 0, "16:00");
+    moved["completed"] = json!(true);
+    let mut was = session("s1", 1, "16:00");
+    was["completed"] = json!(true);
+    let step = json!({"label": "x", "weeks": [
+        {"week_start": MONDAY, "before": [was], "after": []},
+        {"week_start": NEXT_MONDAY, "before": [], "after": [moved]}
+    ], "assignments": []});
+    let data = json!({"weeks": [
+        {"week_start": MONDAY, "revision": 4, "blocks": []},
+        {"week_start": NEXT_MONDAY, "revision": 2, "blocks": [moved]}
+    ]});
+    let live = json!({"essay": {"id": "essay", "done_min": 15}});
+    let live = live.as_object().unwrap();
+    let input = SaveAnswer {
+        pending_step: Some(&step),
+        ..answer(&data, live, live)
+    };
+    let acknowledged = acknowledge_save(&input).unwrap();
+    // The open week's own change is counted already; the 30 done minutes now in the next week are added.
+    assert_eq!(acknowledged.live_counts["essay"]["done_min"], 45);
+    assert_eq!(acknowledged.saved_counts["essay"]["done_min"], 45);
+}
+
+#[test]
+fn a_week_on_screen_from_another_day_does_not_shift_counts_for_its_own_stored_weeks() {
+    // Wednesday 2026-11-04's week is stored in the Mondays 2026-11-02 and 2026-11-09: a change in the
+    // second one is the open week's own change, already in the counts.
+    let moved = session("s1", 0, "16:00");
+    let step = json!({"label": "x", "weeks": [
+        {"week_start": NEXT_MONDAY, "before": [], "after": [moved]}
+    ], "assignments": []});
+    let data = json!({"weeks": [{"week_start": NEXT_MONDAY, "revision": 3, "blocks": [moved]}]});
+    let live = json!({"essay": {"id": "essay", "planned_min": 0, "done_min": 0}});
+    let live = live.as_object().unwrap();
+    let input = SaveAnswer {
+        week_start: WEDNESDAY,
+        shifted_week: true,
+        pending_step: Some(&step),
+        ..answer(&data, live, live)
+    };
+    let acknowledged = acknowledge_save(&input).unwrap();
+    assert!(
+        acknowledged.live_counts.is_empty(),
+        "{:?}",
+        acknowledged.live_counts
+    );
+}
