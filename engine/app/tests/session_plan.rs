@@ -1538,3 +1538,40 @@ fn a_placed_duration_outside_one_week_of_minutes_is_refused() {
     let loose = json!({"placed": [placed_row(json!({"duration_min": null}))]});
     assert_eq!(first_placed(&loose, &targets).unwrap(), Some((3, 20 * 60)));
 }
+
+#[test]
+fn share_minutes_must_be_whole_numbers_in_range_or_missing() {
+    let trace = json!({"placed": [placed_row(json!({}))], "unplaced": [], "explanations": []});
+    let now = clock("2026-09-24", 19, 0);
+    // 30 placed minutes. A string total used to count as 0 and hide 10 minutes left.
+    let wrong = [
+        json!({"assignment_id": "sheet", "this_week_min": "30", "left_min": 10}),
+        json!({"assignment_id": "sheet", "this_week_min": 20, "left_min": "10"}),
+        json!({"assignment_id": "sheet", "this_week_min": 20.5, "left_min": 10}),
+        json!({"assignment_id": "sheet", "this_week_min": true, "left_min": 10}),
+        json!({"assignment_id": "sheet", "this_week_min": -1, "left_min": 10}),
+        json!({"assignment_id": "sheet", "this_week_min": 20, "left_min": -5}),
+        json!({"assignment_id": "sheet", "this_week_min": i64::MAX, "left_min": 0}),
+        json!({"assignment_id": "sheet", "this_week_min": 20, "left_min": 1_000_001}),
+    ];
+    for share in wrong {
+        assert!(answer_for(&trace, &[share.clone()], now).is_err(), "{share}");
+    }
+    // Missing and null minutes stay zero: 30 placed, nothing left.
+    let loose = [
+        json!({"assignment_id": "sheet"}),
+        json!({"assignment_id": "sheet", "this_week_min": null, "left_min": null}),
+    ];
+    for share in loose {
+        let answer = answer_for(&trace, &[share], now).unwrap();
+        assert_eq!(answer.trace["shares"][0]["this_week_min"], 30);
+        assert_eq!(answer.trace["shares"][0]["left_min"], 0);
+    }
+    // 20 + 15 planned, 30 placed: 5 left. The top of the range is still accepted.
+    let some = json!({"assignment_id": "sheet", "this_week_min": 20, "left_min": 15});
+    let answer = answer_for(&trace, &[some], now).unwrap();
+    assert_eq!(answer.trace["shares"][0]["left_min"], 5);
+    let top = json!({"assignment_id": "sheet", "this_week_min": 0, "left_min": 1_000_000});
+    let answer = answer_for(&trace, &[top], now).unwrap();
+    assert_eq!(answer.trace["shares"][0]["left_min"], 999_970);
+}

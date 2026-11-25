@@ -17,6 +17,9 @@ pub const LEFT_NAMED: usize = 2;
 /// Minutes in a week: the longest length a placed block can have.
 const WEEK_MINUTES: i64 = 7 * 24 * 60;
 
+/// The most minutes one share may name; homework is never planned past this.
+const SHARE_MINUTES_MAX: i64 = 1_000_000;
+
 const PLANNING_BUSY: &str = "Planning\u{2026} one moment.";
 const WEEK_CONFLICT: &str =
     "This week changed in another window. Choose More > Reload this week, then try again.";
@@ -269,6 +272,17 @@ fn first_day_of(item: &Value) -> Result<Option<i64>, String> {
             Ok(first)
         }
         Some(_) => Err("days must be a list or null".to_string()),
+    }
+}
+
+/// A share's minutes: missing or null is zero, otherwise a whole number from 0 to the share cap.
+fn share_minutes(share: &Map<String, Value>, key: &str) -> Result<i64, String> {
+    match share.get(key) {
+        None | Some(Value::Null) => Ok(0),
+        Some(value) => value
+            .as_i64()
+            .filter(|minutes| (0..=SHARE_MINUTES_MAX).contains(minutes))
+            .ok_or_else(|| format!("{key} must be 0 to {SHARE_MINUTES_MAX} or null")),
     }
 }
 
@@ -796,22 +810,14 @@ pub fn apply_plan_answer(
                 }
             }
         }
-        let this_week_min = share_obj
-            .get("this_week_min")
-            .and_then(Value::as_i64)
-            .unwrap_or(0);
-        let left_min = share_obj
-            .get("left_min")
-            .and_then(Value::as_i64)
-            .unwrap_or(0);
-        let total_min = this_week_min
+        let this_week_min = share_minutes(&share_obj, "this_week_min")?;
+        let left_min = share_minutes(&share_obj, "left_min")?;
+        let remainder = this_week_min
             .checked_add(left_min)
+            .and_then(|total| total.checked_sub(placed_min))
             .ok_or_else(|| "share minutes too large".to_string())?;
         share_obj.insert("this_week_min".into(), json!(placed_min));
-        share_obj.insert(
-            "left_min".into(),
-            json!(total_min.saturating_sub(placed_min).max(0)),
-        );
+        share_obj.insert("left_min".into(), json!(remainder.max(0)));
         share_obj.insert(
             "placed_days".into(),
             Value::Array(placed_days.into_iter().map(Value::from).collect()),
