@@ -26,7 +26,6 @@ object SyncWords {
     fun syncProblem(kind: String, error: String): String = when {
         isOff(kind) -> OFF
         needsUpdate(effectiveKind(kind, error)) -> NEEDS_UPDATE
-        error.isBlank() -> OTHER
         else -> OTHER
     }
 

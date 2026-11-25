@@ -188,7 +188,7 @@ internal object RustPhoneJson {
                 .put("right", "No time yet").put("why", block.optString("why").ifBlank { null }))
         }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
-            .put("summary", "Placed ${placed.length()} of ${placed.length() + waiting.length()} homework sessions")
+            .put("summary", "Placed ${placed.length()} of ${placed.length() + waiting.length()} sessions")
             .put("lines", lines).toString()
     }
 
