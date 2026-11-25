@@ -3,86 +3,91 @@
 
 use ::flexweek_engine::EngineResult;
 use flexweek_app::session::focus;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use serde_json::Value;
 
 use crate::guard;
 
+/// Parses the arguments (one JSON object) and answers with `decide`'s JSON text. Each caller wraps it in
+/// `guard`, so a panic in the decision stays a Python error.
 fn run(args: &str, decide: fn(&Value) -> EngineResult<Value>) -> PyResult<String> {
-    guard(|| {
-        let args: Value =
-            serde_json::from_str(args).map_err(|error| PyValueError::new_err(error.to_string()))?;
-        decide(&args)
-            .map(|answer| answer.to_string())
-            .map_err(crate::raise)
-    })
+    let args: Value =
+        serde_json::from_str(args).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    if !args.is_object() {
+        return Err(PyTypeError::new_err(
+            "the focus arguments are one JSON object",
+        ));
+    }
+    decide(&args)
+        .map(|answer| answer.to_string())
+        .map_err(crate::raise)
 }
 
 #[pyfunction]
 fn session_focus_start_target(args: &str) -> PyResult<String> {
-    run(args, focus::start_target)
+    guard(|| run(args, focus::start_target))
 }
 
 #[pyfunction]
 fn session_focus_start_decision(args: &str) -> PyResult<String> {
-    run(args, focus::start_decision)
+    guard(|| run(args, focus::start_decision))
 }
 
 #[pyfunction]
 fn session_focus_elapsed_min(args: &str) -> PyResult<String> {
-    run(args, focus::elapsed_min)
+    guard(|| run(args, focus::elapsed_min))
 }
 
 #[pyfunction]
 fn session_focus_tick_step(args: &str) -> PyResult<String> {
-    run(args, focus::tick_step)
+    guard(|| run(args, focus::tick_step))
 }
 
 #[pyfunction]
 fn session_focus_advance_begin(args: &str) -> PyResult<String> {
-    run(args, focus::advance_begin)
+    guard(|| run(args, focus::advance_begin))
 }
 
 #[pyfunction]
 fn session_focus_advance_plan(args: &str) -> PyResult<String> {
-    run(args, focus::advance_plan)
+    guard(|| run(args, focus::advance_plan))
 }
 
 #[pyfunction]
 fn session_focus_enter_phase(args: &str) -> PyResult<String> {
-    run(args, focus::enter_phase)
+    guard(|| run(args, focus::enter_phase))
 }
 
 #[pyfunction]
 fn session_focus_credit_plan(args: &str) -> PyResult<String> {
-    run(args, focus::credit_plan)
+    guard(|| run(args, focus::credit_plan))
 }
 
 #[pyfunction]
 fn session_focus_auto_complete_plan(args: &str) -> PyResult<String> {
-    run(args, focus::auto_complete_plan)
+    guard(|| run(args, focus::auto_complete_plan))
 }
 
 #[pyfunction]
 fn session_focus_mutes_alerts(args: &str) -> PyResult<String> {
-    run(args, focus::mutes_alerts)
+    guard(|| run(args, focus::mutes_alerts))
 }
 
 #[pyfunction]
 fn session_focus_hold_alerts(args: &str) -> PyResult<String> {
-    run(args, focus::hold_alerts)
+    guard(|| run(args, focus::hold_alerts))
 }
 
 #[pyfunction]
 fn session_focus_drop_missing(args: &str) -> PyResult<String> {
-    run(args, focus::drop_missing)
+    guard(|| run(args, focus::drop_missing))
 }
 
 #[pyfunction]
 fn session_focus_rebase(args: &str) -> PyResult<String> {
-    run(args, focus::rebase)
+    guard(|| run(args, focus::rebase))
 }
 
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {

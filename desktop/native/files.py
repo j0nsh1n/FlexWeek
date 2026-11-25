@@ -19,9 +19,7 @@ _CONTENT_FIELDS = [name for name in flexweek_engine.homework_fields() if name !=
 
 def assignment_body(item: dict) -> dict:
     kept = flexweek_engine.files_assignment_input(plain(item), _CONTENT_FIELDS)
-    body = cast(dict, restored(flexweek_engine.checked_homework(kept)))
-    body.pop("revision", None)
-    return body
+    return cast(dict, restored(flexweek_engine.checked_homework_content(kept)))
 
 
 def exportable_block(block: dict, assignments: dict) -> dict:

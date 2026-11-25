@@ -210,9 +210,9 @@ pub fn revision_after_deletes(
     stored_blocks: &[Value],
     revision: &Value,
     deleted: &[String],
-) -> Value {
+) -> EngineResult<Value> {
     let Some(number) = revision.as_i64() else {
-        return revision.clone();
+        return Ok(revision.clone());
     };
     let moved = deleted
         .iter()
@@ -222,7 +222,11 @@ pub fn revision_after_deletes(
                 .any(|block| of_homework(block, homework))
         })
         .count();
-    Value::from(number + moved as i64)
+    i64::try_from(moved)
+        .ok()
+        .and_then(|moved| number.checked_add(moved))
+        .map(Value::from)
+        .ok_or_else(|| EngineError::value("revision is too large"))
 }
 
 /// An Undo or Redo step as it reads once `homework` is deleted: the homework and its sessions are gone
@@ -298,12 +302,17 @@ pub fn request_without_homework(
             );
         } else if let Some(moved) = revisions.get(week) {
             let lead = if week == draft_week {
-                revision.as_i64().unwrap_or_default()
-                    - draft["revision"].as_i64().unwrap_or_default()
+                revision
+                    .as_i64()
+                    .unwrap_or_default()
+                    .checked_sub(draft["revision"].as_i64().unwrap_or_default())
             } else {
-                0
+                Some(0)
             };
-            revision = Value::from(moved.as_i64().unwrap_or_default() + lead);
+            revision = lead
+                .and_then(|lead| moved.as_i64().unwrap_or_default().checked_add(lead))
+                .map(Value::from)
+                .ok_or_else(|| EngineError::value("revision is too large"))?;
         }
         let mut cleaned = write.as_object().cloned().unwrap_or_default();
         cleaned.insert(

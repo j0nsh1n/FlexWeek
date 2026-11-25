@@ -235,7 +235,9 @@ pub fn advance_plan(args: &Value) -> EngineResult<Value> {
     if state["phase"] != "work" {
         return entered(&state, "work", prefs, now);
     }
-    let cycles = whole(&state["cycles"]) + i64::from(completed);
+    let cycles = whole(&state["cycles"])
+        .checked_add(i64::from(completed))
+        .ok_or_else(|| EngineError::value("cycles is too large"))?;
     state["cycles"] = json!(cycles);
     if completed && truthy(&state["assignmentId"]) && truthy(&args["assignment_known"]) {
         state["phase"] = json!("ended");

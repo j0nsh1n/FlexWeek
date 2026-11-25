@@ -166,10 +166,13 @@ mod session_rules {
             "elsewhere".to_string(),
         ];
         assert_eq!(
-            revision_after_deletes(&stored, &json!(4), &deleted),
+            revision_after_deletes(&stored, &json!(4), &deleted).unwrap(),
             json!(6)
         );
-        assert_eq!(revision_after_deletes(&stored, &json!(4), &[]), json!(4));
+        assert_eq!(
+            revision_after_deletes(&stored, &json!(4), &[]).unwrap(),
+            json!(4)
+        );
     }
 
     #[test]
@@ -177,7 +180,7 @@ mod session_rules {
         let stored = [block("s1", Some("essay"))];
         let deleted = ["essay".to_string()];
         assert_eq!(
-            revision_after_deletes(&stored, &json!([3, 8]), &deleted),
+            revision_after_deletes(&stored, &json!([3, 8]), &deleted).unwrap(),
             json!([3, 8])
         );
     }

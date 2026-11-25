@@ -191,7 +191,9 @@ fn history_revision_after_deletes(
 ) -> PyResult<String> {
     guard(|| {
         let blocks = array_of(stored_blocks)?;
-        Ok(history::revision_after_deletes(&blocks, &parse(revision)?, &deleted).to_string())
+        history::revision_after_deletes(&blocks, &parse(revision)?, &deleted)
+            .map(|revision| revision.to_string())
+            .map_err(raise)
     })
 }
 
@@ -218,7 +220,10 @@ fn history_request_without_homework(
     revisions: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let (request, draft) = (parse(request)?, parse(draft)?);
+        let (request, draft) = (
+            Value::Object(object_of(request)?),
+            Value::Object(object_of(draft)?),
+        );
         history::request_without_homework(&request, &draft, homework, &object_of(revisions)?)
             .map(|request| request.to_string())
             .map_err(raise)

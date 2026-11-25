@@ -531,6 +531,15 @@ fn a_block_off_its_day_is_not_marked_but_its_homework_is_still_checked() {
     assert_eq!(planned["complete_homework"], "a1");
 }
 
+#[test]
+fn an_open_block_is_not_marked_on_a_day_it_is_not_on() {
+    // The timer says Saturday; the block is still open but is only on Monday.
+    let mut state = work_timer(true);
+    state["day"] = json!(5);
+    let planned = auto(&state, blocks_of_a_homework(), open_homework(), true, true);
+    assert_eq!(planned["block"], Value::Null);
+}
+
 fn held(kinds: Value, state: &Value, prefs: Value, material: bool) -> Value {
     let args = json!({ "kinds": kinds, "focus": state, "prefs": prefs, "material_owns": material });
     focus::hold_alerts(&args).unwrap()["hold"].clone()

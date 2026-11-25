@@ -27,8 +27,8 @@ fn parse_object(text: &str, what: &str) -> PyResult<Map<String, Value>> {
 #[pyfunction]
 fn session_preferences_body(current: &str, updates: &str) -> PyResult<String> {
     guard(|| {
-        let current = parse(current, "current preferences")?;
-        let updates = parse(updates, "updates")?;
+        let current = Value::Object(parse_object(current, "current preferences")?);
+        let updates = Value::Object(parse_object(updates, "updates")?);
         Ok(preferences_body(&current, &updates).to_string())
     })
 }
@@ -43,7 +43,7 @@ fn session_availability_body(
     work_windows: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
-        let prefs = parse(prefs, "preferences")?;
+        let prefs = Value::Object(parse_object(prefs, "preferences")?);
         let protected = parse(protected, "protected time")?;
         let day_cutoff = parse(day_cutoff, "day cutoff")?;
         let windows = work_windows
