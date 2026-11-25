@@ -3259,6 +3259,10 @@ class NativeSession(QObject):
             .get("done_sessions_min", 0)
         )
 
+    def homework_minutes(self) -> dict[str, dict[str, Any]]:
+        """Every homework's counts from one engine call, for lists that would otherwise ask once per row."""
+        return self._homework_counts()["per_assignment"]
+
     def remaining_for(self, assignment_id: str) -> int:
         return int(
             self._homework_counts()["per_assignment"]
@@ -3405,7 +3409,10 @@ class NativeSession(QObject):
         if destination is None:
             self._say("Select a block or open Day view before pasting into this week.")
             return None
-        available = {item_id: self.minutes_left_for(item_id) for item_id in self.assignments}
+        minutes = self.homework_minutes()
+        available = {
+            item_id: int(minutes.get(item_id, {}).get("uncovered_min", 0)) for item_id in self.assignments
+        }
         return proposals_from_clipboard(
             self.clipboard["items"],
             kind=self.clipboard["kind"],
