@@ -177,12 +177,12 @@ def left_sentence(left: object) -> str:
 
 
 def plan_sentence(placed: int, waiting: int, left: object = ()) -> str:
-    """How much homework a plan placed, counting homework only. `waiting` is homework whose sessions
-    found no room; `left` is homework with minutes no session holds, by title and minutes."""
+    """How many targeted sessions a plan placed. `waiting` is homework whose sessions found no room;
+    `left` is homework with minutes no session holds, by title and minutes."""
     if placed == 0:
         said = "No homework was placed."
     else:
-        said = f"Placed {placed} homework session{'s' if placed != 1 else ''}."
+        said = f"Placed {placed} session{'s' if placed != 1 else ''}."
     if waiting:
         said += f" {waiting} still needs a time."
     return said + left_sentence(left)

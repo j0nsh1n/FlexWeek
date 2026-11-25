@@ -40,7 +40,7 @@ def test_the_leftover_sentence_names_two_and_counts_the_rest() -> None:
     assert left_sentence(five).endswith("with no time. And 3 more.")
     assert "Math" not in left_sentence(five)
     assert plan_sentence(2, 0, three) == (
-        "Placed 2 homework sessions. History essay still has 10 min with no time. "
+        "Placed 2 sessions. History essay still has 10 min with no time. "
         "Science fair poster still has 9 h 55 min with no time. And 1 more."
     )
     assert plan_sentence(0, 1, one) == (
@@ -75,7 +75,7 @@ def test_three_homework_with_minutes_left_name_two_and_count_one(
     wait_until(qapp, lambda: not window.session.busy and _snack(window).startswith("Placed"))
     _pump(qapp)
     assert _snack(window) == (
-        "Placed 3 of 3 homework sessions. Art still has 10 min with no time. "
+        "Placed 3 of 3 sessions. Art still has 10 min with no time. "
         "Biology still has 10 min with no time. And 1 more."
     )
     assert window.session.plan_remainders == [("Art", 10), ("Biology", 10), ("Chemistry", 10)]
@@ -120,14 +120,14 @@ def test_a_focus_timer_shortens_what_is_still_needed(qapp: QApplication, window:
     session.solve()
     wait_until(qapp, lambda: not session.busy and _snack(window).startswith("Placed"))
     _pump(qapp)
-    assert _snack(window) == "Placed 1 of 1 homework sessions. Timer homework still has 5 min with no time."
+    assert _snack(window) == "Placed 1 of 1 sessions. Timer homework still has 5 min with no time."
     placed = [item for item in session.blocks if item.get("assignment_id") == "timer"]
     assert [item["duration_min"] for item in placed] == [30]
 
 
 def test_what_is_too_short_for_plan_is_said_in_minutes(qapp: QApplication, window: NativeWindow) -> None:
     """Essay cut to 50 leaves 10 minutes, under the 15 Plan places: both ways of planning a homework say how
-    many minutes are left instead of "fully planned". With nothing left at all they say the old sentences."""
+    many minutes are left instead of saying there is no time left to plan."""
     session = window.session
     essay = next(item for item in session.blocks if item.get("assignment_id") == "essay")
     essay.update(duration_min=50, pinned=True)

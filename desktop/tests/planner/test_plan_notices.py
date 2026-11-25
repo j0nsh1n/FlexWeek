@@ -123,7 +123,7 @@ def test_the_plan_notice_counts_homework_blocks(qapp: QApplication, window: Nati
     wait_until(qapp, lambda: not window.session.busy and _snack(window).startswith("Placed"))
     _pump(qapp)
     # Material counts what Plan tried: one block placed of one; "Everything has a time." is the drawer's.
-    assert _snack(window) == "Placed 1 of 1 homework sessions"
+    assert _snack(window) == "Placed 1 of 1 sessions"
     assert _qml(_root(window), "homeworkEmptyText").property("text") == "Everything has a time."
 
 
@@ -151,15 +151,15 @@ def _cut_the_essay_to(qapp: QApplication, window: NativeWindow, minutes: int) ->
         # 60 - 5 = 55: Plan places 45 (three quarter hours) and 10 minutes have no session.
         (
             5,
-            "Placed 1 of 1 homework sessions. History essay still has 10 min with no time.",
+            "Placed 1 of 1 sessions. History essay still has 10 min with no time.",
             [("History essay", 10)],
         ),
         # 60 - 15 = 45: Plan places all 45. Nothing is missing, so nothing is said to be.
-        (15, "Placed 1 of 1 homework sessions", []),
+        (15, "Placed 1 of 1 sessions", []),
         # 60 - 20 = 40: places 30, 10 left.
         (
             20,
-            "Placed 1 of 1 homework sessions. History essay still has 10 min with no time.",
+            "Placed 1 of 1 sessions. History essay still has 10 min with no time.",
             [("History essay", 10)],
         ),
     ],

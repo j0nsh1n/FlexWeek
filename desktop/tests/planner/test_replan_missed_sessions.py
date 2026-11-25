@@ -519,7 +519,7 @@ def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_ti
 ) -> None:
     """60 min estimated, 10 of focus: 50 are needed. The missed Tuesday hour comes back as 45, a whole
     number of quarter hours, so 5 min are in no session. Plan for unfinished homework and paste read that
-    one count: 5 min left, too short to place, as the drawer lists them; not "already fully planned"."""
+    one count: 5 min left, too short to place, as the drawer lists them; not "no time left to plan"."""
     session, work = _essay_planned_on_tuesday(qapp, open_light)
     # A 10 minute timer, so the focus done is not a whole number of quarter hours.
     session.preferences = {**(session.preferences or {}), "timer_work_min": 10}
@@ -579,4 +579,4 @@ def test_plan_places_a_missed_session_together_with_new_homework(
     _settle(qapp, session)
     assert session.plan_counts == (2, 0)
     assert session.plan_open == 0
-    assert session.message == "Placed 2 homework sessions."
+    assert session.message == "Placed 2 sessions."

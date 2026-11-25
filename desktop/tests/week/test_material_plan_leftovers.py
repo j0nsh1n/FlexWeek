@@ -46,7 +46,7 @@ def _plan(window, qapp, root) -> None:
     wait_until(
         qapp,
         lambda: (
-            (_snack(window).startswith("Placed") or _snack(window).startswith("Nothing"))
+            (_snack(window).startswith("Placed") or _snack(window).startswith("No homework was placed"))
             and not window.session.busy
         ),
         what=lambda: repr(_snack(window)) + repr(window.session.message),
@@ -76,7 +76,7 @@ def test_a_plan_that_could_place_nothing_says_how_many_it_tried(qapp, window) ->
     _plan(window, qapp, root)
 
     assert _snack(window) == (
-        "Placed 0 of 1 homework sessions. Science fair poster still has 9 h 55 min with no time."
+        "Placed 0 of 1 sessions. Science fair poster still has 9 h 55 min with no time."
     )
     assert session.message == "No homework was placed. Science fair poster still has 9 h 55 min with no time."
     waiting = [b for b in session.blocks if b.get("assignment_id") == "poster" and not b.get("start")]
@@ -105,10 +105,10 @@ def test_a_second_homework_that_was_placed_does_not_contradict_the_sentence(qapp
     _plan(window, qapp, root)
 
     assert _snack(window) == (
-        "Placed 1 of 2 homework sessions. Science fair poster still has 9 h 55 min with no time."
+        "Placed 1 of 2 sessions. Science fair poster still has 9 h 55 min with no time."
     )
     assert window.session.message == (
-        "Placed 1 homework session. Science fair poster still has 9 h 55 min with no time."
+        "Placed 1 session. Science fair poster still has 9 h 55 min with no time."
     )
 
 
@@ -118,11 +118,11 @@ def test_a_second_homework_that_was_placed_does_not_contradict_the_sentence(qapp
         # 60 - 20 = 40: Plan places 30; 10 have no session.
         (
             20,
-            "Placed 2 of 2 homework sessions. History essay still has 10 min with no time.",
+            "Placed 2 of 2 sessions. History essay still has 10 min with no time.",
             "History essay · 10 min with no time",
         ),
         # 60 - 15 = 45: Plan places all 45. Nothing is missing.
-        (15, "Placed 2 of 2 homework sessions", ""),
+        (15, "Placed 2 of 2 sessions", ""),
     ],
 )
 def test_the_drawer_line_lists_only_the_minutes_no_session_holds(
@@ -417,7 +417,7 @@ def test_plan_sizes_its_rest_by_the_week_the_held_number_was_read_with(
     essay = [b for b in session.blocks if b.get("assignment_id") == "essay" and b.get("start")]
     placed = sorted(b["duration_min"] for b in essay)
     assert placed == [5, 45]
-    assert _snack(window) == "Placed 1 of 1 homework sessions. History essay still has 10 min with no time."
+    assert _snack(window) == "Placed 1 of 1 sessions. History essay still has 10 min with no time."
 
 
 def _fail_saves(window, monkeypatch, status: int) -> dict:

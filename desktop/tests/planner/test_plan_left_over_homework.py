@@ -97,7 +97,7 @@ def test_plan_overdue_leaves_the_pinned_session_and_adds_a_new_one(qapp, window)
     fresh = next(item for item in bio if item["id"] != session_id)
     assert (kept["days"], kept["start"], kept.get("pinned")) == ([WEDNESDAY], "15:15", True)
     assert (fresh["days"], fresh["start"], fresh["duration_min"]) == ([SATURDAY], "11:15", 60)
-    assert session.message == "Placed 1 homework session."
+    assert session.message == "Placed 1 session."
     assert session.assignments["bio"]["due"] == due
     assert next(item for item in session.blocks if item["id"] == "class") == before_class
     session.plan_left(["bio"])
@@ -237,7 +237,7 @@ def test_plan_overdue_moves_a_future_session(qapp, window) -> None:
     bio = next(item for item in session.blocks if item["id"] == session_id)
     # The class ends at 11:00 and the default leaves 15 minutes after it.
     assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
-    assert session.message == "Placed 1 homework session."
+    assert session.message == "Placed 1 session."
     assert "prefer_earliest" not in bio
 
 
