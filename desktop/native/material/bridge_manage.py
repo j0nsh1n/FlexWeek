@@ -81,7 +81,7 @@ def restore_form(
     """Restore points: the saved copies with their times, a name for a new one, and what the previewed one
     would change."""
     return {
-        "heading": "Copies of this week",
+        "heading": "Saved copies",
         "where": (storage or {}).get("label") or NO_LOCATION,
         "label": label,
         "points": [

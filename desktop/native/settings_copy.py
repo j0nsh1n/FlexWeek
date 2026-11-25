@@ -300,7 +300,7 @@ DOT_WORDS = {
 
 
 def seen_words(last_seen_ms: str | None, now_ms: int) -> str:
-    """When a phone last synced, in the card's words. last_seen is Unix milliseconds as text."""
+    """When a phone was last seen, in the card's words. last_seen is Unix milliseconds as text."""
     if not last_seen_ms:
         return "Not synced yet"
     seen = int(last_seen_ms)
@@ -311,7 +311,7 @@ def seen_words(last_seen_ms: str | None, now_ms: int) -> str:
         return f"Synced {minutes} min ago"
     if minutes < 24 * 60:
         return f"Synced {minutes // 60} h ago"
-    return f"Last synced on {datetime.fromtimestamp(seen / 1000):%A}"
+    return f"Last seen on {datetime.fromtimestamp(seen / 1000):%A}"
 
 
 def clock_warning_words(count: int) -> str:

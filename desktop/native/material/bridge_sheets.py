@@ -1183,7 +1183,7 @@ class SheetsBridge(QObject):
             "heading": "Unfinished",
             "intro": "Homework that's overdue or left from last week, then homework that still needs a time.",
             "rows": rows,
-            "empty": "No unfinished homework." if not rows else "",
+            "empty": "No homework is overdue, left from last week or waiting for a time." if not rows else "",
         }
 
     def open_preview(self, draft: PreviewDraft) -> None:

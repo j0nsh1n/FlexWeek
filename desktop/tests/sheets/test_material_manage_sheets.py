@@ -135,7 +135,7 @@ def test_more_has_account_and_copies_of_this_week_and_nothing_opens_a_widgets_di
     sheets.moreAction("restoreButton")
     pump(qapp, 40)
     assert _kind(sheets) == "restore"
-    assert _text(shell, "sheetTitle") == "Copies of this week"
+    assert _text(shell, "sheetTitle") == "Saved copies"
     # The window's own entry points, which Settings and the keys use, land on the sheets too.
     sheets.forceClose()
     shell._open_account()
