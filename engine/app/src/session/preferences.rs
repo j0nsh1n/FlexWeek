@@ -120,10 +120,8 @@ impl SetupQueue {
         if has_preferences && !self.prefs.is_empty() {
             return SetupStep::Preferences(std::mem::take(&mut self.prefs));
         }
-        if has_preferences {
-            if let Some(windows) = self.windows.take() {
-                return SetupStep::Windows(windows);
-            }
+        if has_preferences && let Some(windows) = self.windows.take() {
+            return SetupStep::Windows(windows);
         }
         if self.week {
             self.week = false;

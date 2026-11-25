@@ -56,7 +56,11 @@ fn session_availability_body(
 /// `{changed, refollow, rebase_focus}` as JSON text.
 #[pyfunction]
 fn session_follow_first_weekday(old: i64, new: i64, signed_in: bool) -> PyResult<String> {
-    guard(|| Ok(follow_first_weekday(old, new, signed_in).to_json().to_string()))
+    guard(|| {
+        Ok(follow_first_weekday(old, new, signed_in)
+            .to_json()
+            .to_string())
+    })
 }
 
 /// What setup kept and has not yet written. `next` answers the step to send as JSON text.

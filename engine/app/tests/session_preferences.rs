@@ -21,7 +21,12 @@ fn kept(queue: &mut SetupQueue, updates: Value, windows: Option<Value>, week: bo
 fn the_queue_sends_preferences_then_study_hours_then_the_week() {
     let mut queue = SetupQueue::default();
     let hours = json!([{ "days": [0], "start": "09:00", "end": "11:00" }]);
-    kept(&mut queue, json!({ "clock_24h": true }), Some(hours.clone()), true);
+    kept(
+        &mut queue,
+        json!({ "clock_24h": true }),
+        Some(hours.clone()),
+        true,
+    );
 
     assert_eq!(
         queue.next(true, false, true),
@@ -88,7 +93,12 @@ fn a_keep_without_hours_or_week_leaves_those_already_kept() {
 #[test]
 fn preferences_and_study_hours_wait_for_the_stored_preferences_but_the_week_does_not() {
     let mut queue = SetupQueue::default();
-    kept(&mut queue, json!({ "clock_24h": true }), Some(json!([])), true);
+    kept(
+        &mut queue,
+        json!({ "clock_24h": true }),
+        Some(json!([])),
+        true,
+    );
 
     assert_eq!(queue.next(true, false, false), SetupStep::Week);
     assert_eq!(queue.next(true, false, false), SetupStep::Nothing);
@@ -103,7 +113,12 @@ fn preferences_and_study_hours_wait_for_the_stored_preferences_but_the_week_does
 #[test]
 fn clearing_forgets_everything_kept() {
     let mut queue = SetupQueue::default();
-    kept(&mut queue, json!({ "clock_24h": true }), Some(json!([])), true);
+    kept(
+        &mut queue,
+        json!({ "clock_24h": true }),
+        Some(json!([])),
+        true,
+    );
     queue.clear();
 
     assert!(queue.prefs().is_empty());
