@@ -548,14 +548,35 @@ pub fn left_over_items_from(
     committed_blocks: &Value,
     first_part: &Value,
 ) -> EngineResult<Vec<Value>> {
+    let moment = crate::model::parse_due(now)?;
+    left_over_items_at(
+        assignments,
+        saved_weeks,
+        today_week,
+        moment,
+        blocks,
+        committed_blocks,
+        first_part,
+    )
+}
+
+/// `left_over_items_from` with the moment already read, for a caller whose clock may be any real date
+/// (only deadlines are held to 2000 to 2099).
+pub fn left_over_items_at(
+    assignments: &Value,
+    saved_weeks: &Value,
+    today_week: &str,
+    moment: (chrono::NaiveDate, i64),
+    blocks: &Value,
+    committed_blocks: &Value,
+    first_part: &Value,
+) -> EngineResult<Vec<Value>> {
     let shown = crate::shown::shown_parts(today_week)?;
     let first_monday = json!(
         shown
             .as_ref()
             .map_or(today_week, |(first, _, _)| first.as_str())
     );
-    let (today, minute) = crate::model::parse_due(now)?;
-    let moment = (today, minute);
     let Value::Object(table) = assignments else {
         return Err(attribute_error(assignments, "values"));
     };

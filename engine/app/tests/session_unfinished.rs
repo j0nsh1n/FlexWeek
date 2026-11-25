@@ -969,3 +969,71 @@ fn homework_due_this_very_minute_is_overdue_and_one_minute_before_is_not() {
     assert!(overdue_at(9, 59).is_empty());
     assert_eq!(overdue_at(10, 0), vec!["timed"]);
 }
+
+#[test]
+fn the_preview_and_the_card_list_accept_a_january_2100_clock_in_the_last_week() {
+    // Week of Mon 2099-12-28 is still on screen on Fri 2100-01-01. Both clocks (session and wall) are
+    // real dates; only the deadline is held to 2000..2099.
+    let last_week = "2099-12-28";
+    let assignments = map_of(vec![assignment("late", "Late", "2099-12-30T10:00", 60)]);
+
+    let preview = unfinished_preview(
+        UnfinishedPreviewInput {
+            week_start: last_week,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            assignment_id: "late",
+            now: ClockNow::at("2100-01-01", 9, 0),
+            plannable_today: "2100-01-01",
+        },
+        "new-late-1",
+    )
+    .unwrap();
+    match preview {
+        UnfinishedPreview::Rows(rows) => {
+            // Due Wednesday (day 2), today is past it: the row sits on the deadline day.
+            assert_eq!(rows[0]["day"], 2);
+            assert_eq!(rows[0]["block"]["days"], json!([2]));
+            assert_eq!(rows[0]["original_duration"], 60);
+        }
+        UnfinishedPreview::Say(words) => panic!("expected rows, got: {words}"),
+    }
+
+    let items = unfinished_items(UnfinishedInput {
+        week_start: last_week,
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &assignments,
+        assignments_basis: &[],
+        saved_weeks: &[],
+        stored_parts: &[],
+        now: ClockNow::at("2100-01-01", 9, 0),
+    })
+    .unwrap();
+    let pairs: Vec<(&str, &str)> = items
+        .iter()
+        .map(|i| {
+            (
+                i["id"].as_str().unwrap(),
+                i["left_over_state"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(pairs, vec![("late", "overdue")]);
+
+    // A wall-clock date that is not a real date is still refused.
+    let bad = unfinished_preview(
+        UnfinishedPreviewInput {
+            week_start: last_week,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            assignment_id: "late",
+            now: ClockNow::at("2100-01-01", 9, 0),
+            plannable_today: "2100-02-30",
+        },
+        "unused",
+    );
+    assert!(bad.is_err());
+}

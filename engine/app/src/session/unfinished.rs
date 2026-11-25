@@ -494,16 +494,14 @@ pub fn unfinished_items(input: UnfinishedInput<'_>) -> Result<Vec<Value>, String
         now_point.as_ref(),
     )
     .map_err(|err| err.message)?;
-    let now_stamp = format!(
-        "{}T{:02}:{:02}",
-        input.now.today, input.now.hour, input.now.minute
-    );
+    let moment = model::clock_moment(input.now.today, input.now.hour, input.now.minute)
+        .map_err(|err| err.message)?;
     let saved_weeks = Value::Array(input.saved_weeks.iter().map(|s| json!(s)).collect());
-    let items = clipboard::left_over_items_from(
+    let items = clipboard::left_over_items_at(
         &assignments_val,
         &saved_weeks,
         &today_week,
-        &now_stamp,
+        moment,
         &Value::Array(open_week),
         &Value::Array(input.assignments_basis.to_vec()),
         &first_part,
@@ -580,7 +578,8 @@ pub fn unfinished_preview(
 ) -> Result<UnfinishedPreview, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
-    if !time::is_calendar_date(input.plannable_today) {
+    // Wall-clock today may be any real date, like the session clock.
+    if time::week_start_on(input.plannable_today, 0).is_err() {
         return Err(format!(
             "plannable_today must be YYYY-MM-DD, got {:?}",
             input.plannable_today
