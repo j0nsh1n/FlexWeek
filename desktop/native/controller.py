@@ -3360,6 +3360,8 @@ class NativeSession(QObject):
         today: date | None = None,
     ) -> list[dict] | None:
         if self.account is None:
+            if self.clipboard is None:
+                self._say("Copy a block or day before pasting.")
             return None
         ready = json.loads(
             flexweek_engine.paste_ready_json(
@@ -3421,13 +3423,15 @@ class NativeSession(QObject):
         """Add the checked rows. `said` is what the status line says once they are saved."""
         if self.account is None or self.conflict:
             return False
-        op_id = operation_id or (self._operation(attempt_key) if attempt_key else str(uuid4()))
+        # A refused selection must not reserve an attempt: the id is only kept once the rows are accepted.
+        op_id = operation_id or (self._attempts.get(attempt_key) if attempt_key else None) or str(uuid4())
         decision = json.loads(flexweek_engine.preview_groups_json(json.dumps(rows), op_id))
         if decision["say"] is not None:
             self._say(decision["say"])
             return False
         by_week = decision["by_week"]
         if attempt_key:
+            self._attempts.setdefault(attempt_key, op_id)
             self._preview_attempt = attempt_key
         if list(by_week) == [self.week_start]:
             added = by_week[self.week_start]
