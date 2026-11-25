@@ -966,6 +966,7 @@ class SettingsBridge(QObject):
         self._pair_seconds = 0
         self._pair_tries = 0
         self._pair_copied = False
+        self._pair_starting = False
         self._pair_copy_reset = QTimer(self)
         self._pair_copy_reset.setSingleShot(True)
         self._pair_copy_reset.setInterval(2000)
@@ -1251,6 +1252,7 @@ class SettingsBridge(QObject):
             "pairFraction": max(0.0, min(1.0, self._pair_seconds / float(PAIR_TTL_SECONDS))),
             "pairTries": self._pair_tries,
             "pairCopied": self._pair_copied,
+            "pairStarting": self._pair_starting,
             "phones": phones,
             "phoneRows": phone_rows,
             "syncWords": sync_words,
@@ -2489,13 +2491,21 @@ class SettingsBridge(QObject):
 
     @Slot()
     def pair(self) -> None:
+        # One start in flight at a time: a second activation while the first offer is
+        # still pending is ignored, so the older callback cannot replace a newer offer.
+        if self._pair_starting:
+            return
         session = self._window.session
         self._pair_gen += 1
         gen = self._pair_gen
+        self._pair_starting = True
+        self._publish()
 
         def finish(offer: Any, error: Exception | None) -> None:
             def apply() -> None:
+                self._pair_starting = False
                 if gen != self._pair_gen or not self._in_pairing_view():
+                    self._publish()
                     return
                 if error is not None or not isinstance(offer, dict):
                     self._pair_code = ""
@@ -2518,6 +2528,7 @@ class SettingsBridge(QObject):
             QTimer.singleShot(0, self, apply)
 
         if not session.begin_pairing(finish):
+            self._pair_starting = False
             self._pair_code = ""
             self._pair_status = ""
             self._pair_seconds = 0

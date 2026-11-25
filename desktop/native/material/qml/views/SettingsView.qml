@@ -225,6 +225,7 @@ Item {
         status: root.st.pairStatus || ""
         fraction: root.st.pairFraction === undefined ? 0.0 : root.st.pairFraction
         copied: !!root.st.pairCopied
+        starting: !!root.st.pairStarting
         relayNote: root.st.relayNote || ""
         onCopyRequested: root.panel.copyPairCode()
         onRestartRequested: root.panel.pair()

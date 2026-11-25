@@ -19,6 +19,7 @@ FocusScope {
     property real fraction: 0.0
     property bool copied: false
     property string relayNote: ""
+    property bool starting: false
     signal copyRequested()
     signal restartRequested()
     signal dismissed()
@@ -376,6 +377,7 @@ FocusScope {
                         Button {
                             id: copyBtn
                             objectName: "pairCopy"
+                            enabled: root.code !== "" && !root.starting
                             width: actionsGrid.stacked ? actionsGrid.width : implicitWidth
                             theme: root.theme
                             density: root.density
@@ -391,6 +393,7 @@ FocusScope {
                         Button {
                             id: newCodeBtn
                             objectName: "pairNewCode"
+                            enabled: !root.starting
                             width: actionsGrid.stacked ? actionsGrid.width : implicitWidth
                             theme: root.theme
                             density: root.density
