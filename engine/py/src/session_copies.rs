@@ -31,31 +31,38 @@ fn objects(value: Value, what: &str) -> PyResult<Vec<Value>> {
     Ok(items)
 }
 
+/// A JSON object, or None for JSON null: anything else never came from the window.
+fn object_or_null(value: Value, what: &str) -> PyResult<Option<Value>> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    if !value.is_object() {
+        return Err(PyTypeError::new_err(format!("{what} is an object")));
+    }
+    Ok(Some(value))
+}
+
 /// The rows the empty-week copy sheet offers from last week's `source` (JSON object or null):
 /// `{"rows": [...], "words": ...}` with one side null. `new_ids` holds one id per source block.
 #[pyfunction]
 #[pyo3(signature = (source, shown_start, new_ids))]
-fn fixed_copy_rows_json(
-    source: &str,
-    shown_start: &str,
-    new_ids: Vec<String>,
-) -> PyResult<String> {
+fn fixed_copy_rows_json(source: &str, shown_start: &str, new_ids: Vec<String>) -> PyResult<String> {
     guard(|| {
-        let source = read(source)?;
-        let source = (!source.is_null()).then_some(source);
+        let source = object_or_null(read(source)?, "the source week")?;
         let mut ids = new_ids.into_iter();
         let rows = fixed_copy_rows(source.as_ref(), shown_start, &mut ids).map_err(raise)?;
         Ok(rows.to_json().to_string())
     })
 }
 
-/// What the empty-week copy sheet says when `source` (JSON object or null) offers no rows.
+/// What the empty-week copy sheet says when `source` (JSON object or null) offers no rows,
+/// as JSON text.
 #[pyfunction]
 fn copy_empty_words_json(source: &str) -> PyResult<String> {
     guard(|| {
-        let source = read(source)?;
-        let source = (!source.is_null()).then_some(source);
-        Ok(copy_empty_words(source.as_ref()).map_err(raise)?.to_string())
+        let source = object_or_null(read(source)?, "the source week")?;
+        let words = copy_empty_words(source.as_ref()).map_err(raise)?;
+        Ok(Value::String(words.to_string()).to_string())
     })
 }
 
