@@ -214,17 +214,13 @@ fn session_prepare_late(
     trace: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
-        if !(0..24).contains(&now_hour) || !(0..60).contains(&now_minute) {
-            return Err(PyValueError::new_err(
-                "now_hour must be 0..23 and now_minute must be 0..59",
-            ));
-        }
         let blocks = parse_blocks(blocks, "blocks")?;
         let trace = parse_optional_object(trace, "trace")?;
         let prep = prepare_late(LateInput {
             week_start,
             today_iso,
-            now_minute: now_hour * 60 + now_minute,
+            now_hour,
+            now_minute,
             minutes,
             dirty,
             conflict,

@@ -8,6 +8,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use flexweek_engine::desk::clipboard::merge_preview_rows;
 use flexweek_engine::desk::datetext::day_of;
+use flexweek_engine::desk::focus::{MAX_ESTIMATE_MIN, MAX_FOCUS_MINUTES};
 use flexweek_engine::desk::grid::{date_for_day, due_day_in_week};
 use flexweek_engine::desk::planning::{
     apply_plan, is_planned, late_from_start, running_late_block,
@@ -139,8 +140,16 @@ pub fn prepare_allow_splitting(
     }
     let mut updated = fields.clone();
     updated.insert("spread".into(), json!("spread"));
-    let estimate_min = optional_int(updated.get("estimate_min"), "estimate_min")?;
-    let focus_minutes = optional_int(updated.get("focus_minutes"), "focus_minutes")?;
+    let estimate_min = bounded_int(
+        updated.get("estimate_min"),
+        "estimate_min",
+        MAX_ESTIMATE_MIN as i64,
+    )?;
+    let focus_minutes = bounded_int(
+        updated.get("focus_minutes"),
+        "focus_minutes",
+        MAX_FOCUS_MINUTES as i64,
+    )?;
     let remaining = unplanned_minutes(estimate_min, focus_minutes, input.done_min, 0);
     let session_min = (remaining - remaining.rem_euclid(15)).clamp(15, 60);
     let due_raw = match updated.get("due") {
@@ -356,6 +365,7 @@ pub fn recover_answer(input: RecoverAnswerInput<'_>) -> Result<Option<RecoverApp
 pub struct LateInput<'a> {
     pub week_start: &'a str,
     pub today_iso: &'a str,
+    pub now_hour: i64,
     pub now_minute: i64,
     pub minutes: i64,
     pub dirty: bool,
@@ -431,6 +441,10 @@ impl LatePreparation {
 /// Guard and prepare a Running late preview request: check refusal rules and allowed delay lengths,
 /// keep waiting homework out of the late solve, and choose `previous_placed` or a base solve.
 pub fn prepare_late(input: LateInput<'_>) -> Result<LatePreparation, String> {
+    // The refusal helper reads an unparsable date as "no refusal", so check the plain date first.
+    if !plain_date(input.today_iso) {
+        return Err("today_iso must be a date as YYYY-MM-DD".to_string());
+    }
     if let Some(refusal) = running_late_refusal(
         input.week_start,
         input.today_iso,
@@ -443,7 +457,10 @@ pub fn prepare_late(input: LateInput<'_>) -> Result<LatePreparation, String> {
     if !matches!(input.minutes, 15 | 30 | 60) {
         return Ok(LatePreparation::Refused(LATE_INVALID_MINUTES.to_string()));
     }
-    let from_start = late_from_start(input.now_minute);
+    if !(0..24).contains(&input.now_hour) || !(0..60).contains(&input.now_minute) {
+        return Err("now_hour must be 0..23 and now_minute must be 0..59".to_string());
+    }
+    let from_start = late_from_start(input.now_hour * 60 + input.now_minute);
     let day = due_day_in_week(input.today_iso, input.week_start).map_err(|err| err.message)?;
     let from_min = hhmm_to_minutes(&from_start).map_err(|err| err.message)?;
     let late_dumped = dump_blocks(&late_blocks(input.blocks))?;
@@ -637,9 +654,11 @@ pub fn accept_late(input: LateAcceptInput<'_>) -> Result<LateAcceptDecision, Str
         .and_then(Value::as_str)
         .ok_or_else(|| "late preview is missing operation_id".to_string())?
         .to_string();
+    let checked_block = check_block(block).map_err(|refused| refused.0)?;
+    check_trace_lists(trace)?;
     let mut with_late = Vec::with_capacity(input.blocks.len() + 1);
     with_late.extend(input.blocks.iter().cloned());
-    with_late.push(block.clone());
+    with_late.push(checked_block);
     let blocks = apply_plan(
         &Value::Array(with_late),
         trace,
@@ -702,7 +721,11 @@ pub fn spread_answer(input: SpreadAnswerInput<'_>) -> Result<SpreadPreview, Stri
         Some(Value::Array(items)) => items.as_slice(),
         Some(_) => return Err("sessions must be a list".to_string()),
     };
-    let remaining = optional_int(data_fields.get("remaining_min"), "remaining_min")?;
+    let remaining = bounded_int(
+        data_fields.get("remaining_min"),
+        "remaining_min",
+        MAX_ESTIMATE_MIN as i64,
+    )?;
     if sessions.is_empty() {
         let message = if remaining != 0 {
             format!(
@@ -847,6 +870,39 @@ pub fn spread_selection(input: SpreadSelectionInput<'_>) -> Result<SplitSelectio
     })
 }
 
+/// A held trace's `placed` and `unplaced` must be lists of objects with a text `id`; a placement's
+/// `start` is text, its `days` whole numbers and its `duration_min` a whole number, when present.
+fn check_trace_lists(trace: &Value) -> Result<(), String> {
+    for key in ["placed", "unplaced"] {
+        let items = match trace.get(key) {
+            None | Some(Value::Null) => continue,
+            Some(Value::Array(items)) => items,
+            Some(_) => return Err(format!("trace.{key} must be a list")),
+        };
+        for item in items {
+            let Value::Object(fields) = item else {
+                return Err(format!("each trace.{key} item must be a JSON object"));
+            };
+            if !fields.get("id").is_some_and(Value::is_string) {
+                return Err(format!("each trace.{key} item needs a text id"));
+            }
+            if !matches!(
+                fields.get("start"),
+                None | Some(Value::Null | Value::String(_))
+            ) {
+                return Err(format!("trace.{key} start must be text"));
+            }
+            if !matches!(fields.get("duration_min"), None | Some(Value::Null))
+                && fields.get("duration_min").and_then(Value::as_i64).is_none()
+            {
+                return Err(format!("trace.{key} duration_min must be a whole number"));
+            }
+            int_list(fields.get("days"), "days")?;
+        }
+    }
+    Ok(())
+}
+
 fn find_block<'a>(blocks: &'a [Value], block_id: &str) -> Result<Option<&'a Value>, String> {
     for block in blocks {
         if !block.is_object() {
@@ -907,7 +963,7 @@ fn scheduled_blocks(blocks: &[Value], trace: Option<&Value>) -> Result<Vec<Value
         Some(Value::Object(map)) => !map.is_empty(),
         Some(_) => return Err("trace must be a JSON object".to_string()),
     };
-    if !has_trace {
+    let Some(trace) = trace.filter(|_| has_trace) else {
         return Ok(blocks
             .iter()
             .filter(|block| {
@@ -916,7 +972,7 @@ fn scheduled_blocks(blocks: &[Value], trace: Option<&Value>) -> Result<Vec<Value
             })
             .cloned()
             .collect());
-    }
+    };
     let sources: HashMap<&str, &Map<String, Value>> = blocks
         .iter()
         .filter_map(|block| {
@@ -925,7 +981,7 @@ fn scheduled_blocks(blocks: &[Value], trace: Option<&Value>) -> Result<Vec<Value
             Some((id, map))
         })
         .collect();
-    let placed = trace_placed_list(trace.expect("non-empty trace"))?;
+    let placed = trace_placed_list(trace)?;
     let mut merged = Vec::with_capacity(placed.len());
     for item in placed {
         let Value::Object(placed_map) = &item else {
@@ -977,6 +1033,27 @@ fn optional_int(value: Option<&Value>, name: &str) -> Result<i64, String> {
             .as_i64()
             .ok_or_else(|| format!("{name} must be a whole number")),
         Some(_) => Err(format!("{name} must be a whole number")),
+    }
+}
+
+/// `YYYY-MM-DD` and a real day: not a timestamp, a week date or a date with the dashes left out.
+fn plain_date(text: &str) -> bool {
+    let shaped = text.len() == 10
+        && text.bytes().enumerate().all(|(index, byte)| match index {
+            4 | 7 => byte == b'-',
+            _ => byte.is_ascii_digit(),
+        });
+    shaped && day_of(text).is_ok()
+}
+
+/// A whole number from 0 to `max`; the minute counts a homework can hold. Anything else is refused
+/// before arithmetic can overflow.
+fn bounded_int(value: Option<&Value>, name: &str, max: i64) -> Result<i64, String> {
+    let number = optional_int(value, name)?;
+    if (0..=max).contains(&number) {
+        Ok(number)
+    } else {
+        Err(format!("{name} must be from 0 to {max}"))
     }
 }
 

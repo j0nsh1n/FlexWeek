@@ -3,13 +3,12 @@
 //! desktop parity tests, never from recording code output.
 
 use flexweek_app::session::plan_previews::{
-    AllowSplittingInput, LATE_CAPACITY_REFUSAL, LATE_INVALID_MINUTES, LATE_STATUS,
-    LATE_TOUCH_LABEL, LateAcceptDecision, LateAcceptInput, LateAnswerInput, LateInput,
-    LatePreparation, PreviousSource, RECOVER_STATUS, RECOVER_TOUCH_LABEL, RecoverAnswerInput,
-    RecoverInput, RecoverPreparation, SPREAD_ALL_PLANNED, SpreadAnswerInput, SpreadPreview,
-    SpreadSelectionInput, accept_late, late_answer, late_blocks, late_payload_from_base,
-    late_summary, prepare_allow_splitting, prepare_late, recover_answer, recover_payload_from_base,
-    recover_request, spread_answer, spread_key, spread_ready_sentence, spread_selection,
+    AllowSplittingInput, LateAcceptDecision, LateAcceptInput, LateAnswerInput, LateInput,
+    LatePreparation, PreviousSource, RecoverAnswerInput, RecoverInput, RecoverPreparation,
+    SpreadAnswerInput, SpreadPreview, SpreadSelectionInput, accept_late, late_answer, late_blocks,
+    late_payload_from_base, late_summary, prepare_allow_splitting, prepare_late, recover_answer,
+    recover_payload_from_base, recover_request, spread_answer, spread_key, spread_ready_sentence,
+    spread_selection,
 };
 use serde_json::{Value, json};
 
@@ -274,7 +273,7 @@ fn recover_request_guards_and_chooses_previous_source() {
             previous_source,
             payload,
         } => {
-            assert_eq!(status, RECOVER_STATUS);
+            assert_eq!(status, "Replanning after the miss…");
             assert_eq!(previous_source, PreviousSource::Trace);
             assert_eq!(payload["recover"]["missed_block_id"], "school");
             assert_eq!(payload["recover"]["missed_day"], 0);
@@ -332,7 +331,7 @@ fn recover_request_guards_and_chooses_previous_source() {
             previous_source,
             base_payload,
         } => {
-            assert_eq!(status, RECOVER_STATUS);
+            assert_eq!(status, "Replanning after the miss…");
             assert_eq!(previous_source, PreviousSource::BaseSolve);
             assert_eq!(base_payload["week_start"], WEEK);
             assert_eq!(base_payload["blocks"].as_array().unwrap().len(), 2);
@@ -374,7 +373,7 @@ fn recover_answer_records_sorted_missed_day_and_keeps_series_days() {
     })
     .unwrap()
     .expect("target exists");
-    assert_eq!(applied.label, RECOVER_TOUCH_LABEL);
+    assert_eq!(applied.label, "the replan");
     let updated_school = applied.blocks.iter().find(|b| b["id"] == "school").unwrap();
     assert_eq!(updated_school["days"], json!([0, 1, 2, 3, 4]));
     assert_eq!(updated_school["missed_days"], json!([0, 2]));
@@ -411,7 +410,8 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
         prepare_late(LateInput {
             week_start: "2026-09-28",
             today_iso: "2026-09-24",
-            now_minute: 19 * 60,
+            now_hour: 19,
+            now_minute: 0,
             minutes: 30,
             dirty: false,
             conflict: false,
@@ -427,7 +427,8 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
         prepare_late(LateInput {
             week_start: WEEK,
             today_iso: "2026-09-24",
-            now_minute: 19 * 60,
+            now_hour: 19,
+            now_minute: 0,
             minutes: 30,
             dirty: true,
             conflict: true,
@@ -446,7 +447,8 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
         prepare_late(LateInput {
             week_start: WEEK,
             today_iso: "2026-09-24",
-            now_minute: 19 * 60,
+            now_hour: 19,
+            now_minute: 0,
             minutes: 30,
             dirty: true,
             conflict: false,
@@ -464,7 +466,8 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
         prepare_late(LateInput {
             week_start: WEEK,
             today_iso: "2026-09-24",
-            now_minute: 19 * 60,
+            now_hour: 19,
+            now_minute: 0,
             minutes: 45,
             dirty: false,
             conflict: false,
@@ -472,7 +475,7 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
             trace: None,
         })
         .unwrap(),
-        LatePreparation::Refused(LATE_INVALID_MINUTES.into())
+        LatePreparation::Refused("Choose 15, 30 or 60 minutes.".into())
     );
 
     // Valid delay: snaps 14:07 down to 14:00, excludes waiting homework from payload.blocks,
@@ -480,7 +483,8 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
     let ready = prepare_late(LateInput {
         week_start: WEEK,
         today_iso: "2026-09-24",
-        now_minute: 14 * 60 + 7,
+        now_hour: 14,
+        now_minute: 7,
         minutes: 30,
         dirty: false,
         conflict: false,
@@ -500,7 +504,7 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
             assert_eq!(day, 3);
             assert_eq!(from_start, "14:00");
             assert_eq!(minutes, 30);
-            assert_eq!(status, LATE_STATUS);
+            assert_eq!(status, "Replanning…");
             assert_eq!(previous_source, PreviousSource::Scheduled);
             let sent_ids: Vec<&str> = payload["blocks"]
                 .as_array()
@@ -529,7 +533,8 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
     let needs_base = prepare_late(LateInput {
         week_start: WEEK,
         today_iso: "2026-09-24",
-        now_minute: 14 * 60 + 7,
+        now_hour: 14,
+        now_minute: 7,
         minutes: 15,
         dirty: false,
         conflict: false,
@@ -638,7 +643,9 @@ fn late_answer_and_accept_late_preserve_operation_id_and_check_guards() {
             assignments: &json!({}),
         })
         .unwrap(),
-        LateAcceptDecision::Refused(LATE_CAPACITY_REFUSAL.into())
+        LateAcceptDecision::Refused(
+            "This week already has 100 blocks. Remove one before recording a late start.".into()
+        )
     );
 
     // Accepting applies the locked late block and new placement while preserving school's days and op_id.
@@ -657,7 +664,7 @@ fn late_answer_and_accept_late_preserve_operation_id_and_check_guards() {
             label,
         } => {
             assert_eq!(operation_id, op_id);
-            assert_eq!(label, LATE_TOUCH_LABEL);
+            assert_eq!(label, "running late");
             assert_eq!(out_trace, trace);
             assert_eq!(blocks.len(), 3);
             let moved_essay = blocks.iter().find(|b| b["id"] == "essay-1").unwrap();
@@ -691,7 +698,7 @@ fn spread_answer_keeps_assignment_identity_and_reports_leftovers() {
         })
         .unwrap(),
         SpreadPreview::Empty {
-            message: SPREAD_ALL_PLANNED.into()
+            message: "All of this homework is already focused or planned.".into()
         }
     );
 
@@ -829,8 +836,9 @@ fn spread_selection_maps_stored_mondays_into_shown_wednesday_week() {
     })
     .unwrap();
     assert_eq!(allow.label, "spreading Lab");
-    assert_eq!(allow.made_ids.len(), 2);
-    assert_eq!(allow.plan_ids, allow.made_ids);
+    // Group index 0 is Nov 2 + Wed, index 1 is Nov 9 + Mon; index 2 (Nov 11) is the next shown week.
+    assert_eq!(allow.made_ids, ["b-stage3-opwed1-0", "b-stage3-opwed1-1"]);
+    assert_eq!(allow.plan_ids, ["b-stage3-opwed1-0", "b-stage3-opwed1-1"]);
 
     // Ordinary Spread by hand (no allow_split_pending): made_ids stays the same (so stale
     // _split_whole entries are cleared), while plan_ids is empty (no plan promise).
@@ -911,7 +919,8 @@ fn prepare_late_and_recover_match_scheduled_blocks_when_trace_is_non_empty_with_
         prepare_late(LateInput {
             week_start: WEEK,
             today_iso: "2026-09-24",
-            now_minute: 14 * 60,
+            now_hour: 14,
+            now_minute: 0,
             minutes: 30,
             dirty: false,
             conflict: false,
@@ -919,14 +928,17 @@ fn prepare_late_and_recover_match_scheduled_blocks_when_trace_is_non_empty_with_
             trace: None,
         })
         .unwrap(),
-        LatePreparation::Refused(LATE_CAPACITY_REFUSAL.into())
+        LatePreparation::Refused(
+            "This week already has 100 blocks. Remove one before recording a late start.".into()
+        )
     );
 
     let with_placed = json!({"placed": [essay.clone()]});
     let late = prepare_late(LateInput {
         week_start: WEEK,
         today_iso: "2026-09-24",
-        now_minute: 14 * 60,
+        now_hour: 14,
+        now_minute: 0,
         minutes: 60,
         dirty: false,
         conflict: false,
@@ -997,4 +1009,132 @@ fn wrong_shaped_inputs_are_refused_with_errors() {
         })
         .is_err()
     );
+}
+
+fn late_input<'a>(today_iso: &'a str, now_hour: i64, blocks: &'a [Value]) -> LateInput<'a> {
+    LateInput {
+        week_start: WEEK,
+        today_iso,
+        now_hour,
+        now_minute: 0,
+        minutes: 30,
+        dirty: false,
+        conflict: false,
+        blocks,
+        trace: None,
+    }
+}
+
+#[test]
+fn running_late_needs_a_plain_date_for_today_and_a_real_clock() {
+    // A timestamp, a week date and a date without dashes are not today's date: the refusal checks
+    // would skip them and the solve would run for a week that is not open.
+    for bad in [
+        "2026-09-24T14:07:00",
+        "2026-W39-4",
+        "20260924",
+        "2026-9-24",
+        "",
+    ] {
+        assert!(prepare_late(late_input(bad, 14, &[])).is_err(), "{bad}");
+    }
+    assert!(prepare_late(late_input("2026-09-24", 14, &[])).is_ok());
+    assert!(prepare_late(late_input("2026-09-24", 24, &[])).is_err());
+    assert!(prepare_late(late_input("2026-09-24", -1, &[])).is_err());
+    let mut late_minute = late_input("2026-09-24", 14, &[]);
+    late_minute.now_minute = 60;
+    assert!(prepare_late(late_minute).is_err());
+}
+
+#[test]
+fn running_late_snaps_the_clock_to_the_quarter_hour() {
+    // 14:07 is inside the 14:00 slot; the hour times sixty plus the minute is the minute of the day.
+    let late = prepare_late(LateInput {
+        now_minute: 7,
+        ..late_input("2026-09-24", 14, &[])
+    })
+    .unwrap();
+    assert_eq!(late.to_json()["from_start"], "14:00");
+    let later = prepare_late(LateInput {
+        now_minute: 52,
+        ..late_input("2026-09-24", 16, &[])
+    })
+    .unwrap();
+    assert_eq!(later.to_json()["from_start"], "16:45");
+}
+
+#[test]
+fn accepting_running_late_refuses_malformed_blocks_and_traces() {
+    let essay = homework_session("essay-1", "essay", "Essay", vec![3], Some("18:45"), 60);
+    let good_block = json!({
+        "id": "b-late-1", "kind": "locked", "title": "Running late",
+        "days": [3], "start": "19:00", "duration_min": 30,
+    });
+    let good_trace = json!({"placed": [], "unplaced": [], "moves": []});
+    let accept = |block: Value, trace: Value| {
+        accept_late(LateAcceptInput {
+            preview: Some(&json!({
+                "week_start": WEEK, "stale": false, "operation_id": "op",
+                "block": block, "trace": trace,
+            })),
+            week_start: WEEK,
+            blocks: std::slice::from_ref(&essay),
+            assignments: &json!({}),
+        })
+    };
+    assert!(accept(good_block.clone(), good_trace.clone()).is_ok());
+    // An empty object is not a block.
+    assert!(accept(json!({}), good_trace.clone()).is_err());
+    // A block without days or with a start that is not a time is refused too.
+    assert!(
+        accept(
+            json!({"id": "b", "kind": "locked", "title": "x", "start": "99:99"}),
+            good_trace.clone()
+        )
+        .is_err()
+    );
+    // Placements must be lists of objects that name a block.
+    assert!(accept(good_block.clone(), json!({"placed": {}})).is_err());
+    assert!(accept(good_block.clone(), json!({"placed": [{}]})).is_err());
+    assert!(accept(good_block.clone(), json!({"placed": ["essay-1"]})).is_err());
+    assert!(accept(good_block.clone(), json!({"unplaced": {"id": "essay-1"}})).is_err());
+    assert!(
+        accept(
+            good_block.clone(),
+            json!({"placed": [{"id": "essay-1", "days": "3"}]})
+        )
+        .is_err()
+    );
+    assert!(
+        accept(
+            good_block.clone(),
+            json!({"placed": [{"id": "essay-1", "start": 5}]})
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn allow_splitting_refuses_minute_counts_a_homework_cannot_hold() {
+    let split = |estimate: Value, focus: Value| {
+        prepare_allow_splitting(AllowSplittingInput {
+            assignment: Some(&json!({
+                "id": "p", "title": "P", "due": "2026-09-25T23:59",
+                "estimate_min": estimate, "focus_minutes": focus,
+            })),
+            done_min: 0,
+            week_start: WEEK,
+            today_iso: WEEK,
+            selected_day: None,
+        })
+    };
+    // A day is 1440 minutes: 90 minutes of 120 done leaves 30, the session length.
+    let found = split(json!(120), json!(90)).unwrap().unwrap();
+    assert_eq!(found.session_min, 30);
+    assert!(split(json!(i64::MIN), json!(60)).is_err());
+    assert!(split(json!(-1), json!(0)).is_err());
+    assert!(split(json!(1441), json!(0)).is_err());
+    assert!(split(json!(60), json!(-5)).is_err());
+    assert!(split(json!(60), json!(71401)).is_err());
+    assert!(split(json!(1440), json!(71400)).is_ok());
 }
