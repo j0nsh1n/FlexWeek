@@ -141,6 +141,8 @@ REMINDERS = ("off", "5", "10", "15")
 LEAD_MAX = 120
 # How often an open pairing code's countdown and tries are read again.
 PAIR_TICK_MS = 1000
+# How long a Pair waits for the new offer before freeing Copy and Start a new code.
+PAIR_START_TIMEOUT_MS = 15000
 REMINDER_CHIPS = (
     {"label": "Off", "value": "off"},
     {"label": "5m", "value": "5"},
@@ -2540,7 +2542,33 @@ class SettingsBridge(QObject):
             # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
             QTimer.singleShot(0, self, apply)
 
-        if not session.begin_pairing(finish):
+        def expire() -> None:
+            # The start never answered: invalidate it so a late answer drops as stale,
+            # and free Copy and Start a new code instead of wedging them until restart.
+            if gen != self._pair_gen or not self._pair_starting:
+                return
+            if self._pair_open and self._pair_code:
+                return
+            self._pair_gen += 1
+            self._pair_starting = False
+            self._pair_error = "Pairing did not start."
+            self._publish()
+
+        QTimer.singleShot(PAIR_START_TIMEOUT_MS, self, expire)
+        try:
+            started = session.begin_pairing(finish)
+        except Exception as exc:
+            self._pair_gen += 1
+            self._pair_starting = False
+            self._pair_code = ""
+            self._pair_status = ""
+            self._pair_seconds = 0
+            self._pair_tries = 0
+            self._pair_open = False
+            self._pair_error = str(exc) or "Pairing did not start."
+            self._publish()
+            return
+        if not started:
             self._pair_starting = False
             self._pair_code = ""
             self._pair_status = ""

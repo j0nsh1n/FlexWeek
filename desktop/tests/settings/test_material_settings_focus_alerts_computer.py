@@ -559,3 +559,65 @@ def test_leaving_settings_during_a_pending_start_lets_a_new_pair_work(
     _pump(qapp, 10)
     assert _panel(window).property("state")["pairCode"] == "4444 5555"
     assert _panel(window).property("state")["pairOpen"] is True
+
+
+def test_a_pairing_start_that_raises_leaves_pairing_usable(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX-LIST-4 item 3: a start that raises must not wedge the guard; Copy and
+    Start a new code work again on the next Pair."""
+    def boom(done: object) -> bool:
+        raise RuntimeError("no radio")
+
+    monkeypatch.setattr(window.session, "begin_pairing", boom)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    _pump(qapp, 10)
+    assert _panel(window).property("state").get("pairStarting") is False
+    assert _panel(window).property("state")["pairError"] == "no radio"
+
+    # Pairing again works and both action buttons come back.
+    monkeypatch.setattr(
+        window.session, "begin_pairing", lambda done: done({"display_code": "6666 7777"}, None) or True
+    )
+    _click(qapp, window, _named(root, "row_pair")[0])
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "6666 7777")
+    assert _panel(window).property("state").get("pairStarting") is False
+    assert _named(root, "pairCopy")[0].property("enabled") is True
+    assert _named(root, "pairNewCode")[0].property("enabled") is True
+
+
+def test_a_pairing_start_that_never_answers_times_out(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX-LIST-4 item 3: a start whose answer never comes must time out instead of
+    disabling Copy and Start a new code until restart."""
+    import desktop.native.material.bridge_settings as bridge_settings
+
+    monkeypatch.setattr(bridge_settings, "PAIR_START_TIMEOUT_MS", 50)
+    pending: list[object] = []
+    monkeypatch.setattr(window.session, "begin_pairing", lambda done: pending.append(done) or True)
+    monkeypatch.setattr(
+        window.session,
+        "pairing_status",
+        lambda: {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 300_000, "tries_left": 3},
+    )
+    root = _open_settings(qapp, window, "sync")
+    _click(qapp, window, _named(root, "row_pair")[0])
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is True)
+    wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is False)
+    assert _panel(window).property("state")["pairError"] == "Pairing did not start."
+
+    # The timed-out start's late answer is stale; a new Pair shows a fresh code.
+    _click(qapp, window, _named(root, "row_pair")[0])
+    assert len(pending) == 2
+    pending[1]({"display_code": "8888 9999"}, None)  # type: ignore[index]
+    wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "8888 9999")
+    pending[0]({"display_code": "0000 9999"}, None)  # type: ignore[index]
+    _pump(qapp, 10)
+    assert _panel(window).property("state")["pairCode"] == "8888 9999"
