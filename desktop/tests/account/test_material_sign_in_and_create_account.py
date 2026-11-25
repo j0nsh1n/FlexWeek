@@ -315,7 +315,9 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     assert showcase_iface.text(QAccessible.Text.Name) == "FlexWeek preview"
 
     # Repeater delegates live in the visual item tree, not QObject.children(), so look them up via named().
-    dot2 = named(window, "signInDot2")[0]
+    dots = named(window, "signInDot2")
+    assert dots, "signInDot2"
+    dot2 = dots[0]
     assert dot2.property("activeFocusOnTab") is True
     dot2_iface = QAccessible.queryAccessibleInterface(dot2)
     assert dot2_iface is not None
@@ -338,7 +340,9 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     assert showcase.property("autoAdvancing") is True
 
     # Claude #2: indicator dots are keyboard-operable and pause rotation while focused.
-    dot3 = named(window, "signInDot3")[0]
+    dots = named(window, "signInDot3")
+    assert dots, "signInDot3"
+    dot3 = dots[0]
     dot3.forceActiveFocus()
     pump(qapp, 5)
     QTest.keyClick(quick, Qt.Key.Key_Space)
