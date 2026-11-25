@@ -104,14 +104,14 @@ STATUS_COLORS = {
 }
 
 CLASS_COLORS = {
-    "class": "#3d6fc4",  # School
-    "exercise": "#2b9665",  # Sports (darker than the spec's #2f9e6b: 3:1 on the page, Jonathan 11-04)
-    "extra": "#0f8a8a",  # Clubs
-    "assignments": "#a87512",  # Work
-    "study": "#c2557a",  # Personal
-    "meals": "#64748b",  # Other
-    "sleep": "#64748b",  # Other
-    "free": "#64748b",  # Other
+    "class": "#3d6fc4",       # School
+    "exercise": "#2b9665",    # Sports (darker than the spec's #2f9e6b: 3:1 on the page, Jonathan 11-04)
+    "extra": "#0f8a8a",       # Clubs
+    "assignments": "#a87512", # Work
+    "study": "#c2557a",       # Personal
+    "meals": "#64748b",       # Other
+    "sleep": "#64748b",       # Other
+    "free": "#64748b",        # Other
 }
 OTHER_CLASS_COLOR = "#64748b"
 SIX_CLASSES = ("class", "exercise", "extra", "assignments", "study", "other")
@@ -140,7 +140,7 @@ def qml_path() -> Path:
 def _schemes() -> dict[str, dict[str, str]]:
     try:
         loaded = json.loads(tokens_path().read_text(encoding="utf-8"))
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return {}
     if not isinstance(loaded, dict):
         raise ValueError("Material tokens must be a JSON object of schemes")
@@ -687,7 +687,7 @@ def store_material(path: Path, material: dict[str, Any]) -> None:
     """Put `material` on the look file and leave every other key where it was."""
     try:
         stored = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
+    except (OSError, ValueError):
         stored = {}
     if not isinstance(stored, dict):
         stored = {}
@@ -700,7 +700,7 @@ def kept_material(path: Path) -> dict[str, Any] | None:
     """The material object already in the look file, so a later save of the widgets look keeps it."""
     try:
         stored = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return None
     material = stored.get("material") if isinstance(stored, dict) else None
     return material if isinstance(material, dict) else None

@@ -155,7 +155,9 @@ AUDIO = (
     ("Spotify", "spotify"),
 )
 AUDIO_VALUES = {value for _label, value in AUDIO}
-TONES = tuple({"label": ALARM_TONE_LABELS.get(name, name.title()), "value": name} for name in SOUNDS)
+TONES = tuple(
+    {"label": ALARM_TONE_LABELS.get(name, name.title()), "value": name} for name in SOUNDS
+)
 # (key, saved field, smallest, largest) of the focus timer's lengths, in minutes. The ranges are the
 # backend's (Preferences).
 TIMER_LENGTHS = {
@@ -1949,7 +1951,7 @@ class SettingsBridge(QObject):
         clock_24h = (_prefs_of(self._window)).get("clock_24h") is True
         try:
             return this_week_line(session.blocks, [school], clock_24h, session.week_start) or ""
-        except KeyError, TypeError, ValueError:
+        except (KeyError, TypeError, ValueError):
             return ""
 
     def _redraw_study(self) -> None:
@@ -2037,7 +2039,9 @@ class SettingsBridge(QObject):
             return
         session = self._window.session
         cutoff = _prefs_of(self._window).get("day_cutoff") or None
-        if session.save_availability(self._study.saved_protected(), cutoff, self._study.saved_windows()):
+        if session.save_availability(
+            self._study.saved_protected(), cutoff, self._study.saved_windows()
+        ):
             self._study.dirty = False
             self._study.error = ""
         self._publish()
@@ -2091,16 +2095,12 @@ class SettingsBridge(QObject):
             school.dirty = False
             self._publish()
             return
-        made = (
-            copy.deepcopy(usual)
-            if usual is not None
-            else {
-                "id": SETUP_SCHOOL_ID,
-                "kind": "locked",
-                "title": "School",
-                "category": "class",
-            }
-        )
+        made = copy.deepcopy(usual) if usual is not None else {
+            "id": SETUP_SCHOOL_ID,
+            "kind": "locked",
+            "title": "School",
+            "category": "class",
+        }
         made.update(days=sorted(school.days), start=school.start, duration_min=school.minutes())
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(made)])

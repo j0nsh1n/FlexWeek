@@ -704,7 +704,9 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
-    def note(self, text: str, *, action: str = "UNDO", on_action: Callable[[], None] | None = None) -> None:
+    def note(
+        self, text: str, *, action: str = "UNDO", on_action: Callable[[], None] | None = None
+    ) -> None:
         """One snackbar line. `on_action` is what its button does; Undo and Retry need none."""
         said_before = self._snack
         self._snack = text
