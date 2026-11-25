@@ -227,7 +227,14 @@ class AccountBridge(QObject):
         super().__init__(window)
         self._window = window
         session = window.session  # type: ignore[attr-defined]
-        self._phase = "app" if session.account is not None else "sign-in"
+        # A session kept at the last sign-in is tried just after the window opens: until it answers, only the
+        # plain background shows, not a sign-in card that would flash before the week.
+        if session.account is not None:
+            self._phase = "app"
+        elif session.kept is not None and session.kept.token() is not None:
+            self._phase = "opening"
+        else:
+            self._phase = "sign-in"
         self._username = ""
         self._password = ""
         self._keep = bool(session.keep_signed_in)
@@ -286,6 +293,7 @@ class AccountBridge(QObject):
         self._sync_tables()
         session.status.connect(self._on_status)
         session.busy_changed.connect(self._on_busy)
+        session.resume_failed.connect(self._on_resume_failed)
 
     @property
     def codes(self) -> list[str]:
@@ -1594,6 +1602,11 @@ class AccountBridge(QObject):
 
     def _on_busy(self, _busy: bool) -> None:
         self.changed.emit()
+
+    def _on_resume_failed(self) -> None:
+        if self._phase == "opening":
+            self._phase = "sign-in"
+            self.changed.emit()
 
     def _on_status(self, message: str) -> None:
         if self._phase not in AUTH_PHASES:

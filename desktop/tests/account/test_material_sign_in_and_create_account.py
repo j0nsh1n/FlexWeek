@@ -17,6 +17,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.setup_steps import WEEK
+from desktop.native.window import NativeWindow
 from desktop.tests.account.support import (
     OTHER_PASSWORD,
     WRONG_PASSWORD,
@@ -33,6 +34,8 @@ from desktop.tests.account.support import (
     skip_setup,
     through_recovery,
 )
+from desktop.tests.light_app import _client_for
+from desktop.tests.material_support import pump
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, qapp  # noqa: F401
 
@@ -188,6 +191,47 @@ def test_a_kept_session_resumes_into_the_material_week(
     assert second.session.account["username"] == "resuming_student"
     assert shown(second, "materialRail")
     assert not shown(second, "authCard")
+
+
+def _launch_seeing_phases(qapp: QApplication, launches: LightLaunches) -> tuple[NativeWindow, list[str]]:
+    """A launch like `launches.launch()`, with every account phase recorded from the moment the window
+    exists, before the kept session is tried."""
+    with _client_for(launches.api):
+        window = NativeWindow(launches.database, kept=launches.kept)
+    seen = [account(window).phase]
+    account(window).changed.connect(lambda: seen.append(account(window).phase))
+    window.show()
+    launches.windows.append(window)
+    wait_until(qapp, lambda: not window.session.busy)
+    pump(qapp, 10)
+    return window, seen
+
+
+def test_a_kept_session_opens_the_week_without_showing_sign_in_first(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    """Jonathan, 2026-11-24: opening FlexWeek where he was kept signed in showed the sign-in card for a
+    moment before the week. While the kept session is tried, only the plain background shows."""
+    first = material_launches.launch()
+    create(qapp, first, "opening_student", keep=True)
+    through_recovery(qapp, first)
+    skip_setup(qapp, first)
+    first.hide()
+    second, seen = _launch_seeing_phases(qapp, material_launches)
+    wait_until(qapp, lambda: account(second).phase == "app")
+    assert seen[0] == "opening"
+    assert "sign-in" not in seen, seen
+
+
+def test_a_kept_session_that_no_longer_works_opens_on_sign_in_saying_why(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    material_launches.kept.keep("A" * 43)
+    window, seen = _launch_seeing_phases(qapp, material_launches)
+    assert seen[0] == "opening"
+    assert account(window).phase == "sign-in"
+    assert shown(window, "authCard")
+    assert "sign in" in account(window).statusLine.lower()
 
 
 def test_without_keep_a_new_launch_asks_to_sign_in(
