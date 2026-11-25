@@ -30,7 +30,16 @@ Rectangle {
     border.width: drawer.phone ? 0 : (drawer.highContrast ? 1.5 : 1)
     border.color: drawer.highContrast ? m3.outline : m3.outlineVariant
     clip: true
-    implicitHeight: header.implicitHeight + (count > 0 ? list.contentHeight : empty.implicitHeight) + 40
+    implicitHeight: header.implicitHeight + (count > 0 ? list.contentHeight + 44 : empty.implicitHeight + 64)
+
+    Rectangle {
+        visible: drawer.phone
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: drawer.highContrast ? 1.5 : 1
+        color: drawer.highContrast ? m3.outline : m3.outlineVariant
+    }
 
     Column {
         id: header

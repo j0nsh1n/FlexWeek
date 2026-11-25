@@ -388,12 +388,10 @@ Item {
         passive: root.passive
         anchors.right: parent.right
         anchors.rightMargin: root.outerPad
-        anchors.top: root.phone ? undefined : parent.top
-        anchors.topMargin: root.phone ? 0 : 0
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 0
         width: root.phone ? parent.width : root.drawerWidth
-        height: root.phone ? Math.min(implicitHeight, Math.max(160, parent.height * 0.45)) : undefined
+        height: root.phone ? Math.min(implicitHeight, Math.max(160, parent.height * 0.45)) : parent.height
         bridge: root.bridge
         theme: root.theme
         density: root.density

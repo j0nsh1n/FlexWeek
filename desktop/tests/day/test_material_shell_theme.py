@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject  # noqa: E402
+from PySide6.QtCore import QObject, QPointF  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
@@ -110,3 +110,39 @@ def test_a_narrow_shell_uses_the_bar_instead_of_the_rail(
         assert int(root.property("enterMs")) == 300
     finally:
         material_window.setMinimumWidth(WINDOW_MIN_WIDTH)
+
+
+def test_a_narrow_week_keeps_the_grid_visible_above_the_homework_drawer(
+    qapp: QApplication, material_window: NativeWindow
+) -> None:
+    """At 700 px the week grid keeps most of the height above the drawer; at 810 px they sit side by side."""
+    root = show_material(qapp, material_window)
+    material_window._material_page.bridge.showPage("week")
+    material_window.setMinimumWidth(360)
+    try:
+        material_window.resize(700, 800)
+        pump(qapp, 10)
+        card = qml(root, "weekCalendarCard")
+        scroller = qml(root, "weekScroller")
+        drawer = qml(root, "homeworkDrawer")
+        assert card.property("visible") is True
+        assert scroller.property("visible") is True
+        assert drawer.property("visible") is True
+        assert card.height() > drawer.height(), (card.height(), drawer.height())
+        assert card.height() >= 300, card.height()
+        assert scroller.height() >= 200, scroller.height()
+        card_bottom = card.mapToScene(QPointF(0, card.height())).y()
+        drawer_top = drawer.mapToScene(QPointF(0, 0)).y()
+        assert drawer_top >= card_bottom - 1, (drawer_top, card_bottom)
+
+        material_window.resize(810, 800)
+        pump(qapp, 10)
+        assert card.height() >= 500, card.height()
+        assert scroller.height() >= 400, scroller.height()
+        card_right = card.mapToScene(QPointF(card.width(), 0)).x()
+        drawer_left = drawer.mapToScene(QPointF(0, 0)).x()
+        assert drawer_left >= card_right - 1, (drawer_left, card_right)
+    finally:
+        material_window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        material_window.resize(1280, 800)
+        pump(qapp)
