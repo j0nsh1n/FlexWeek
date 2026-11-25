@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-WORKFLOW_PATH = ROOT / ".github/workflows/dev-build.yml"
+WORKFLOW_PATH = ROOT / ".depot/workflows/dev-build.yml"
 SCRIPT_PATH = ROOT / "scripts/dev-release.sh"
 
 WORKFLOW = WORKFLOW_PATH.read_text(encoding="utf-8")
@@ -82,7 +82,9 @@ def test_the_dev_release_script_starts_the_workflow_on_main() -> None:
     assert SCRIPT_PATH.is_file()
     assert (SCRIPT_PATH.stat().st_mode & 0o111) != 0, "Script must be executable"
     assert "set -euo pipefail" in SCRIPT
-    assert "gh workflow run dev-build.yml --ref main" in SCRIPT
+    # On Depot CI since 2026-11-24; GitHub Actions no longer has the workflow.
+    assert '"$DEPOT" ci dispatch --repo j0nsh1n/FlexWeek --workflow dev-build.yml --ref main' in SCRIPT
+    assert "gh workflow run" not in SCRIPT
     assert "gh release create" not in SCRIPT
     # It must not claim another run's link: a run listed right after dispatch may not be this one.
     assert "gh run list" not in SCRIPT

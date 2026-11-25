@@ -6,8 +6,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from desktop.tests.updater.release_workflows import release_text
+
 ROOT = Path(__file__).resolve().parents[3]
-WORKFLOW = (ROOT / ".github/workflows/release-windows.yml").read_text(encoding="utf-8")
+WORKFLOW = release_text()
 CHECKLIST = (ROOT / "docs/github-release.md").read_text(encoding="utf-8")
 
 

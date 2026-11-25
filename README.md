@@ -98,7 +98,7 @@ The Linux downloads include a helper that lets an AI assistant you already use (
 - **Planner and storage**: Rust (`engine/`), built into a Python module with PyO3 and maturin; SQLite (rusqlite).
 - **Saved data**: the Rust service answers the window in the same process; there is no server.
 - **Phone app**: Android, Kotlin with Jetpack Compose, calling the same Rust engine through UniFFI; sync uses iroh.
-- **Packaging**: Linux tarball and AppImage, Windows installers (Inno Setup and WiX), built on GitHub Actions.
+- **Packaging**: Linux tarball and AppImage built on Depot CI, Windows installers (Inno Setup and WiX) built on GitHub Actions.
 
 ## Run from source
 

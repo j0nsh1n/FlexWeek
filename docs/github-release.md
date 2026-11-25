@@ -45,8 +45,10 @@ The steps for a release, in order. The block above is the release body only.
 Before the tag
 
 1. Merge the fixes planned for the release. Every pull request has green checks.
-2. Run "Release packages" by hand on main with no tag. It builds and tests every
-   package and uploads nothing. Both jobs must pass. If anyone can try the Windows
+2. Run both release workflows by hand on main with no tag: "Release packages" on GitHub
+   Actions (the Windows installers) and "Release packages (Linux)" on Depot CI
+   (`depot ci dispatch --repo j0nsh1n/FlexWeek --workflow release-linux.yml --ref main`).
+   They build and test every package and upload nothing. Both must pass. If anyone can try the Windows
    installers from the run's artifacts on a real PC, do; otherwise say in the notes
    that they were not tried.
 3. Open a developer build for an hour (`scripts/dev-release.sh`) and note its memory
@@ -55,7 +57,8 @@ Before the tag
    heading `## [X.Y.Z] - <date>` over a new empty `## [Unreleased]`, Android
    `versionName` and `versionCode` (up by one), `docs/release-notes-vX.Y.Z.md`,
    `context.md`, `roadmap.md` and `README.md` up to date. Comment `@coderabbitai review`.
-   Run Verify by hand on the branch so every mutation shard runs. Merge when the
+   Run Verify by hand on the branch so every mutation shard runs (on Depot CI:
+   `depot ci dispatch --repo j0nsh1n/FlexWeek --workflow verify.yml --ref <branch>`). Merge when the
    reviewer passes and every check is green.
 5. Use a developer build of the merged main, and try every visible control once in
    Material and in Today's app. What turns up becomes fixes before the tag.
@@ -67,8 +70,10 @@ Cutting the release
    workflow runs the same check first and stops when they differ.
 7. Create the GitHub release for `vX.Y.Z` as a draft, titled "FlexWeek X.Y.Z", with
    the body above and the release notes. Not a pre-release.
-8. Run "Release packages" by hand with the tag. It builds from the tag, smoke-tests
-   each package and the packaged assistant helper, and uploads eight files:
+8. Run both release workflows by hand with the tag: "Release packages" on GitHub Actions
+   and "Release packages (Linux)" on Depot CI (`--input tag=vX.Y.Z` to the dispatch above).
+   They build from the tag, smoke-test each package and the packaged assistant helper,
+   and upload eight files:
    `FlexWeek-Windows-x64-Setup.exe`, `FlexWeek-Windows-x64.msi`,
    `FlexWeek-Linux-x86_64.tar.gz`, `FlexWeek-x86_64.AppImage` and a `.sha256` for each.
 9. Android, on the machine that holds the key: from `android/`, run
@@ -79,7 +84,8 @@ Cutting the release
    the same certificate as the previous release's APK.
 10. Check all ten files are on the draft and every checksum matches: download each and
     run `sha256sum -c`.
-11. Publish as latest. Publishing starts "Release packages" again; its upload steps skip
+11. Publish as latest. Publishing starts the GitHub "Release packages" again (Depot
+    cannot start on a release, so the Linux one does not run); its upload steps skip
     every file already on the release, so the checked files stay as they are. Cancel
     that run if you do not need it. To replace a file on purpose, delete it from the
     release first.

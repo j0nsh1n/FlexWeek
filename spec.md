@@ -618,7 +618,7 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
 
 ## Architecture
 - Language/runtime: **Python 3.14**. PINNED. Verified against the local
-  interpreter (3.14.7) and `.github/workflows/verify.yml` (`python-version: '3.14'`).
+  interpreter (3.14.7) and `.depot/workflows/verify.yml` (`python-version: '3.14'`).
   Never downgrade.
 - Current languages: Python, Rust, QML and SQL for account storage. The client
   is Material 3 in Qt Quick/QML hosted from Python; see DESKTOP.md.
@@ -736,20 +736,24 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   service in their own process, so they need no server, open no network port
   (phone sync, once a phone is paired, listens for it) and need no Python
   install; the database sits in the user data directory. There is no hosted
-  deployment (D4, 2026-11-21). The Windows installers and the Linux download are
-  built on GitHub Actions (`.github/workflows/release-windows.yml`), which
-  installs, opens and uninstalls each Windows installer; a run started by hand
-  without a tag builds and tests everything but uploads nothing; running them on
-  a real PC is unverified here.
-- GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
-  pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
+  deployment (D4, 2026-11-21). The Windows installers are built on GitHub
+  Actions (`.github/workflows/release-windows.yml`), which installs, opens and
+  uninstalls each one; the Linux downloads on Depot CI
+  (`.depot/workflows/release-linux.yml`, started by hand with the tag, since Depot
+  cannot start on a published release). A run started by hand without a tag
+  builds and tests everything but uploads nothing; running the installers on a
+  real PC is unverified here.
+- CI: Depot CI runs the GitHub Actions workflow format on its own runners, in
+  parallel (moved there from GitHub Actions on 2026-11-24). `.depot/workflows/verify.yml`
+  is the source gate (mypy, not pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
   `screens`, `rig`, `mutate` and `mutate-python`. `screens` runs the screen tests
   written in Rust (`engine/testkit/tests`) against the Python app through the
   test door. `rig` runs once for Material Day and once
   for Material Week with a real pointer on a hidden display (Xvfb, Openbox,
   xdotool) and uploads the frames and results; CI has no ffmpeg, so there is no
-  video. `.github/workflows/codeql.yml` runs CodeQL on Python.
-  `.github/workflows/dev-build.yml` publishes the developer build.
+  video. `.github/workflows/codeql.yml` runs CodeQL on Python on GitHub Actions
+  (its action needs a GitHub run). `.depot/workflows/dev-build.yml` publishes the
+  developer build.
   The generic kit `ci.yml` is not installed: it ran pyright and looked for
   `tests/` at the repo root. Dependabot stays off.
 
@@ -869,7 +873,7 @@ flaky is fixed or reported, not left.
 other suite or script, and `fwtest clean` stops what a killed run left.
 Run every local suite, mutation run and rig through `fwtest` rather than
 bare Python, so runs queue behind each other and leave nothing running.
-`.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`) and
+`.depot/workflows/verify.yml` runs on Depot CI on every push and pull request (Python 3.14, Rust stable, `contents: read`) and
 is the gate: everything runs there except pictures. An `engine` job builds the engine wheel and fwtest once;
 `verify-python`, `desktop`, `rig` and `mutate-python` install them. `verify-python` runs `fwtest gate --backend-only`
 (lint, types, mutation patterns, the port ledger, backend tests, diff checks). `desktop` runs every test file under `desktop/tests`,
@@ -879,7 +883,7 @@ thread's stack. `verify-engine` runs the harness's and the engine's cargo checks
 the Day and Week tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video). On pull requests and
 by hand, `mutate` builds its own engine module and runs the mutation cases under `engine/` over four shards, and
 `mutate-python` runs the rest over six. `verify-python` and `desktop` set `FLEXWEEK_SILENT=1` and upload their flaky
-log as an artifact. `.github/workflows/dev-build.yml`, started by hand (`scripts/dev-release.sh`), builds the Linux
+log as an artifact. `.depot/workflows/dev-build.yml`, started by hand (`scripts/dev-release.sh`), builds the Linux
 tarball from `main` as `<version>.<UTC date and minute>` and publishes it as the `dev` pre-release titled `Developer
 build <version> (<commit7>)`. The build it replaces is kept first as a pre-release tagged `dev-<its commit7>` and
 titled `Developer build <its version> (<its commit7>)`; the kept tag points at the new run's commit, and the old
@@ -1003,7 +1007,7 @@ The numbers the Machine Resources rules in AGENTS.md use for this project.
   and keep watching while it runs; warn below 6 GB available or when swap
   climbs, stop the job below 3 GB.
 - Runs only in CI: CodeQL, the Windows and Linux packaging and installer checks
-  (`release-windows.yml`), the whole desktop suite, every mutation case and the
+  (`release-windows.yml` on GitHub Actions, `release-linux.yml` on Depot CI), the whole desktop suite, every mutation case and the
   rig. Locally, `fwtest gate --touched` runs the touched areas; a full local
   gate or rig run before a push is not required (Testing structure rule 7).
 - Scratch folder: `~/.flexweek-ui-harness/scratch`.
