@@ -38,7 +38,8 @@ impl<'a> ClockNow<'a> {
 }
 
 fn validate_clock(now: &ClockNow<'_>) -> Result<(), String> {
-    if !time::is_calendar_date(now.today) {
+    // The clock is any real date; only deadlines are held to 2000..2099.
+    if time::week_start_on(now.today, 0).is_err() {
         return Err(format!("today must be YYYY-MM-DD, got {:?}", now.today));
     }
     if !(0..=23).contains(&now.hour) {
@@ -71,9 +72,9 @@ fn overdue_ids(
     assignments: &Map<String, Value>,
     now: &ClockNow<'_>,
 ) -> Result<Vec<String>, String> {
-    let (today_date, _) = model::parse_due(now.today).map_err(|err| err.message)?;
     // Match Python's `(now.date(), now.hour * 60 + now.minute)` so 23:59 is still before END_OF_DAY_MIN (1440).
-    let moment = (today_date, now.hour * 60 + now.minute);
+    // ISO dates of four digits sort as text, so the clock date needs no deadline-range parse.
+    let moment = (now.today, now.hour * 60 + now.minute);
     let mut ids = Vec::new();
     for (key, item) in assignments {
         if truthy(item.get("completed")) {
@@ -86,7 +87,8 @@ fn overdue_ids(
         else {
             continue;
         };
-        if model::parse_due(due).map_err(|err| err.message)? <= moment {
+        let (due_day, due_minute) = model::parse_due(due).map_err(|err| err.message)?;
+        if (due_day.to_string().as_str(), due_minute) <= moment {
             ids.push(key.clone());
         }
     }

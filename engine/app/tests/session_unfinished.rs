@@ -743,3 +743,63 @@ fn invalid_clock_stored_parts_or_exhausted_ids_are_refused() {
         .is_err()
     );
 }
+
+#[test]
+fn a_clock_past_the_last_deadline_year_still_counts_and_plans() {
+    // The last supported week (Mon 2099-12-28) is still open on Fri 2100-01-01. Deadlines are limited to
+    // 2000..2099, the clock is any real date, so the week spills into January without an error.
+    let last_week = "2099-12-28";
+    let assignments = map_of(vec![assignment("late", "Late", "2099-12-30T10:00", 60)]);
+
+    let counts = homework_counts(HomeworkCountsInput {
+        week_start: last_week,
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &assignments,
+        assignments_basis: &[],
+        now: ClockNow::at("2100-01-01", 9, 0),
+    })
+    .unwrap();
+    assert_eq!(counts.overdue_assignment_ids, vec!["late"]);
+    assert!(counts.per_assignment["late"].overdue);
+    assert_eq!(counts.per_assignment["late"].uncovered_min, 60);
+
+    let mut ids = ["new-1"].into_iter().map(str::to_string);
+    let planned = plan_unfinished(
+        UnfinishedPlanInput {
+            week_start: last_week,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            assignment_ids: &["late".to_string()],
+            now: ClockNow::at("2100-01-01", 9, 0),
+        },
+        &mut ids,
+    )
+    .unwrap();
+    match planned {
+        UnfinishedPlan::Ready {
+            made,
+            overdue_targets,
+            ..
+        } => {
+            assert_eq!(made, vec!["new-1"]);
+            assert_eq!(overdue_targets, vec!["new-1"]);
+        }
+        UnfinishedPlan::Say(words) => panic!("expected Ready, got: {words}"),
+    }
+
+    // A deadline past 2099 stays refused.
+    let far = map_of(vec![assignment("far", "Far", "2100-01-02", 60)]);
+    assert!(
+        homework_counts(HomeworkCountsInput {
+            week_start: last_week,
+            first_weekday: 0,
+            blocks: &[],
+            assignments: &far,
+            assignments_basis: &[],
+            now: ClockNow::at("2100-01-01", 9, 0),
+        })
+        .is_err()
+    );
+}
