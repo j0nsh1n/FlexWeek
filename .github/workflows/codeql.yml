@@ -1,5 +1,5 @@
 # CodeQL scans Python. It does not replace
-# .github/workflows/verify.yml. The generic kit CI (pyright, tests/ at repo
+# .depot/workflows/verify.yml (Depot CI). The generic kit CI (pyright, tests/ at repo
 # root) is not used in this repository.
 name: CodeQL
 on:

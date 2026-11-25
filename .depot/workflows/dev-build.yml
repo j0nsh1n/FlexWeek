@@ -1,9 +1,5 @@
-# Depot CI Migration
-# Source: .github/workflows/dev-build.yml
-#
-# Changes made:
-# - Changed GitHub runs-on labels to their Depot equivalents
-
+# Runs on Depot CI (moved from GitHub Actions on 2026-11-24, for its parallel runners). GitHub Actions
+# keeps only CodeQL (.github/workflows/codeql.yml) and the Windows release (release-windows.yml).
 name: Developer build
 
 on:

@@ -1,19 +1,13 @@
-# Depot CI Migration
-# Source: .github/workflows/release-windows.yml
-#
-# Changes made:
-# - Removed unsupported trigger "release"
-# - Rewrote .github/ path references to .depot/
-# - Removed job "windows": Depot has no Windows runners (the GitHub workflow still builds the installers)
-# - Changed runs-on from "ubuntu-24.04" to "depot-ubuntu-24.04" in job "linux"
+# The Linux downloads (tar.gz and AppImage) for a release, on Depot CI. Depot cannot start on
+# "release published", so after publishing a release run it by hand with the tag:
+#   depot ci dispatch --repo j0nsh1n/FlexWeek --workflow release-linux.yml --ref main --input tag=vX.Y.Z
+# The Windows installers stay on GitHub Actions (.github/workflows/release-windows.yml), which has
+# Windows runners and starts by itself when the release is published.
+name: Release packages (Linux)
 
-name: Release packages
-
-# Builds the Windows installers and the Linux downloads (Nuitka can only build
-# for the OS it runs on) and attaches them to the GitHub release. Fires when a
-# release is published; runnable by hand against an existing tag. Pull requests
-# that touch packaging, and a hand run without a tag, build and test everything
-# but upload nothing to a release; the Windows installers are kept as run artifacts.
+# Builds the Linux downloads and attaches them to the GitHub release named by `tag`. Pull
+# requests that touch packaging, and a hand run without a tag, build and test everything but
+# upload nothing to a release.
 #
 # onedir (not onefile): Qt plugins ship as a folder, so each bundle is a
 # directory, installed on Windows and inside a tar.gz or AppImage on Linux.
@@ -30,7 +24,7 @@ on:
       - "desktop/build_windows.ps1"
       - "desktop/build_linux.sh"
       - "desktop/package_linux.sh"
-      - ".depot/workflows/release-windows.yml"
+      - ".depot/workflows/release-linux.yml"
 
 permissions:
   contents: write

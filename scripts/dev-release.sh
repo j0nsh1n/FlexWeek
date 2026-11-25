@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# Trigger the Developer build GitHub workflow from main and print the run URL.
+# Start the Developer build workflow on Depot CI from main and say where to follow it. CI moved from
+# GitHub Actions to Depot on 2026-11-24 (.depot/workflows/dev-build.yml).
 set -euo pipefail
 
-if ! command -v gh >/dev/null 2>&1; then
-    echo "GitHub CLI (gh) is not installed." >&2
+DEPOT="${DEPOT:-depot}"
+if ! command -v "$DEPOT" >/dev/null 2>&1; then
+    echo "The Depot CLI (depot) is not installed: https://depot.dev/docs/cli/installation" >&2
     exit 1
 fi
 
-if ! gh auth status >/dev/null 2>&1; then
-    echo "GitHub CLI (gh) is not logged in. Run 'gh auth login' first." >&2
-    exit 1
-fi
-
-echo "Triggering Developer build workflow from main..."
-gh workflow run dev-build.yml --ref main
+echo "Starting the Developer build workflow on Depot from main..."
+"$DEPOT" ci dispatch --repo j0nsh1n/FlexWeek --workflow dev-build.yml --ref main
 
 echo "Started. The build takes about 20 minutes and replaces the dev pre-release."
-echo "Follow it at https://github.com/j0nsh1n/FlexWeek/actions/workflows/dev-build.yml"
+echo "Follow it with: $DEPOT ci workflow list --repo j0nsh1n/FlexWeek --name 'Developer build'"
