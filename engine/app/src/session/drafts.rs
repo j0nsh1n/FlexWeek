@@ -85,8 +85,15 @@ struct Parked {
     selection: Value,
 }
 
+/// What a delete answer will change, read before anything is changed.
+struct DeletePrepared {
+    removed: Map<String, Value>,
+    current: Option<(Value, Revision, Value)>,
+    parked: Vec<Map<String, Value>>,
+}
+
 /// A homework delete waiting for its answer, then for the other weeks it read back for Undo.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Deleting {
     homework: String,
     title: String,
@@ -99,7 +106,7 @@ struct Deleting {
     reading: Option<String>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct PendingBatch {
     request: Map<String, Value>,
     stay: Option<bool>,
@@ -129,7 +136,7 @@ impl PendingBatch {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct WeekDraft {
     fields: Map<String, Value>,
     revision: Revision,
@@ -155,7 +162,7 @@ impl Default for WeekDraft {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 enum HistoryAction {
     #[default]
     Save,
@@ -193,6 +200,42 @@ pub struct Drafts {
     clock: u64,
     deleting: Option<Deleting>,
     effects: effects::Effects,
+}
+
+/// Everything an answer can change but the effects waiting for answers, kept so a failed answer
+/// leaves the session as it was.
+struct Saved {
+    week: WeekDraft,
+    save: Map<String, Value>,
+    action: HistoryAction,
+    parked: Vec<(String, Parked)>,
+    versions: BTreeMap<String, u64>,
+    clock: u64,
+    deleting: Option<Deleting>,
+}
+
+impl Drafts {
+    fn keep_state(&self) -> Saved {
+        Saved {
+            week: self.week.clone(),
+            save: self.save.clone(),
+            action: self.action.clone(),
+            parked: self.parked.clone(),
+            versions: self.versions.clone(),
+            clock: self.clock,
+            deleting: self.deleting.clone(),
+        }
+    }
+
+    fn put_state_back(&mut self, saved: Saved) {
+        self.week = saved.week;
+        self.save = saved.save;
+        self.action = saved.action;
+        self.parked = saved.parked;
+        self.versions = saved.versions;
+        self.clock = saved.clock;
+        self.deleting = saved.deleting;
+    }
 }
 
 impl Default for Drafts {
@@ -609,21 +652,34 @@ impl Drafts {
     }
 
     /// The week set aside becomes the open week; its steps are new objects, as a copy made them.
-    fn restore(&mut self, parked: Parked) -> Result<Value, String> {
-        for name in WEEK_FIELDS {
-            let value = parked
+    /// The fallible parts are read first, so a bad parked copy changes nothing.
+    fn restore(&mut self, parked: &Parked) -> Result<Value, String> {
+        let field = |name: &str| {
+            parked
                 .fields
                 .get(name)
                 .cloned()
-                .unwrap_or_else(|| default_value(name));
+                .unwrap_or_else(|| default_value(name))
+        };
+        let mut revision = Some(checked_revision(&field("revision"))?);
+        let mut pending = Some(PendingBatch::capture(field("pending_save"))?);
+        for name in WEEK_FIELDS {
             match name {
-                "undo" | "redo" => self.restore_stack(name == "redo", value),
-                "revision" => self.set_revision(checked_revision(&value)?),
-                "pending_save" => self.set_pending(PendingBatch::capture(value)?),
-                _ => self.put(name, value),
+                "undo" | "redo" => self.restore_stack(name == "redo", field(name)),
+                "revision" => {
+                    if let Some(revision) = revision.take() {
+                        self.set_revision(revision);
+                    }
+                }
+                "pending_save" => {
+                    if let Some(pending) = pending.take() {
+                        self.set_pending(pending);
+                    }
+                }
+                _ => self.put(name, field(name)),
             }
         }
-        Ok(parked.selection)
+        Ok(parked.selection.clone())
     }
 
     fn parked_flags(&self) -> Vec<(String, DraftFlags)> {
@@ -811,13 +867,22 @@ impl Drafts {
                 park_open,
                 words,
             } => {
+                // A parked week that cannot be restored stays parked, and the open week stays open.
+                let parked_before = self.parked.clone();
                 if park_open {
                     self.park(open, selection);
                 }
-                let parked = self
-                    .take_parked(&start)
-                    .ok_or_else(|| format!("no week set aside from {start}"))?;
-                let selection = self.restore(parked)?;
+                let Some(parked) = self.take_parked(&start) else {
+                    self.parked = parked_before;
+                    return Err(format!("no week set aside from {start}"));
+                };
+                let selection = match self.restore(&parked) {
+                    Ok(selection) => selection,
+                    Err(error) => {
+                        self.parked = parked_before;
+                        return Err(error);
+                    }
+                };
                 json!({ "action": "restore", "start": start, "words": words, "selection": selection })
             }
             LoadRoute::Fetch {
@@ -1753,7 +1818,49 @@ impl Drafts {
     /// homework, and the Undo step starts. The answer names the next week to read back, if any.
     /// `ids` are fresh operation ids for held batches the delete changed, one per week set aside.
     fn delete_ok(&mut self, command: &Value) -> Result<Value, String> {
-        let mut deleting = self.deleting.take().ok_or("no delete is waiting")?;
+        let deleting = self.deleting.take().ok_or("no delete is waiting")?;
+        // Everything that can fail is read before anything changes, so a bad answer leaves the
+        // delete waiting and every week as it was.
+        let prepared = match self.prepare_delete(&deleting, command) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.deleting = Some(deleting);
+                return Err(error);
+            }
+        };
+        let DeletePrepared {
+            removed,
+            current,
+            parked,
+        } = prepared;
+        let homework = deleting.homework.clone();
+        let open = self.week_start();
+        if let Some((blocks, revision, stored)) = current {
+            self.put("blocks", blocks);
+            self.set_revision(revision);
+            self.put("stored_parts", stored);
+        }
+        let mut assignments = self.assignments();
+        assignments.shift_remove(&homework);
+        self.put("assignments", Value::Object(assignments));
+        let mut dirty = self.dirty_ids();
+        dirty.retain(|id| *id != homework);
+        self.set_dirty_ids(dirty);
+        self.put("committed_blocks", self.field("blocks").clone());
+        self.put("committed_assignments", self.field("assignments").clone());
+        for ((_, draft), fields) in self.parked.iter_mut().zip(parked) {
+            draft.fields = fields;
+        }
+        self.finish_delete_step(deleting, removed, open)
+    }
+
+    /// The fallible half of `delete_ok`: the server's removed sessions, the open week as stored, and
+    /// each parked week with the homework taken out, all computed on copies.
+    fn prepare_delete(
+        &self,
+        deleting: &Deleting,
+        command: &Value,
+    ) -> Result<DeletePrepared, String> {
         let homework = deleting.homework.clone();
         let data = &command["data"];
         let mut ids = command["ids"]
@@ -1794,31 +1901,41 @@ impl Drafts {
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        if let Some(current) = weeks
+        let current = match weeks
             .iter()
             .find(|week| week["week_start"].as_str() == Some(open.as_str()))
         {
-            self.put("blocks", current["blocks"].clone());
-            self.set_revision(checked_revision(&current["revision"])?);
-            self.put(
-                "stored_parts",
+            Some(current) => Some((
+                current["blocks"].clone(),
+                checked_revision(&current["revision"])?,
                 match current.get("stored") {
                     Some(stored) if truthy(Some(stored)) => stored.clone(),
                     _ => json!([]),
                 },
-            );
+            )),
+            None => None,
+        };
+        let mut parked = Vec::with_capacity(self.parked.len());
+        for (start, draft) in &self.parked {
+            let mut fields = draft.fields.clone();
+            prune_parked(start, &mut fields, &homework, &revisions, &mut ids)?;
+            parked.push(fields);
         }
-        let mut assignments = self.assignments();
-        assignments.shift_remove(&homework);
-        self.put("assignments", Value::Object(assignments));
-        let mut dirty = self.dirty_ids();
-        dirty.retain(|id| *id != homework);
-        self.set_dirty_ids(dirty);
-        self.put("committed_blocks", self.field("blocks").clone());
-        self.put("committed_assignments", self.field("assignments").clone());
-        for (start, draft) in &mut self.parked {
-            prune_parked(start, &mut draft.fields, &homework, &revisions, &mut ids)?;
-        }
+        Ok(DeletePrepared {
+            removed,
+            current,
+            parked,
+        })
+    }
+
+    /// The infallible half of `delete_ok`: the Undo step and the reads of the other weeks.
+    fn finish_delete_step(
+        &mut self,
+        mut deleting: Deleting,
+        removed: Map<String, Value>,
+        open: String,
+    ) -> Result<Value, String> {
+        let homework = deleting.homework.clone();
         let basis: Vec<Value> = self
             .field("assignments_basis")
             .as_array()
@@ -2056,4 +2173,96 @@ fn prune_parked(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+
+    /// A delete answer that cannot be applied to every parked week (here one with a trace that is
+    /// not an object) is refused before anything changes: the delete is still waiting, the open
+    /// week keeps its blocks and the homework, and the good parked week is untouched.
+    #[test]
+    fn a_delete_answer_that_cannot_reach_every_parked_week_changes_nothing() {
+        let mut drafts = Drafts::default();
+        drafts.put("week_start", json!("2026-11-23"));
+        drafts.put("blocks", json!([{"id": "s1", "assignment_id": "essay"}]));
+        drafts.put(
+            "assignments",
+            json!({"essay": {"id": "essay", "title": "Essay"}}),
+        );
+        let good = Map::from_iter([(
+            "blocks".to_string(),
+            json!([{"id": "s2", "assignment_id": "essay"}]),
+        )]);
+        let bad = Map::from_iter([("trace".to_string(), json!("not an object"))]);
+        drafts.parked = vec![
+            (
+                "2026-11-30".into(),
+                Parked {
+                    fields: good.clone(),
+                    selection: json!(null),
+                },
+            ),
+            (
+                "2026-12-07".into(),
+                Parked {
+                    fields: bad,
+                    selection: json!(null),
+                },
+            ),
+        ];
+        drafts.deleting = Some(Deleting {
+            homework: "essay".into(),
+            title: "Essay".into(),
+            key: "k".into(),
+            before: vec![],
+            item: json!({"id": "essay"}),
+            step: None,
+            removed: Map::new(),
+            others: VecDeque::new(),
+            reading: None,
+        });
+        let answer = json!({
+            "data": {"weeks": [{"week_start": "2026-11-23", "blocks": [], "revision": 3}]},
+            "ids": ["fresh-1", "fresh-2"],
+        });
+        assert!(drafts.delete_ok(&answer).is_err());
+        assert!(drafts.deleting.is_some());
+        assert_eq!(
+            drafts.field("blocks"),
+            &json!([{"id": "s1", "assignment_id": "essay"}])
+        );
+        assert!(drafts.assignments().contains_key("essay"));
+        assert_eq!(drafts.parked[0].1.fields, good);
+    }
+
+    /// A parked copy whose revision or pending save cannot be read is refused before anything of it
+    /// is put on the open week: no field, Undo step or batch from it shows up.
+    #[test]
+    fn a_parked_week_that_cannot_be_read_changes_nothing() {
+        for (name, bad) in [
+            ("revision", json!("seven")),
+            ("pending_save", json!([1, 2])),
+        ] {
+            let mut drafts = Drafts::default();
+            drafts.put("week_start", json!("2026-11-23"));
+            drafts.put("blocks", json!([{"id": "open-block"}]));
+            let mut fields = Map::new();
+            fields.insert("week_start".into(), json!("2026-11-30"));
+            fields.insert("blocks".into(), json!([{"id": "parked-block"}]));
+            fields.insert(name.into(), bad);
+            let parked = Parked {
+                fields,
+                selection: json!(null),
+            };
+            assert!(drafts.restore(&parked).is_err(), "{name}");
+            assert_eq!(drafts.field("week_start"), &json!("2026-11-23"), "{name}");
+            assert_eq!(
+                drafts.field("blocks"),
+                &json!([{"id": "open-block"}]),
+                "{name}"
+            );
+        }
+    }
 }

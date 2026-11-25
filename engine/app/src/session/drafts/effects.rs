@@ -178,9 +178,12 @@ impl Drafts {
         if pending.epoch != epoch || pending.ticket.is_some_and(|expected| expected != ticket) {
             return Ok(json!({ "action": "ignore" }));
         }
+        let before = self.keep_state();
         let answer = self.apply_effect(command, &pending.answer, epoch, ticket);
         if answer.is_err() {
-            // NativeClient reports an unreadable success through the same request's error callback.
+            // A reply that fails part way leaves nothing half-applied; NativeClient then reports
+            // the unreadable success through the same request's error callback.
+            self.put_state_back(before);
             self.effects.wait_for(pending);
         }
         answer
@@ -299,5 +302,49 @@ impl Drafts {
                 .send(request, WaitFor::DeletedWeek, epoch, Some(ticket));
             Ok(json!({ "action": "request", "effect": effect, "deleted": deleted }))
         }
+    }
+}
+
+#[cfg(test)]
+mod rollback_tests {
+    use super::super::Drafts;
+    use super::WaitFor;
+    use serde_json::json;
+
+    /// A save answer that puts the server's blocks and then cannot read the revision leaves the
+    /// open week as it was before the answer, with the save still waiting for an answer.
+    #[test]
+    fn a_save_answer_that_fails_part_way_changes_nothing() {
+        let mut drafts = Drafts::default();
+        drafts.put("week_start", json!("2026-11-23"));
+        drafts.put("blocks", json!([{"id": "mine"}]));
+        drafts.put("dirty", json!(true));
+        let effect = drafts.effects.send(
+            json!({"method": "POST", "path": "/api/changes", "body": {}}),
+            WaitFor::Save {
+                written: json!(["2026-11-23"]),
+                destination: json!("2026-11-23"),
+                sent_repeats: false,
+                held: json!(null),
+            },
+            1,
+            Some(7),
+        );
+        let id = effect["id"].as_u64().unwrap_or_default();
+        let answer = drafts.answer_effect(
+            &json!({
+                "effect_id": id,
+                "data": {"weeks": [{"week_start": "2026-11-23", "blocks": [{"id": "server"}], "revision": "bad"}]},
+                "error": null,
+                "now": "2026-11-25T10:00",
+                "shifted_week": false,
+            }),
+            1,
+            7,
+        );
+        assert!(answer.is_err(), "{answer:?}");
+        assert_eq!(drafts.field("blocks"), &json!([{"id": "mine"}]));
+        assert_eq!(drafts.field("dirty"), &json!(true));
+        assert!(drafts.effects.take(id).is_some());
     }
 }
