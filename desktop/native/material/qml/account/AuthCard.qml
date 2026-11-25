@@ -2,8 +2,9 @@ import QtQuick
 import QtQuick.Layouts
 import components 1.0
 
-// Sign in, Create your account, and Reset your password: one card, three modes, the words of the
-// Widgets page. Every action goes to the account bridge, which calls NativeSession.
+// Sign in, Create your account, and Reset your password: Option B split layout on desktop
+// (animated multi-scene QML welcome panel on the left, clean form on the right), collapsing
+// to a single centered card on narrow/phone widths.
 FocusScope {
     id: root
     objectName: "authCard"
@@ -17,12 +18,37 @@ FocusScope {
     readonly property bool signIn: mode === "sign-in"
     readonly property bool create: mode === "create"
     readonly property bool reset: mode === "reset"
+    readonly property bool splitLayout: !phone && width >= 820
 
     M3Palette { id: palette; theme: root.theme }
 
+    SignInShowcase {
+        id: showcase
+        visible: root.splitLayout
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: root.splitLayout ? Math.round(root.width * 0.52) : 0
+        theme: root.theme
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+    }
+
+    Rectangle {
+        visible: root.splitLayout
+        anchors.left: showcase.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        color: palette.cardSurface
+    }
+
     Flickable {
         id: scroller
-        anchors.fill: parent
+        anchors.left: root.splitLayout ? showcase.right : parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         contentWidth: width
         contentHeight: Math.max(height, card.implicitHeight + 48)
         clip: true
@@ -31,24 +57,27 @@ FocusScope {
         Rectangle {
             id: card
             objectName: "authSurface"
-            width: root.phone ? parent.width - 32 : 420
+            width: root.splitLayout
+                ? Math.min(400, Math.max(300, scroller.width - 48))
+                : (root.phone ? scroller.width - 32 : 420)
             x: (scroller.width - width) / 2
             y: Math.max(24, (scroller.height - implicitHeight) / 2)
-            implicitHeight: column.implicitHeight + 64
+            implicitHeight: column.implicitHeight + (root.splitLayout ? 32 : 64)
             height: implicitHeight
-            radius: 8
-            color: palette.surfaceContainerLow
-            border.width: root.highContrast ? 1.5 : 0
-            border.color: palette.outline
+            radius: root.splitLayout ? 0 : palette.cornerFor(24)
+            color: palette.cardSurface
+            border.width: root.splitLayout ? 0 : (root.highContrast ? 1.5 : 1)
+            border.color: root.highContrast ? palette.outline : palette.outlineVariant
 
             ColumnLayout {
                 id: column
-                x: 32
-                y: 32
-                width: parent.width - 64
+                x: root.splitLayout ? 8 : 32
+                y: root.splitLayout ? 16 : 32
+                width: parent.width - (root.splitLayout ? 16 : 64)
                 spacing: 16
 
                 RowLayout {
+                    visible: !root.splitLayout
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 10
                     M3Icon {
@@ -58,10 +87,10 @@ FocusScope {
                         color: palette.primary
                     }
                     Text {
-                        objectName: "authBrand"
+                        objectName: !root.splitLayout ? "authBrand" : ""
                         text: "FlexWeek"
                         color: palette.primary
-                        font.family: M3Font.family
+                        font.family: M3Font.heading
                         font.pixelSize: M3Font.px(22)
                         font.weight: 600
                     }
@@ -70,13 +99,13 @@ FocusScope {
                 Text {
                     objectName: "authHeading"
                     Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
+                    horizontalAlignment: root.splitLayout ? Text.AlignLeft : Text.AlignHCenter
                     text: bridge ? bridge.heading : ""
                     wrapMode: Text.WordWrap
                     color: palette.inkSurface
-                    font.family: M3Font.family
-                    font.pixelSize: M3Font.px(24)
-                    font.weight: 400
+                    font.family: M3Font.heading
+                    font.pixelSize: M3Font.px(26)
+                    font.weight: 600
                     Accessible.role: Accessible.Heading
                     Accessible.name: text
                 }
@@ -84,7 +113,7 @@ FocusScope {
                     objectName: "authNote"
                     Layout.fillWidth: true
                     visible: text !== ""
-                    horizontalAlignment: Text.AlignHCenter
+                    horizontalAlignment: root.splitLayout ? Text.AlignLeft : Text.AlignHCenter
                     text: bridge ? bridge.note : ""
                     wrapMode: Text.WordWrap
                     color: palette.inkMuted
@@ -100,6 +129,7 @@ FocusScope {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
+                    ground: palette.cardSurface
                     label: "Username"
                     text: bridge ? bridge.username : ""
                     hint: bridge ? bridge.usernameHint : ""
@@ -118,6 +148,7 @@ FocusScope {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
+                    ground: palette.cardSurface
                     label: "Password"
                     secret: true
                     text: bridge ? bridge.password : ""
@@ -150,6 +181,7 @@ FocusScope {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
+                    ground: palette.cardSurface
                     label: "Recovery code"
                     text: bridge ? bridge.recoveryCode : ""
                     problem: bridge ? bridge.recoveryProblem : ""
@@ -166,6 +198,7 @@ FocusScope {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
+                    ground: palette.cardSurface
                     label: "New password"
                     secret: true
                     text: bridge ? bridge.newPassword : ""

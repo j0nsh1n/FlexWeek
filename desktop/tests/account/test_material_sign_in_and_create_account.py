@@ -275,3 +275,36 @@ def test_a_bad_load_asks_for_a_cpu_copy_instead_of_showing_the_widgets_sign_in(
     qapp.processEvents()
     assert page(window) == "drawErrorPage"
     assert launched == []
+
+
+def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_reduce_or_off(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    from desktop.tests.window_support import look_file
+
+    window = material_launches.launch()
+    window.resize(1280, 800)
+    pump(qapp, 10)
+    showcase = qml(window, "signInShowcase")
+    assert showcase is not None and showcase.property("visible") is True
+    assert showcase.property("staticMode") is False
+    assert showcase.property("autoAdvancing") is True
+    assert qml(window, "signInSlideDots").property("visible") is True
+
+    # Reduce motion and Animations Off both freeze the showcase on a single static scene.
+    for motion in ("reduce", "off"):
+        window._motion = motion
+        window._material_page.publish()
+        pump(qapp, 10)
+        assert showcase.property("staticMode") is True, motion
+        assert showcase.property("autoAdvancing") is False, motion
+        assert int(showcase.property("currentSlide")) == 0, motion
+        assert qml(window, "signInSlideDots").property("visible") is False, motion
+
+    # Motion speed Off in the look file also stops the carousel.
+    window._motion = "normal"
+    look_file().write_text(json.dumps({"surface": "material", "material": {"advanced": {"motion": "Off"}}}))
+    window._material_page.publish()
+    pump(qapp, 10)
+    assert showcase.property("staticMode") is True
+    assert showcase.property("autoAdvancing") is False
