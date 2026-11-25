@@ -25,9 +25,10 @@ BLOCK = {
 }
 
 
-def _file(title: str) -> str:
+def _file(title: str, block_title: str = "History essay") -> str:
     payload = export_week_payload(WEEK, [BLOCK], {"essay": HOMEWORK})
     payload["assignments"][0]["title"] = title
+    payload["blocks"][0]["title"] = block_title
     return json.dumps(payload)
 
 
@@ -36,7 +37,12 @@ def test_a_homework_title_with_a_lone_surrogate_is_refused_with_words() -> None:
     assert answer == {"error": "The file has text that can't be read. Nothing was imported."}
 
 
+def test_a_block_title_with_a_lone_surrogate_is_refused_with_words() -> None:
+    answer = parse_import_payload(_file("History essay", block_title="\udc00"))
+    assert answer == {"error": "The file has text that can't be read. Nothing was imported."}
+
+
 def test_a_title_with_a_character_outside_the_basic_plane_imports() -> None:
     answer = parse_import_payload(_file("Essay \U0001f4da"))
-    assert "error" not in answer
+    assert answer.get("error") is None
     assert [item["title"] for item in answer["assignments"]] == ["Essay \U0001f4da"]
