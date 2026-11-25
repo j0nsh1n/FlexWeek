@@ -29,7 +29,7 @@ from desktop.native.settings_copy import (
     keys_words,
 )
 from desktop.native.version import VERSION
-from desktop.native.window import SIGN_OUT_QUESTION, NativeWindow
+from desktop.native.window import SIGN_OUT_QUESTION, WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import focus_quick, named, pump, quick_of, quick_window_of, show_material
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
@@ -255,16 +255,23 @@ def test_an_update_found_shows_a_material_sheet_with_what_changed(
     assert _focused(window) == "updateInstall"
 
     # Finding 12: Update stays a centered floating pop-up at both desktop and narrow/phone widths.
-    for size in ((1280, 800), (480, 720)):
-        window.resize(*size)
-        pump(qapp, 20)
-        card = _one(root, "sheetCard")
-        card_top = float(card.property("y"))
-        card_h = float(card.property("height"))
-        parent_h = float(card.parentItem().property("height"))
-        assert abs((card_top + card_h / 2) - parent_h / 2) < 4, size
-    window.resize(1280, 800)
-    pump(qapp, 10)
+    # The window minimum is 800, so reach the narrow layout by lowering it first and restoring after.
+    window.setMinimumWidth(480)
+    try:
+        for size, narrow in (((1280, 800), False), ((480, 720), True)):
+            window.resize(*size)
+            pump(qapp, 20)
+            assert (float(root.property("width")) < 768) is narrow, size
+            assert root.property("phone") is narrow, size
+            card = _one(root, "sheetCard")
+            card_top = float(card.property("y"))
+            card_h = float(card.property("height"))
+            parent_h = float(card.parentItem().property("height"))
+            assert abs((card_top + card_h / 2) - parent_h / 2) < 4, size
+    finally:
+        window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        pump(qapp, 10)
 
 
 def test_update_now_starts_the_download_and_shows_progress_and_problems(
