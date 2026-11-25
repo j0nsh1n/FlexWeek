@@ -1,78 +1,47 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-23)
-- 2.0.0 (the Rust overhaul; plan `~/.flexweek-ui-harness/scratch/rust-2.0.0/plan/plan.md`) is under way on main,
-  developer builds only until 2.0.0. P0 (#142) and P1 (#143-#152) are merged. P2 parts 1-3 are merged (#154-#156):
-  the window asks the Rust service in its own process (`flexweek_service::desk_requests` through
-  `flexweek_engine.service_answer`, on a shared pool of 4 worker threads in `desktop/native/client.py`), the app
-  opens no network port with no phone paired (checked in-process and in the smoke report's `listening`),
-  `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the hosted-server
-  settings (D4) are no longer read. The request tests are `engine/service/tests/desk_requests.rs` (36 tests covering
-  every route's own answer). P2 is not complete: pydantic (`backend/models.py`, about 115 uses incl. the planner
-  adapters and the sheets' error wording) goes in P4; spec.md's wording waits in held #157.
-- P3 is done (#158, #160): the test door (`desktop/tests/door.py`, test-only, a local socket file; its docstring
-  lists the steps, setting-up steps included), `door_app.py`, and `flexweek-testkit::door` (Driver + Door). 42 Week
-  screen tests in `engine/testkit/tests/week_*.rs` (plus 5 door tests in `the_test_door.rs`) run with `-- --ignored`
-  against the Python app; CI's `screens` job runs them (about 5 minutes). The Python files they replaced
-  (`test_material_go_to_date.py`, `..._keyboard_returns_to_week.py`, `..._now_label.py`, `..._preview_dialog_keys.py`)
-  are deleted with ledger rows. fwtest's flaky rerun still covers pytest only.
-- P4 has started: `flexweek-app::session` (engine/app/src/session) holds the session's frame (requests on one pool
-  of 4 workers, epochs, the 30 s limit on a steady clock, the expiry rule, the window's error words; #161). The
-  window's requests go through it: `desktop/native/client.py`'s `NativeClient` is a shell over
-  `flexweek_engine.NativeCore` (engine/py/src/session.rs) that keeps each request's callbacks by number and takes
-  one answer per turn of the window's loop; `stop_workers()` at quit stops the Rust workers. The light app's client
-  answers inline (`Frame::answer_inline`). The session's busy state, latest ticket and status line are Rust's
-  (`session/status.rs`, #164); `NativeSession.busy`/`message`/`planning` read it. When the week saves itself
-  (`session/autosave.rs`) and the steps of saving before leaving (`session/leaving.rs`) are decided there too, the
-  window running the timers (#167). Signing in, up and out run in Rust (`session/account.rs`): the session sends the
-  request and reads the answer, and the window gets one event per flow (`signed_in`, `registered`, `auth_failed`,
-  `signed_out`) for its own part (setup answers, the kept file, the focus store, loading the week). Pydantic leaves
-  in P4 (Jonathan, 2026-11-23); controller.py checks blocks and homework with the engine (`checked_block`,
-  `checked_homework`, #168) and the hours windows with the engine (`check_hours_windows`, refused as "Check the
-  days and times of your study hours and protected time.", Jonathan 2026-11-24); it no longer uses pydantic's models.
-  The 30-second sign-in
-  words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
-- `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
-  tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
-  deleted.
-- Main had #140 (Material only, its own Qt Quick window, #118's weekly fixed times) and #137 (the phone 1.4.0 fixes)
-  before 1.5.0. Done time is the larger of focus minutes and minutes ticked done (`plan::done_time`).
-- Latest release: v1.5.0, published 2026-11-20 (US time) from main 0effa56f (PR #141). The previous release is
-  v1.4.0 (2026-11-17); its Android app was signed with the same key as 1.3.0.
-- Developer build `1.3.0.202611171825` (main 5788750) is `dev`; older builds stay as `dev-<commit>` pre-releases
-  (`dev-18dee2e` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
-- In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
-  preview), the assistant's planning tools and live reload (#91, #92), the testing rebuild (#97, 2026-11-08: tests by
-  area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105), CI/build work
-  (#106-#109) and the release blockers from the 2026-11-10 review (#110, #112, #113, #114: developer-builds switch
-  hidden off the tarball, the packaged smoke test opens Material, tag/version check, two flaky-test fixes).
-- The 1.3.1 fixes (the assistant helper's clock, Material's letter keys, Help from the keyboard) are in 1.4.0; no
-  1.3.1 is released.
-- Checks: CI is the gate (Verify: engine, verify-python, both rigs, four desktop shards; mutation jobs on pull
-  requests). CodeQL had 0 open alerts at the release review.
-- Known gaps: Ctrl+wheel zoom in Material fails on Jonathan's Wayland desktop (parked probe in `scratch/ctrl-wheel`;
-  named under Known limits in the 1.4.0 notes); Material memory growth (1.9 GB after 49 min, 2026-11-05) is unmeasured
-  (also named there); Jonathan ran 1.5.0 (Material only) on a real Windows PC on 2026-11-21, and the rewrite's
-  Windows pieces are not tried yet; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open;
-  `fwtest flaky` lists the tests still logged flaky; the assistant helper's stderr test
-  (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
-- 2.0.0 follow-ups after P1: `hypothesis` is installed and unused (remove in P2); the Python store methods
-  `apply_repeat_intents`, `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers;
-  the five remaining corpus generators still count any exception as a refusal (the seven that needed
-  backend/app.py were removed in #156); the desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can
-  fail on CI depending on the clock (passed on re-run, 2026-11-22).
-- Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
-  slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
-  desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
-  decode.
-- Python: the window's client (it hands each request to the Rust service), password hashing's salt, the clock, environment and file reads, the pydantic checks, `backend/models.py`'s Spotify and due-date
-  copies, `CATEGORIES` in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing and
-  `scripts/rig/drive.py`.
-- Speed (pr35 review): placing the probe week 1.1 ms; drawing a frame of the hours 10.2 ms median (limit 16 ms).
-- Known differences from the Python originals: integers past 64 bits and Python-only JSON (NaN, lone surrogates)
-  in stored rows; an estimate past 2^63 raises `OverflowError`; `build_month` returns a month where Python raised
-  `TypeError` on a finished session with no start. About 100 cases the deleted differential tests pinned have no
-  Rust test (roadmap, carried over).
+## Current State (2026-11-25)
+- `origin/main` is `ead664a7`. Latest release: v1.5.0, published 2026-11-20 from `0effa56f` (PR #141). The 2.0.0 Rust
+  overhaul is under way on main and is available in developer builds only.
+- P0 (#142), P1 (#143-#152) and the P2 server removal (#154-#156) are merged. The window asks the Rust service in its
+  own process. `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the
+  hosted-server settings are not read. With no phone paired, the app opens no network port. Removing pydantic is part
+  of P4.
+- P3 is done (#158, #160): the test-only door (`desktop/tests/door.py`, `door_app.py`) and `flexweek-testkit::door`
+  drive the Python app from Rust screen tests. CI's `screens` job runs them. fwtest's flaky rerun still covers pytest
+  only.
+- P4 is in progress. On main, `flexweek-app::session` owns the request frame and its four workers, epochs, the 30 s
+  limit, expiry and error words (#161, #163), busy/latest-ticket/status state (#164), autosave and leaving decisions
+  (#167), and account flows including sign-in, registration, recovery, resume, sign-out, password and recovery-code
+  changes and account deletion (#165, #166). `desktop/native/client.py` is a shell over
+  `flexweek_engine.NativeCore`; the window still owns Qt callbacks, kept-session files, setup answers and week loading.
+  Blocks, homework (#168) and study/protected hours (#178) are checked by the engine. The hours refusal is "Check the
+  days and times of your study hours and protected time."
+- PR #181 is **in progress**, not merged on `origin/main`. Branch `feat/p4-history-reminders-transfer` (`b96d203e`)
+  adds undo-step rules in `engine/engine/src/desk/history.rs`, reminder-card and alarm-queue decisions, focus-timer
+  decisions, the setup queue and preference bodies, and restore/import/export decisions in Rust. The window retains Qt,
+  file and request work.
+- CI moved to Depot on 2026-11-24 (#153). `.depot/workflows/verify.yml` runs `engine`, `verify-engine`,
+  `verify-python`, `desktop`, `screens`, `rig`, `mutate` and `mutate-python`; mutation jobs run on pull requests and
+  by hand. GitHub Actions keeps CodeQL and `.github/workflows/release-windows.yml`; #177 skips Windows installer builds
+  for developer-build releases. Linux releases and developer builds run on Depot. `scripts/dev-release.sh` dispatches
+  `dev-build.yml` from main; publishing normally takes about four minutes and replaces the GitHub `dev` pre-release.
+- Recent fixes on main: the app icon is the dumbbell on a lime rounded square (#172); a working kept session no longer
+  flashes the sign-in card (#173); Report a problem opens Jonathan's Google form with version and device details (#174);
+  the Android pairing field keeps typed digits in order and draws the grouping space separately (#175). #179 updated
+  the phone refusal tests to use the demo clock.
+- Rust owns planning, storage, calendar rules and Qt-free desktop logic. Python still owns Qt/QML hosting, live week
+  state and interface rules not yet ported, plus clock, environment and file integration. `backend/models.py` remains
+  until P4 finishes. Python wrappers encode, call and decode rather than keeping a second implementation.
+- Known gaps: Ctrl+wheel zoom in Material fails on Jonathan's Wayland desktop; Material memory growth remains
+  unmeasured; Jonathan ran 1.5.0 on a real Windows PC on 2026-11-21, but the 2.0.0 rewrite's Windows pieces are not
+  tried there; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open; `fwtest flaky` lists the
+  remaining flaky tests. The desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can be clock-sensitive
+  on CI.
+- 2.0.0 follow-ups: `hypothesis` is installed and unused; Python store methods `apply_repeat_intents`,
+  `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers; five corpus generators still count
+  any exception as a refusal. Known Rust/Python differences remain for integers past 64 bits, Python-only JSON values,
+  estimates past 2^63 and a finished session with no start in `build_month`.
 
 ## Repo Landmarks
 ```
@@ -139,6 +108,11 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-25: local branch `docs/2026-11-25-refresh` updates the README, desktop and architecture guides, Material and
+  Android notes, release checklist, engine maps and fwtest CI table. It records Depot CI, current P4 and the in-progress
+  #181, plus the icon, feedback form, kept-sign-in and pairing fixes. Older migration contracts are labelled historical;
+  release notes were not changed. No builds or tests were run for this docs-only pass. Next: coordinator review and
+  publishing.
 - 2026-11-24 (after the AFK run): #165, #166, #172-#176 merged; CI moved to Depot (#153); the hours windows are
   checked by the engine with a plain refusal (branch feat/p4-hours-windows). Next: group 2's save core with group 3
   (undo); Jonathan's picks from the Gemini redesign mockups (`~/.flexweek-ui-harness/scratch/design-2.0-richer/`).
