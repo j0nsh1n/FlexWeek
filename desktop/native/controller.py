@@ -138,7 +138,6 @@ from desktop.native.reuse import (
     routine_template,
     running_late_block,
     running_late_refusal,
-    session_days,
     settle_placements,
     solve_request,
     time_still_needed,
@@ -1445,102 +1444,25 @@ class NativeSession(QObject):
     ) -> None:
         """Save `assignment` and keep its sessions in step. `spread` drops every open time it has and
         makes no new one, for `spread_after_save` to write the sessions that replace them."""
-        payload = {key: value for key, value in assignment.items() if key in HOMEWORK_FIELDS}
-        payload.setdefault("revision", 0)
-        known = self.assignments.get(payload.get("id"))
-        if known is not None:
-            # A dialog that stayed open across a focus credit holds an older copy. As in the web
-            # client's saveHomework, an edit never sets the revision or the focus counters.
-            for key in ("revision", "focus_minutes", "focus_sessions"):
-                payload[key] = known.get(key) or 0
-        body = _checked_homework(payload)
-        if known is not None:
-            body["session_weeks"] = list(known.get("session_weeks") or [])
-            # The server's counts stay paired with `_assignments_basis`, the week they were read with, until
-            # the next read: an edit drops none of them, or the done and later-week minutes are lost.
-            for key in ("planned_min", "unplanned_min", "done_min"):
-                if key in known:
-                    body[key] = known[key]
-        sessions = [item for item in self.blocks if item.get("assignment_id") == body["id"]]
-        # One session as long as the old estimate is the homework's only planned time, so it follows
-        # the new estimate. Spread, pasted or partly planned sessions keep the lengths already chosen.
-        # A session ticked done keeps its length: it is time done, and done time counts in every count.
-        whole = (
-            not spread
-            and len(sessions) == 1
-            and known is not None
-            and not sessions[0].get("completed")
-            and sessions[0]["duration_min"] == known.get("estimate_min")
+        edit = json.loads(
+            flexweek_engine.homework_edit_json(
+                json.dumps(self.blocks),
+                json.dumps(self.assignments),
+                json.dumps(self._assignments_basis),
+                json.dumps(assignment),
+                self.week_start,
+                json.dumps(days),
+                spread,
+                str(uuid4()),
+            )
         )
-        blocks = []
-        for item in self.blocks:
-            if item.get("assignment_id") != body["id"]:
-                blocks.append(item)
-                continue
-            if spread and not item.get("completed"):
-                continue
-            session = deepcopy(item)
-            session["title"] = body["title"]
-            if whole:
-                session["duration_min"] = body["estimate_min"]
-            session["priority"] = body["priority"]
-            session["energy"] = body["energy"]
-            if body.get("category") is not None:
-                session["category"] = body["category"]
-            if days is not None and len(sessions) == 1 and not session.get("start"):
-                session["days"] = days
-            if "fixed_at" in assignment and not session.get("completed"):
-                self._fix_session(session, assignment["fixed_at"])
-            blocks.append(_checked_block(session))
-        # A homework already known gets a session for what is still to place of it, by the one count (its
-        # done time and later weeks' sessions off), and none when nothing is: a new one gets its estimate.
-        length = (
-            available_homework_minutes(body, blocks, self._assignments_basis)
-            if known is not None
-            else body["estimate_min"]
-        )
-        if not sessions and not spread and length > 0:
-            session = {
-                "id": str(uuid4()),
-                "title": body["title"],
-                "kind": "flexible",
-                "duration_min": length,
-                "days": days if days is not None else session_days(self.week_start, body["due"]),
-                "priority": body["priority"],
-                "energy": body["energy"],
-                "assignment_id": body["id"],
-                "category": body.get("category"),
-            }
-            if assignment.get("fixed_at"):
-                self._fix_session(session, assignment["fixed_at"])
-            blocks.append(_checked_block(session))
-        finished = bool(body.get("completed"))
-        label = ("editing " if known is not None else "adding ") + body["title"]
-        if known is not None and finished != bool(known.get("completed")):
-            label = ("finishing " if finished else "reopening ") + body["title"]
-            for session in blocks:
-                if session.get("assignment_id") != body["id"]:
-                    continue
-                session["completed"] = finished
-                if finished and session.get("kind") == "flexible" and session.get("start"):
-                    if len(session["days"]) == 1:
-                        session["completed_day"] = session["days"][0]
-                elif not finished:
-                    session.pop("completed_day", None)
+        for block_id in edit["pinned"]:
+            self.needs_time.pop(block_id, None)
+        body = edit["assignment"]
         self.assignments[body["id"]] = body
         self.dirty_assignments.add(body["id"])
-        self.blocks = blocks
-        edited = {session["id"] for session in blocks if session.get("assignment_id") == body["id"]}
-        self._touch(label, keep=edited)
-
-    def _fix_session(self, session: dict, fixed_at: dict | None) -> None:
-        """Pin `session` at the day and start the student chose with "Do it at", or with None let
-        FlexWeek move it again, as "Let FlexWeek pick a time" does."""
-        if fixed_at is None:
-            session.pop("pinned", None)
-            return
-        session.update(start=fixed_at["start"], days=[fixed_at["day"]], pinned=True)
-        self.needs_time.pop(session["id"], None)
+        self.blocks = edit["blocks"]
+        self._touch(edit["label"], keep=set(edit["changed"]))
 
     def _time_step(self) -> int:
         """The student's time step, 5 or 15 minutes."""
@@ -2240,16 +2162,10 @@ class NativeSession(QObject):
 
     def unpin_assignment(self, assignment_id: str) -> bool:
         """Let FlexWeek move this homework's sessions again."""
-        changed = False
-        blocks = []
-        for block in self.blocks:
-            if block.get("assignment_id") == assignment_id and block.get("pinned"):
-                block = {key: value for key, value in block.items() if key != "pinned"}
-                changed = True
-            blocks.append(block)
-        if not changed:
+        unpinned = flexweek_engine.homework_unpin_json(json.dumps(self.blocks), assignment_id)
+        if unpinned is None:
             return False
-        self.blocks = blocks
+        self.blocks = json.loads(unpinned)
         title = (self.assignments.get(assignment_id) or {}).get("title") or "homework"
         self._touch("unpinning " + title)
         return True
@@ -2307,9 +2223,7 @@ class NativeSession(QObject):
         item = self.assignments.get(assignment_id)
         if item is None:
             return
-        body = deepcopy(item)
-        body["completed"] = completed
-        body["completed_at"] = (body.get("completed_at") or local_stamp()) if completed else None
+        body = json.loads(flexweek_engine.homework_completed_json(json.dumps(item), completed, local_stamp()))
         self.add_homework(body)
 
     def last_step(self) -> dict | None:
