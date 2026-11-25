@@ -1065,6 +1065,64 @@ fn pre_split_counts_name_uncovered_remainders_against_pre_save_basis() {
 }
 
 #[test]
+fn the_remainder_is_counted_before_focus_splitting_not_after() {
+    // 105 min of homework with one 90-min session. The solver is asked for 120 min (the session
+    // plus its breaks), so as this plan left the week the session holds 120 min and no remainder
+    // is named. Splitting then makes 3 x 30 min of work and 2 breaks that carry no homework, so
+    // counted after splitting only 90 min would be covered and 15 min would wrongly be named.
+    let prefs = json!({
+        "auto_split_pomodoro": true,
+        "timer_work_min": 30,
+        "timer_break_min": 15,
+        "timer_long_break_min": 30,
+        "timer_long_break_every": 4,
+    });
+    let mut hw = homework("essay", "History essay", "2026-09-27", 105);
+    hw["planned_min"] = json!(0);
+    hw["unplanned_min"] = json!(105);
+    let assignments = map_of(&[("essay", hw)]);
+    let session = flex_block("b-essay", "essay", "History essay", 90, &[3, 4, 5, 6]);
+    let week = vec![session];
+    let basis: Vec<Value> = Vec::new();
+    let targets = vec!["b-essay".to_string()];
+    let trace = json!({
+        "placed": [{
+            "id": "b-essay", "title": "History essay", "kind": "flexible", "start": "16:00",
+            "days": [4], "duration_min": 120, "assignment_id": "essay",
+        }],
+        "unplaced": [],
+        "explanations": [],
+    });
+    let empty_needs = Map::new();
+    let answer = apply_plan_answer(
+        PlanAnswerInput {
+            original_blocks: &basis,
+            source_week: &week,
+            trace: &trace,
+            targets: &targets,
+            assignments: &assignments,
+            assignments_basis: &basis,
+            week_start: WEEK,
+            preferences: Some(&prefs),
+            shares: &[],
+            needs_time: &empty_needs,
+            clock: clock("2026-09-24", 12, 0),
+            earliest_first: false,
+            overdue: None,
+            new_left: None,
+        },
+        counter_ids(),
+    )
+    .unwrap();
+    assert_eq!(answer.split_count, 1);
+    assert_eq!(answer.plan_remainders, Vec::<(String, i64)>::new());
+    assert_eq!(
+        answer.placed_note,
+        "Placed 1 homework block. Split 1 into focus chunks."
+    );
+}
+
+#[test]
 fn sentences_and_first_placed_match_desktop_rules() {
     assert_eq!(left_sentence(&[]), "");
     let one = vec![("History essay".to_string(), 10)];
