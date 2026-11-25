@@ -21,11 +21,11 @@
   "test": "cargo:flexweek-engine:desk_remind:test_a_block_with_a_song_is_announced_by_the_song_at_its_start"
  },
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/reminders.rs",
   "name": "a snoozed block song rings again",
-  "old": "                self._snoozed_songs[alarm[\"id\"]] = alarm\n",
-  "new": "                pass\n",
-  "test": "desktop/tests/settings/test_block_start_song.py::test_a_snoozed_block_song_plays_again_five_minutes_later"
+  "old": "                    self.keep_song(id, alarm.clone());\n",
+  "new": "",
+  "test": "cargo:flexweek-app:session_reminders:finishing_a_block_song_with_snooze_keeps_it_and_without_forgets_it"
  },
  {
   "file": "engine/store/src/lib.rs",
