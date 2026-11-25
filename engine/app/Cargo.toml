@@ -11,6 +11,7 @@ name = "FlexWeek"
 path = "src/main.rs"
 
 [dependencies]
+flexweek-engine = { path = "../engine" }
 flexweek-platform = { path = "../platform" }
 flexweek-service = { path = "../service" }
 flexweek-store = { path = "../store" }

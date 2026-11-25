@@ -96,7 +96,6 @@ from desktop.native.remind import (
     due_reminders,
     due_songs,
     reminder_lead_min,
-    snooze_until,
     todays_starts,
 )
 from desktop.native.reuse import (
@@ -473,10 +472,8 @@ class NativeSession(QObject):
         self.fired_alarms: set[str] = set()
         self.snoozed_alarms: dict[str, int] = {}
         self.last_alarm_check: int | None = None
-        self.active_alarm: dict | None = None
-        self.alarm_queue: list[dict] = []
+        self._alarms = flexweek_engine.AlarmQueue()
         self.played_songs: set[str] = set()
-        self._snoozed_songs: dict[str, dict] = {}
         self._focus_after_restore = False
         self.restore_points: list[dict] = []
         self.restore_preview: dict | None = None
@@ -666,10 +663,8 @@ class NativeSession(QObject):
         self.fired_alarms.clear()
         self.snoozed_alarms.clear()
         self.last_alarm_check = None
-        self.active_alarm = None
-        self.alarm_queue.clear()
+        self._alarms.clear()
         self.played_songs.clear()
-        self._snoozed_songs.clear()
         self._focus_after_restore = False
         self.restore_points = []
         self.restore_preview = None
@@ -4805,32 +4800,30 @@ class NativeSession(QObject):
         for alarm in (*songs, *queued):
             self._enqueue_alarm(alarm)
 
+    @property
+    def active_alarm(self) -> dict | None:
+        """The alarm ringing now (the engine holds it; this is a copy)."""
+        return json.loads(self._alarms.active())
+
+    @property
+    def alarm_queue(self) -> list[dict]:
+        """The alarms waiting their turn, in order (a copy)."""
+        return json.loads(self._alarms.waiting())
+
+    @property
+    def _snoozed_songs(self) -> dict[str, dict]:
+        """Block songs a snooze keeps to ring again, by alarm id (a copy)."""
+        return json.loads(self._alarms.songs())
+
     def _enqueue_alarm(self, alarm: dict) -> None:
-        alarm_id = alarm.get("id")
-        if self.active_alarm is not None and self.active_alarm.get("id") == alarm_id:
-            return
-        if any(item.get("id") == alarm_id for item in self.alarm_queue):
-            return
-        if self.active_alarm is None:
-            self.active_alarm = alarm
+        if self._alarms.enqueue(json.dumps(alarm, default=str)):
             self.alarm_due.emit(alarm)
-            return
-        self.alarm_queue.append(alarm)
 
     def finish_alarm(self, snooze: bool = False) -> None:
-        alarm = self.active_alarm
-        self.active_alarm = None
-        if snooze and alarm is not None:
-            self.snoozed_alarms[alarm["id"]] = snooze_until(self.now_ms())
-        if alarm is not None and alarm.get("block"):
-            # A block's song is in no list of alarms, so the snooze has to keep it to ring it again.
-            if snooze:
-                self._snoozed_songs[alarm["id"]] = alarm
-            else:
-                self._snoozed_songs.pop(alarm["id"], None)
-        nxt = self.alarm_queue.pop(0) if self.alarm_queue else None
-        self.active_alarm = nxt
-        self.alarm_due.emit(nxt)
+        answer = json.loads(self._alarms.finish(snooze, self.now_ms() if snooze else 0))
+        if answer["snoozed"] is not None:
+            self.snoozed_alarms[answer["snoozed"]["id"]] = answer["snoozed"]["until_ms"]
+        self.alarm_due.emit(answer["next"])
 
     def spotify_url(self, value: str | None = None) -> str:
         """A link handed in, checked, or the Settings link when nothing was handed in.

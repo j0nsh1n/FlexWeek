@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, Signal
-
-from desktop.native.remind import reminder_snooze_until, reminder_start_min, reminder_stays
 
 
 class KeptReminders(QObject):
     """A reminder kept on screen as a card with Snooze and Close, until its block starts.
 
-    The timing is the engine's (remind.py); this only holds the cards. `rows` is today's blocks by
-    reminder key, or None when they are not known (another week is open), and `minute` is the minute
-    of the local day. `release` is told which key's card went because its block started, so the
-    "starts now" notice can take over.
+    The cards and their timing are the engine's (`flexweek_engine.ReminderCards`); this reads the
+    clock and today's blocks, and turns what the engine answers into signals. `rows` is today's blocks
+    by reminder key, or None when they are not known (another week is open), and `minute` is the
+    minute of the local day. `release` is told which key's card went because its block started, so
+    the "starts now" notice can take over.
     """
 
     # What the cards show changed.
@@ -32,93 +33,55 @@ class KeptReminders(QObject):
     ) -> None:
         super().__init__(parent)
         self._rows, self._minute, self._release = rows, minute, release
-        self._cards: list[dict] = []
+        self._cards = flexweek_engine.ReminderCards()
+
+    def _titles(self) -> str:
+        """Today's blocks as reminder key to title, as JSON text; null when they are not known."""
+        rows = self._rows()
+        if rows is None:
+            return "null"
+        return json.dumps({key: block.get("title") for key, block in rows.items()}, default=str)
 
     def add(self, notice: dict) -> bool:
         """Keep this reminder as a card. False when it cannot stay: no key, or its block has started."""
-        key = notice.get("key")
-        block = (self._rows() or {}).get(key) if isinstance(key, str) else None
-        if block is None or not reminder_stays(reminder_start_min(key), self._minute()):
-            return False
-        if any(card["key"] == key for card in self._cards):
-            return True
-        title = str(notice.get("title") or "FlexWeek")
-        self._cards.append(
-            {
-                "key": key,
-                "title": title,
-                "body": str(notice.get("body") or ""),
-                "name": str(block.get("title") or ""),
-                "until": None,
-            }
-        )
-        self._say(self._cards[-1])
-        self.changed.emit()
-        return True
+        answer = json.loads(self._cards.add(json.dumps(notice, default=str), self._titles(), self._minute()))
+        if answer["said"] is not None:
+            self.shown.emit(answer["said"])
+        if answer["changed"]:
+            self.changed.emit()
+        return answer["kept"]
 
     def cards(self) -> list[dict]:
         """The cards on screen, newest first; a snoozed one is not among them."""
-        return [
-            {"key": card["key"], "title": card["title"], "body": card["body"]}
-            for card in reversed(self._cards)
-            if card["until"] is None
-        ]
+        return json.loads(self._cards.cards())
 
     def snooze(self, key: str) -> None:
-        for card in self._cards:
-            if card["key"] == key and card["until"] is None:
-                card["until"] = reminder_snooze_until(self._minute(), reminder_start_min(key))
-                self.changed.emit()
-                return
+        if self._cards.snooze(key, self._minute()):
+            self.changed.emit()
 
     def close(self, key: str) -> None:
-        kept = [card for card in self._cards if card["key"] != key]
-        if len(kept) != len(self._cards):
-            self._cards = kept
+        if self._cards.close(key):
             self.changed.emit()
 
     def clear(self) -> None:
-        if self._cards:
-            self._cards.clear()
+        if self._cards.clear():
             self.changed.emit()
 
     def sync(self) -> None:
         """Follow the clock and the week: a card whose block started, moved or went is dropped, a
         snoozed one that is due comes back, and a renamed block's card shows the new name."""
-        rows = self._rows() if self._cards else None
-        if rows is None:
+        if not self._cards.has_cards():
             return
-        now = self._minute()
-        changed = False
-        kept: list[dict] = []
-        started: list[str] = []
-        for card in self._cards:
-            block = rows.get(card["key"])
-            if block is None:
-                changed = True
-                continue
-            if not reminder_stays(reminder_start_min(card["key"]), now):
-                started.append(card["key"])
-                changed = True
-                continue
-            name = str(block.get("title") or "")
-            if name != card["name"]:
-                card["title"] = name + card["title"][len(card["name"]) :]
-                card["name"] = name
-                changed = changed or card["until"] is None
-            if card["until"] is not None and now >= card["until"]:
-                card["until"] = None
-                changed = True
-                self._say(card)
-            kept.append(card)
-        self._cards = kept
-        for key in started:
+        titles = self._titles()
+        if titles == "null":
+            return
+        answer = json.loads(self._cards.sync(titles, self._minute()))
+        for words in answer["said"]:
+            self.shown.emit(words)
+        for key in answer["released"]:
             self._release(key)
-        if changed:
+        if answer["changed"]:
             self.changed.emit()
-
-    def _say(self, card: dict) -> None:
-        self.shown.emit(card["title"] + (" — " + card["body"] if card["body"] else ""))
 
 
 class KeptAlerts(QObject):
