@@ -31,7 +31,8 @@ pub const SELECT_BEFORE_COPYING: &str = "Select a block before copying it.";
 pub const COPY_BEFORE_PASTING: &str = "Copy a block or day before pasting.";
 
 /// What pasting with nowhere chosen says.
-pub const CHOOSE_BEFORE_PASTING: &str = "Select a block or open Day view before pasting into this week.";
+pub const CHOOSE_BEFORE_PASTING: &str =
+    "Select a block or open Day view before pasting into this week.";
 
 /// What saving the preview with nothing checked says.
 pub const SELECT_BEFORE_SAVING: &str = "Select at least one item before saving.";
@@ -104,20 +105,30 @@ fn day_number(value: &Value) -> Result<i64, EngineError> {
     }
 }
 
-/// Whether `day` counts as one of `days`, as `in` judges it: only a number that reads as `day`
-/// matches, and nothing else raises.
+/// Whether `day` counts as one of `days`, as Python `in` judges it: strings like `"3"` and
+/// fractions like `3.7` do not match `3`, and non-lists return false.
 fn days_contain(days: &Value, day: i64) -> bool {
     let Value::Array(days) = days else {
         return false;
     };
-    days.iter().any(|item| day_number(item).is_ok_and(|got| got == day))
+    days.iter().any(|item| match item {
+        Value::Number(n) => {
+            n.as_i64() == Some(day)
+                || n.as_f64()
+                    .is_some_and(|f| f.fract() == 0.0 && f == day as f64)
+        }
+        Value::Bool(b) => i64::from(*b) == day,
+        _ => false,
+    })
 }
 
 /// The object with `id` in `items`, or `None`. Items that are not objects cannot match, as
 /// subscripting them raised before a copy ran.
 fn find_block<'a>(items: &'a [Value], id: &str) -> Result<Option<&'a Value>, EngineError> {
     objects(items, "blocks")?;
-    Ok(items.iter().find(|item| item.get("id").and_then(Value::as_str) == Some(id)))
+    Ok(items
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(id)))
 }
 
 fn assignment_of<'a>(assignments: &'a Value, id: &str) -> Option<&'a Value> {
@@ -202,7 +213,8 @@ pub fn fixed_copy_rows(
         let copy = reuse::copied_fixed_block(
             item,
             &days,
-            &ids.next().ok_or_else(|| EngineError::value("new_ids holds one id per copied row"))?,
+            &ids.next()
+                .ok_or_else(|| EngineError::value("new_ids holds one id per copied row"))?,
         )?;
         let id = copy.get("id").cloned().unwrap_or(Value::Null);
         offered.push(json!({
@@ -221,7 +233,10 @@ pub fn fixed_copy_rows(
             words: Some(copy_empty_words(Some(source))?.to_string()),
         });
     }
-    Ok(CopyRows { rows: Some(offered), words: None })
+    Ok(CopyRows {
+        rows: Some(offered),
+        words: None,
+    })
 }
 
 /// What the empty-week copy sheet says when `source` offers no rows: Setup's blocks already
@@ -312,7 +327,9 @@ pub fn date_problem(input: &DateProblemInput) -> Result<Option<String>, EngineEr
     // Whatever the clock fails to parse as is refused in these words, as the hours drag was.
     let start_min = match flexweek_engine::time::hhmm_to_minutes(&clock) {
         Ok(start_min) => start_min,
-        Err(error) if error.kind == ErrorKind::Value => return Ok(Some(OUTSIDE_PLANNED_HOURS.into())),
+        Err(error) if error.kind == ErrorKind::Value => {
+            return Ok(Some(OUTSIDE_PLANNED_HOURS.into()));
+        }
         Err(error) => return Err(error),
     };
     if (input.block.filter(|block| !block.is_null()).is_none() || !completed)
@@ -339,10 +356,14 @@ pub fn date_problem(input: &DateProblemInput) -> Result<Option<String>, EngineEr
         Some((day, minute)) => (json!([day, minute]), "tuple"),
         None => (Value::Null, "NoneType"),
     };
-    Ok(
-        grid::span_problem(input.to_day, start_min, start_min + length, &due_json, due_type)?
-            .map(str::to_string),
-    )
+    Ok(grid::span_problem(
+        input.to_day,
+        start_min,
+        start_min + length,
+        &due_json,
+        due_type,
+    )?
+    .map(str::to_string))
 }
 
 /// What the relocation half of `_commit_move_to_date` needs: the resolved weeks and days, the
@@ -406,7 +427,10 @@ pub fn relocate(
     ids: &mut impl Iterator<Item = String>,
 ) -> Result<Relocation, EngineError> {
     let same_week = input.from_week == input.to_week;
-    let source_blocks = rows(get(input.source, "blocks")?.unwrap_or(&Value::Null), "blocks")?;
+    let source_blocks = rows(
+        get(input.source, "blocks")?.unwrap_or(&Value::Null),
+        "blocks",
+    )?;
     objects(source_blocks, "blocks")?;
     let block = find_block(source_blocks, input.block_id)?;
     let Some(block) = block else {
@@ -432,12 +456,13 @@ pub fn relocate(
             .cloned()
             .ok_or_else(|| EngineError::key("duration_min"))?,
     )?;
+    // Only the block's own homework judges the move: unlike the drag check, nothing falls back
+    // to an assignment sharing the block's id.
     let homework_id = match get(block, "assignment_id")? {
         Some(Value::String(id)) if !id.is_empty() => id.clone(),
         _ => String::new(),
     };
-    let assignment = assignment_of(input.assignments, &homework_id)
-        .or_else(|| assignment_of(input.assignments, input.block_id));
+    let assignment = assignment_of(input.assignments, &homework_id);
     let due_value = assignment
         .and_then(|assignment| assignment.get("due"))
         .cloned()
@@ -472,8 +497,15 @@ pub fn relocate(
     }
     let source_value = Value::Array(source_blocks.clone());
     let dest_value = dest_blocks.map(|blocks| Value::Array(blocks.clone()));
-    let fallback = input.block_id.to_string();
-    let mut fresh = move || ids.next().unwrap_or_else(|| fallback.clone());
+    // A split day draws one fresh id; running dry is refused instead of reusing an id.
+    let mut ran_out = false;
+    let mut fresh = || match ids.next() {
+        Some(id) => id,
+        None => {
+            ran_out = true;
+            String::new()
+        }
+    };
     let moved = grid::relocate_block(
         &source_value,
         &json!(input.block_id),
@@ -481,8 +513,11 @@ pub fn relocate(
         &json!(input.to_day),
         dest_value.as_ref(),
         &mut fresh,
-    )?;
-    let Some((source_after, dest_after, _made)) = moved else {
+    );
+    if ran_out {
+        return Err(EngineError::value("new_ids holds one id per split day"));
+    }
+    let Some((source_after, dest_after, _made)) = moved? else {
         return say(NOT_ON_THAT_DATE);
     };
     if let Some(dest_after) = dest_after.as_ref()
@@ -559,7 +594,12 @@ pub fn clipboard_block(
     };
     let label = label.to_string();
     let source_day_number = day_number(&source_day)?;
-    let items = vec![reuse::clipboard_item(source, source_day_number, &resolved, new_id)];
+    let items = vec![reuse::clipboard_item(
+        source,
+        source_day_number,
+        &resolved,
+        new_id,
+    )];
     let clipboard = json!({
         "kind": "block",
         "label": label,
@@ -649,7 +689,10 @@ pub fn paste_destination(
             == week_start
     {
         let day = grid::due_day_in_week(selection.selected_day, week_start)?;
-        return Ok(Some(Destination { day: Some(day), start: None }));
+        return Ok(Some(Destination {
+            day: Some(day),
+            start: None,
+        }));
     }
     let column = grid::due_day_in_week(selection.today_iso, week_start).unwrap_or(-1);
     if !(0..=6).contains(&column) {
@@ -739,7 +782,9 @@ impl PasteReady {
     pub fn to_json(&self) -> Value {
         match self {
             Self::Say(words) => json!({ "day": Value::Null, "start": Value::Null, "words": words }),
-            Self::Ready { day, start } => json!({ "day": day, "start": start, "words": Value::Null }),
+            Self::Ready { day, start } => {
+                json!({ "day": day, "start": start, "words": Value::Null })
+            }
         }
     }
 }
@@ -768,8 +813,9 @@ pub fn paste_ready(
             || {
                 Err(EngineError {
                     kind: ErrorKind::Type,
-                    message: "argument 'target_day': 'NoneType' object cannot be converted to 'PyLong'"
-                        .to_string(),
+                    message:
+                        "argument 'target_day': 'NoneType' object cannot be converted to 'PyLong'"
+                            .to_string(),
                 })
             },
             |day| {

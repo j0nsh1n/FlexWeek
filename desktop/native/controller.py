@@ -195,9 +195,6 @@ def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str
 
 
 HOURS_REFUSED = "Check the days and times of your study hours and protected time."
-SETUP_ALREADY_HERE = (
-    "Nothing to copy: School and the fixed times you added in Setup are already in every week."
-)
 
 
 # Blocks and homework are checked and written as the engine does it (engine/service/src/blocks.rs and

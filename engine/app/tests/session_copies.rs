@@ -5,9 +5,9 @@
 //! values come from those rules and the desktop tests they keep green.
 
 use flexweek_app::session::copies::{
-    CopyDay, PasteReady, PasteSelection, PreviewGroups, Relocation, RelocationInput,
-    clipboard_block, copy_day_items, copy_empty_words, date_problem, fixed_copy_rows, paste_destination,
-    paste_ready, preview_groups, relocate, DateProblemInput,
+    CopyDay, DateProblemInput, PasteReady, PasteSelection, PreviewGroups, Relocation,
+    RelocationInput, clipboard_block, copy_day_items, copy_empty_words, date_problem,
+    fixed_copy_rows, paste_destination, paste_ready, preview_groups, relocate,
 };
 use serde_json::{Value, json};
 
@@ -89,7 +89,10 @@ fn fixed_rows_skip_blocks_without_a_kind_start_or_days() {
     let mut ids = Vec::new().into_iter();
     let rows = fixed_copy_rows(Some(&source), WEEK, &mut ids).unwrap();
     assert!(rows.rows.is_none());
-    assert_eq!(rows.words.as_deref(), Some("There's nothing to copy from last week yet."));
+    assert_eq!(
+        rows.words.as_deref(),
+        Some("There's nothing to copy from last week yet.")
+    );
 }
 
 #[test]
@@ -97,7 +100,10 @@ fn fixed_rows_without_a_source_offer_nothing() {
     let mut ids = Vec::new().into_iter();
     let rows = fixed_copy_rows(None, WEEK, &mut ids).unwrap();
     assert!(rows.rows.is_none());
-    assert_eq!(rows.words.as_deref(), Some("There's nothing to copy from last week yet."));
+    assert_eq!(
+        rows.words.as_deref(),
+        Some("There's nothing to copy from last week yet.")
+    );
 }
 
 #[test]
@@ -152,7 +158,10 @@ fn a_drag_onto_its_own_date_has_no_problem() {
 #[test]
 fn a_block_that_is_there_moves_without_a_problem() {
     let block = locked("soccer", vec![3], "16:00");
-    assert_eq!(date_problem(&problem_input(Some(&block), 3, 1, None)).unwrap(), None);
+    assert_eq!(
+        date_problem(&problem_input(Some(&block), 3, 1, None)).unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -191,8 +200,7 @@ fn a_past_start_is_refused_with_the_next_time() {
 
 #[test]
 fn a_move_past_the_homework_deadline_is_refused() {
-    let block =
-        json!({"id": "soccer", "kind": "flexible", "days": [3], "start": "16:00",
+    let block = json!({"id": "soccer", "kind": "flexible", "days": [3], "start": "16:00",
                "duration_min": 120, "assignment_id": "essay"});
     let assignments = json!({"essay": {"id": "essay", "due": "2026-09-22T17:00"}});
     let mut input = problem_input(Some(&block), 3, 1, Some(&assignments));
@@ -380,7 +388,10 @@ fn copying_without_a_selection_names_what_to_do() {
     let blocks = json!([locked("piano", vec![2], "18:00")]);
     let copied = clipboard_block(&blocks, None, None, "auto", "group-1").unwrap();
     assert!(copied.clipboard.is_none());
-    assert_eq!(copied.words.as_deref(), Some("Select a block before copying it."));
+    assert_eq!(
+        copied.words.as_deref(),
+        Some("Select a block before copying it.")
+    );
     let copied = clipboard_block(&blocks, Some("missing"), None, "auto", "group-1").unwrap();
     assert!(copied.clipboard.is_none());
     assert!(copied.words.is_none());
@@ -445,7 +456,10 @@ fn copying_a_plain_block_copies_its_day() {
     let clipboard = copied.clipboard.expect("the block copies");
     assert_eq!(clipboard["kind"], json!("block"));
     assert_eq!(clipboard["label"], json!("Title"));
-    assert_eq!(copied.words.as_deref(), Some("Title copied. Choose a destination and paste."));
+    assert_eq!(
+        copied.words.as_deref(),
+        Some("Title copied. Choose a destination and paste.")
+    );
     let items = clipboard["items"].as_array().expect("one item");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["scope"], json!("block"));
@@ -469,9 +483,14 @@ fn copying_a_series_copies_one_occurrence() {
 fn the_paste_lands_on_the_selected_occurrence_with_its_start() {
     let blocks = json!([locked("piano", vec![2], "18:00")]);
     let trace = json!({});
-    let found = paste_destination(&blocks, &trace, &selection(Some("piano"), Some(2), "week", WEEK), WEEK)
-        .unwrap()
-        .expect("the occurrence decides");
+    let found = paste_destination(
+        &blocks,
+        &trace,
+        &selection(Some("piano"), Some(2), "week", WEEK),
+        WEEK,
+    )
+    .unwrap()
+    .expect("the occurrence decides");
     assert_eq!(found.day, Some(2));
     assert_eq!(found.start.as_deref(), Some("18:00"));
 }
@@ -480,9 +499,14 @@ fn the_paste_lands_on_the_selected_occurrence_with_its_start() {
 fn the_paste_falls_back_to_the_placed_trace_start() {
     let blocks = json!([{"id": "rest", "kind": "flexible", "days": [2], "duration_min": 60}]);
     let trace = json!({"placed": [{"id": "rest", "days": [2], "start": "18:30"}]});
-    let found = paste_destination(&blocks, &trace, &selection(Some("rest"), Some(2), "week", WEEK), WEEK)
-        .unwrap()
-        .expect("the trace decides");
+    let found = paste_destination(
+        &blocks,
+        &trace,
+        &selection(Some("rest"), Some(2), "week", WEEK),
+        WEEK,
+    )
+    .unwrap()
+    .expect("the trace decides");
     assert_eq!(found.day, Some(2));
     assert_eq!(found.start.as_deref(), Some("18:30"));
 }
@@ -518,7 +542,11 @@ fn the_paste_lands_on_the_planner_day_or_today() {
         today_iso: "2026-10-05",
         ..no_selection()
     };
-    assert!(paste_destination(&blocks, &trace, &outside, WEEK).unwrap().is_none());
+    assert!(
+        paste_destination(&blocks, &trace, &outside, WEEK)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -536,7 +564,10 @@ fn copying_a_day_takes_what_is_on_it_but_not_finished_homework() {
     };
     assert_eq!(clipboard["kind"], json!("day"));
     assert_eq!(clipboard["items"].as_array().map(Vec::len), Some(1));
-    assert_eq!(words, "Wednesday · 1 item copied. Choose a destination and paste.");
+    assert_eq!(
+        words,
+        "Wednesday · 1 item copied. Choose a destination and paste."
+    );
 }
 
 #[test]
@@ -568,9 +599,16 @@ fn a_paste_needs_a_clipboard_and_a_destination() {
         PasteReady::Ready { .. } => panic!("nothing is copied"),
     }
     let clipboard = json!({"kind": "block", "label": "Title", "items": [], "fingerprint": "x"});
-    let ready =
-        paste_ready(Some(&clipboard), Some(3), Some("17:00"), &blocks, &trace, &no_selection(), WEEK)
-            .unwrap();
+    let ready = paste_ready(
+        Some(&clipboard),
+        Some(3),
+        Some("17:00"),
+        &blocks,
+        &trace,
+        &no_selection(),
+        WEEK,
+    )
+    .unwrap();
     match ready {
         PasteReady::Ready { day, start } => assert_eq!((day, start.as_deref()), (3, Some("17:00"))),
         PasteReady::Say(words) => panic!("a target is chosen, it said: {words}"),
@@ -579,7 +617,16 @@ fn a_paste_needs_a_clipboard_and_a_destination() {
         today_iso: "2026-10-05",
         ..no_selection()
     };
-    let ready = paste_ready(Some(&clipboard), None, None, &blocks, &trace, &outside, WEEK).unwrap();
+    let ready = paste_ready(
+        Some(&clipboard),
+        None,
+        None,
+        &blocks,
+        &trace,
+        &outside,
+        WEEK,
+    )
+    .unwrap();
     match ready {
         PasteReady::Say(words) => assert_eq!(
             words,
@@ -610,7 +657,9 @@ fn the_preview_refuses_an_empty_or_invalid_choice() {
     }
     let rows = json!([preview_row(2, true, "taken")]);
     match preview_groups(&rows, "op-1").unwrap() {
-        PreviewGroups::Say(words) => assert_eq!(words, "Uncheck what can't be added before saving."),
+        PreviewGroups::Say(words) => {
+            assert_eq!(words, "Uncheck what can't be added before saving.")
+        }
         PreviewGroups::Groups { .. } => panic!("a refused row is checked"),
     }
 }
@@ -631,7 +680,12 @@ fn the_preview_groups_checked_rows_by_week() {
             assert_eq!(weeks, vec![WEEK, "2026-09-28"]);
             assert_eq!(by_week[WEEK].as_array().map(Vec::len), Some(1));
             assert_eq!(by_week[WEEK][0]["days"], json!([2]));
-            assert!(by_week[WEEK][0]["id"].as_str().unwrap_or("").starts_with("b-stage3-"));
+            assert!(
+                by_week[WEEK][0]["id"]
+                    .as_str()
+                    .unwrap_or("")
+                    .starts_with("b-stage3-")
+            );
         }
     }
 }
@@ -655,4 +709,56 @@ fn a_series_moves_one_day_and_keeps_the_rest() {
         .collect();
     days.sort();
     assert_eq!(days, vec![vec![1], vec![2, 4]]);
+}
+
+#[test]
+fn a_fixed_block_sharing_a_homework_id_is_not_judged_by_its_due_time() {
+    let source = json!({"blocks": [{
+        "id": "essay", "title": "Essay Club", "kind": "locked",
+        "days": [3], "start": "16:00", "duration_min": 120
+    }], "revision": 4});
+    let assignments = json!({"essay": {"id": "essay", "due": "2026-09-22T17:00"}});
+    let mut input = relocation_input(&source, None, WEEK, WEEK, 3, 1, Some(&assignments));
+    input.block_id = "essay";
+    let mut ids = Vec::new().into_iter();
+    let (after, dest, title) = applied(relocate(&input, &mut ids).unwrap());
+    assert_eq!(dest, None);
+    assert_eq!(after[0]["days"], json!([1]));
+    assert_eq!(title, "Essay Club");
+}
+
+#[test]
+fn days_contain_requires_an_exact_day_number() {
+    // `"3"` and `3.7` are not `3` in Python's `3 in days`, so a block with those is not on day 3.
+    for bad_days in [json!(["3"]), json!([3.7])] {
+        let block = json!({"id": "soccer", "title": "Title", "kind": "locked",
+                           "duration_min": 60, "days": bad_days, "start": "25:00"});
+        assert_eq!(
+            date_problem(&problem_input(Some(&block), 3, 1, None)).unwrap(),
+            None
+        );
+        let source = json!({"blocks": [block], "revision": 4});
+        let input = relocation_input(&source, None, WEEK, WEEK, 3, 1, None);
+        let mut ids = Vec::new().into_iter();
+        assert_eq!(
+            said(relocate(&input, &mut ids).unwrap()),
+            "That block isn't on that date."
+        );
+    }
+}
+
+#[test]
+fn splitting_a_series_without_a_fresh_id_is_refused() {
+    let source = json!({"blocks": [locked("band", vec![0, 2, 4], "17:00")], "revision": 4});
+    let mut input = relocation_input(&source, None, WEEK, WEEK, 0, 1, None);
+    input.block_id = "band";
+    let mut empty = Vec::new().into_iter();
+    assert!(relocate(&input, &mut empty).is_err());
+
+    // A single-day move splits nothing and needs no fresh id.
+    let single = json!({"blocks": [locked("soccer", vec![3], "16:00")], "revision": 4});
+    let input = relocation_input(&single, None, WEEK, WEEK, 3, 1, None);
+    let mut empty = Vec::new().into_iter();
+    let (after, _, _) = applied(relocate(&input, &mut empty).unwrap());
+    assert_eq!(after[0]["days"], json!([1]));
 }
