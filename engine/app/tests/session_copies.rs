@@ -141,9 +141,11 @@ fn problem_input<'a>(
 
 #[test]
 fn a_drag_onto_its_own_date_has_no_problem() {
-    let block = locked("soccer", vec![3], "16:00");
+    // The start would be refused outside planned hours, so only the same-date guard keeps this
+    // quiet.
+    let block = locked("soccer", vec![3], "25:00");
     let mut input = problem_input(Some(&block), 3, 3, None);
-    input.to_iso = "2026-09-24";
+    input.to_iso = input.from_iso;
     assert_eq!(date_problem(&input).unwrap(), None);
 }
 
@@ -155,8 +157,13 @@ fn a_block_that_is_there_moves_without_a_problem() {
 
 #[test]
 fn a_block_that_is_not_on_the_from_date_has_no_problem() {
-    let block = locked("soccer", vec![3], "16:00");
-    assert_eq!(date_problem(&problem_input(Some(&block), 0, 1, None)).unwrap(), None);
+    // The start would be refused outside planned hours, so only the from-day guard keeps this
+    // quiet.
+    let block = locked("soccer", vec![3], "25:00");
+    assert_eq!(
+        date_problem(&problem_input(Some(&block), 0, 1, None)).unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -199,14 +206,37 @@ fn a_move_past_the_homework_deadline_is_refused() {
 
 #[test]
 fn a_dialog_start_without_a_block_is_judged_the_same_way() {
-    let mut input = problem_input(None, 3, 1, None);
-    input.from_iso = "2026-09-22";
-    input.to_iso = "2026-09-22";
+    // No block on the week: the dialog's own start is judged, and a past one is refused.
+    let mut input = problem_input(None, 3, 2, None);
+    input.to_iso = TODAY;
+    input.start = Some("07:00");
+    input.duration_min = Some(60);
+    assert_eq!(
+        date_problem(&input).unwrap(),
+        Some("That time has passed. Choose 08:00 or later today, or another day.".to_string())
+    );
+    // A start with nothing to judge it by is quiet, as is later today.
+    let input = problem_input(None, 3, 1, None);
+    assert_eq!(date_problem(&input).unwrap(), None);
+    let mut input = problem_input(None, 3, 2, None);
+    input.to_iso = TODAY;
     input.start = Some("16:00");
     input.duration_min = Some(60);
     assert_eq!(date_problem(&input).unwrap(), None);
-    let input = problem_input(None, 3, 1, None);
-    assert_eq!(date_problem(&input).unwrap(), None);
+}
+
+#[test]
+fn a_dialog_homework_without_a_block_is_judged_against_its_due_time() {
+    let assignments = json!({"essay": {"id": "essay", "due": "2026-09-22T17:00"}});
+    let mut input = problem_input(None, 3, 1, Some(&assignments));
+    input.now_iso = "2026-09-21";
+    input.start = Some("16:00");
+    input.duration_min = Some(120);
+    input.assignment_id = Some("essay");
+    assert_eq!(
+        date_problem(&input).unwrap(),
+        Some("That ends after it's due, so it stayed where it was.".to_string())
+    );
 }
 
 fn relocation_input<'a>(
