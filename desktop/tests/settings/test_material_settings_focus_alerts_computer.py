@@ -7,8 +7,7 @@ import re
 
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlProperty
+from PySide6.QtGui import QAccessible, QGuiApplication
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -250,7 +249,10 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
 
     # At 320 px phone width and Larger text, both tiles and both action buttons stay within the viewport.
     dialog = _named(root, "pairingDialog")[0]
-    assert QQmlProperty(dialog, "Accessible.name").read() == "Pair a phone"
+    iface = QAccessible.queryAccessibleInterface(dialog)
+    assert iface is not None
+    assert iface.role() == QAccessible.Role.Dialog
+    assert iface.text(QAccessible.Text.Name) == "Pair a phone"
     window.setMinimumWidth(320)
     try:
         _panel(window).setTextSize("larger")
