@@ -485,6 +485,17 @@ fn shift_held_counts(
 /// The edits a save's answer makes to the window's copies, its Undo history and its status line. A
 /// Plan's step is reported as planned only once the save holding it lands.
 pub fn acknowledge_save(answer: &SaveAnswer<'_>) -> EngineResult<Acknowledgment> {
+    for step in [answer.pending_step, answer.travel_step]
+        .into_iter()
+        .flatten()
+    {
+        for field in ["weeks", "assignments"] {
+            if !matches!(step.get(field), None | Some(Value::Null | Value::Array(_))) {
+                return Err(EngineError::value(format!("step {field} must be a list")));
+            }
+        }
+    }
+
     let replied = optional_list(answer.data, "weeks")?;
     let mut changed = Vec::new();
     let mut held_in: BTreeMap<&str, Vec<&str>> = BTreeMap::new();

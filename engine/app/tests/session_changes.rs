@@ -303,6 +303,48 @@ fn answer<'a>(
     }
 }
 
+#[test]
+fn a_save_answer_refuses_malformed_pending_history_lists() {
+    let data = json!({});
+    let held = Map::new();
+    for (step, words) in [
+        (json!({"weeks": false}), "step weeks must be a list"),
+        (
+            json!({"assignments": "bad"}),
+            "step assignments must be a list",
+        ),
+    ] {
+        let input = SaveAnswer {
+            pending_step: Some(&step),
+            ..answer(&data, &held, &held)
+        };
+        assert_eq!(acknowledge_save(&input).unwrap_err().message, words);
+    }
+}
+
+#[test]
+fn an_undo_answer_refuses_malformed_history_lists() {
+    let data = json!({});
+    let held = Map::new();
+    for (step, words) in [
+        (
+            json!({"label": "moving Piano", "weeks": {}}),
+            "step weeks must be a list",
+        ),
+        (
+            json!({"label": "moving Piano", "assignments": 0}),
+            "step assignments must be a list",
+        ),
+    ] {
+        let input = SaveAnswer {
+            traveling: Some(Travel::Undo),
+            travel_step: Some(&step),
+            ..answer(&data, &held, &held)
+        };
+        assert_eq!(acknowledge_save(&input).unwrap_err().message, words);
+    }
+}
+
 fn session(id: &str, day: i64, start: &str) -> Value {
     json!({"id": id, "title": "Essay", "kind": "flexible", "assignment_id": "essay",
            "duration_min": 30, "days": [day], "start": start})
