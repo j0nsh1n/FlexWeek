@@ -22,8 +22,9 @@ FocusScope {
     signal closeRequested()
 
     anchors.fill: parent
+    property int desktopMaxWidth: 560
     readonly property int margin: 24
-    readonly property real cardWidth: phone ? width : Math.min(560, Math.max(0, width - 32))
+    readonly property real cardWidth: phone ? width : Math.min(desktopMaxWidth, Math.max(0, width - 32))
     readonly property real chrome: (phone ? 12 + 4 + 16 : 24) + titleText.height + 16 + 16 + footer.height + 24
 
     M3Palette { id: pal; theme: root.theme }
