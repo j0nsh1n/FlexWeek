@@ -31,6 +31,20 @@ fn objects(value: Value, what: &str) -> PyResult<Vec<Value>> {
     Ok(items)
 }
 
+/// The assignments table: always an object of assignment objects, never a list or primitive.
+fn assignments_table(value: Value) -> PyResult<Value> {
+    let Value::Object(ref entries) = value else {
+        return Err(PyTypeError::new_err("the assignments are an object"));
+    };
+    if entries
+        .values()
+        .any(|item| !item.is_object() && !item.is_null())
+    {
+        return Err(PyTypeError::new_err("every assignment is an object"));
+    }
+    Ok(value)
+}
+
 /// A JSON object, or None for JSON null: anything else never came from the window.
 fn object_or_null(value: Value, what: &str) -> PyResult<Option<Value>> {
     if value.is_null() {
@@ -108,9 +122,8 @@ fn date_problem_json(
     time_step: i64,
 ) -> PyResult<Option<String>> {
     guard(|| {
-        let block = read(block)?;
-        let block = (!block.is_null()).then_some(block);
-        let assignments = read(assignments)?;
+        let block = object_or_null(read(block)?, "the block")?;
+        let assignments = assignments_table(read(assignments)?)?;
         let input = DateProblemInput {
             block_id,
             from_iso,
@@ -155,14 +168,8 @@ fn relocate_json(
         if !source.is_object() {
             return Err(PyTypeError::new_err("the source week is an object"));
         }
-        let dest = read(dest)?;
-        let dest = (!dest.is_null()).then_some(dest);
-        if let Some(dest) = dest.as_ref()
-            && !dest.is_object()
-        {
-            return Err(PyTypeError::new_err("the destination week is an object"));
-        }
-        let assignments = read(assignments)?;
+        let dest = object_or_null(read(dest)?, "the destination week")?;
+        let assignments = assignments_table(read(assignments)?)?;
         let input = RelocationInput {
             block_id,
             from_day,
@@ -216,8 +223,8 @@ fn paste_destination_json(
     week_start: &str,
 ) -> PyResult<Option<String>> {
     guard(|| {
-        let blocks = read(blocks)?;
-        let trace = read(trace)?;
+        let blocks = Value::Array(objects(read(blocks)?, "blocks")?);
+        let trace = object_or_null(read(trace)?, "the trace")?.unwrap_or(Value::Null);
         let found = paste_destination(
             &blocks,
             &trace,
@@ -248,8 +255,8 @@ fn clipboard_day_json(
     new_ids: Vec<String>,
 ) -> PyResult<String> {
     guard(|| {
-        let blocks = read(blocks)?;
-        let trace = read(trace)?;
+        let blocks = Value::Array(objects(read(blocks)?, "blocks")?);
+        let trace = object_or_null(read(trace)?, "the trace")?.unwrap_or(Value::Null);
         let mut ids = new_ids.into_iter();
         let copied: CopyDay =
             copy_day_items(&blocks, &trace, day, week_start, &mut ids).map_err(raise)?;
@@ -278,10 +285,9 @@ fn paste_ready_json(
     week_start: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let clipboard = read(clipboard)?;
-        let clipboard = (!clipboard.is_null()).then_some(clipboard);
-        let blocks = read(blocks)?;
-        let trace = read(trace)?;
+        let clipboard = object_or_null(read(clipboard)?, "the clipboard")?;
+        let blocks = Value::Array(objects(read(blocks)?, "blocks")?);
+        let trace = object_or_null(read(trace)?, "the trace")?.unwrap_or(Value::Null);
         let ready: PasteReady = paste_ready(
             clipboard.as_ref(),
             target_day,
