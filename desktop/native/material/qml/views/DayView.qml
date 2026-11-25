@@ -316,6 +316,28 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
+        // Room kept around a focused control so it is not left half-cut at the edge.
+        readonly property int focusMargin: 6
+
+        // Scroll a focused child into view, as the pairing dialog does for its body.
+        function ensureVisible(item) {
+            if (!item || !rightPanel.visible)
+                return
+            var inside = item
+            while (inside && inside !== rightPanel.contentItem)
+                inside = inside.parent
+            if (!inside)
+                return
+            var pos = item.mapToItem(rightPanel.contentItem, 0, 0)
+            var top = pos.y - focusMargin
+            var bottom = pos.y + item.height + focusMargin
+            var limit = Math.max(0, rightPanel.contentHeight - rightPanel.height)
+            if (top < rightPanel.contentY)
+                rightPanel.contentY = Math.max(0, top)
+            else if (bottom > rightPanel.contentY + rightPanel.height)
+                rightPanel.contentY = Math.min(limit, bottom - rightPanel.height)
+        }
+
         Column {
             id: rightColumn
             width: rightPanel.width
@@ -373,6 +395,14 @@ Item {
     }
 
     M3Palette { id: palette; theme: root.theme }
+
+    // In a short window Tab can land on Now card or month controls below the fold:
+    // scroll the side panel so the focused control is on screen.
+    readonly property Item heldFocus: Window.activeFocusItem
+    onHeldFocusChanged: {
+        if (heldFocus)
+            rightPanel.ensureVisible(heldFocus)
+    }
 
     onVisibleChanged: {
         if (visible && hoursLoader.item)

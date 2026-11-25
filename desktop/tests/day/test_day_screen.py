@@ -248,6 +248,34 @@ def test_dragging_the_day_divider_resizes_the_right_panel_and_remembers_it(
     pump(qapp)
 
 
+def test_the_side_panel_scrolls_a_focused_control_into_view(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A1: in a short window the month sits below the fold; focusing it scrolls the
+    side panel so the focused control is on screen, as PairingDialog.ensureVisible does."""
+    root = show_material(qapp, window)
+    bridge = bridge_of(window)
+    bridge.showPage("day")
+    pump(qapp)
+    by_name = {str(item.objectName()): item for item in visuals(root) if item.objectName()}
+    panel = by_name["dayRightPanel"]
+    month = by_name["dayMiniMonth"]
+    window.resize(1280, 480)
+    pump(qapp, 10)
+    assert float(panel.property("contentHeight")) > float(panel.property("height"))
+    month.forceActiveFocus()
+    pump(qapp)
+    assert month.property("activeFocus") is True
+    m_top = month.mapToScene(QPointF(0, 0)).y()
+    m_bottom = month.mapToScene(QPointF(0, month.height())).y()
+    v_top = panel.mapToScene(QPointF(0, 0)).y()
+    v_bottom = panel.mapToScene(QPointF(0, panel.height())).y()
+    assert m_top >= v_top - 1, (m_top, v_top)
+    assert m_bottom <= v_bottom + 1, (m_bottom, v_bottom)
+    window.resize(1280, 800)
+    pump(qapp, 10)
+
+
 def test_mini_month_edge_columns_stay_clickable_at_smallest_sidebar_width_and_larger_text(
     qapp: QApplication, window: NativeWindow
 ) -> None:
