@@ -12,5 +12,5 @@ fi
 echo "Starting the Developer build workflow on Depot from main..."
 "$DEPOT" ci dispatch --repo j0nsh1n/FlexWeek --workflow dev-build.yml --ref main
 
-echo "Started. The build takes about 20 minutes and replaces the dev pre-release."
+echo "Started. The build takes about 4 minutes on Depot and replaces the dev pre-release."
 echo "Follow it with: $DEPOT ci workflow list --repo j0nsh1n/FlexWeek --name 'Developer build'"
