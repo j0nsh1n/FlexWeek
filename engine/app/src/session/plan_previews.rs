@@ -445,6 +445,9 @@ pub fn prepare_late(input: LateInput<'_>) -> Result<LatePreparation, String> {
     if !plain_date(input.today_iso) {
         return Err("today_iso must be a date as YYYY-MM-DD".to_string());
     }
+    if !(0..24).contains(&input.now_hour) || !(0..60).contains(&input.now_minute) {
+        return Err("now_hour must be 0..23 and now_minute must be 0..59".to_string());
+    }
     if let Some(refusal) = running_late_refusal(
         input.week_start,
         input.today_iso,
@@ -456,9 +459,6 @@ pub fn prepare_late(input: LateInput<'_>) -> Result<LatePreparation, String> {
     }
     if !matches!(input.minutes, 15 | 30 | 60) {
         return Ok(LatePreparation::Refused(LATE_INVALID_MINUTES.to_string()));
-    }
-    if !(0..24).contains(&input.now_hour) || !(0..60).contains(&input.now_minute) {
-        return Err("now_hour must be 0..23 and now_minute must be 0..59".to_string());
     }
     let from_start = late_from_start(input.now_hour * 60 + input.now_minute);
     let day = due_day_in_week(input.today_iso, input.week_start).map_err(|err| err.message)?;

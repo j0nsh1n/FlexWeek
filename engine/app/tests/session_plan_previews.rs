@@ -1044,6 +1044,14 @@ fn running_late_needs_a_plain_date_for_today_and_a_real_clock() {
     let mut late_minute = late_input("2026-09-24", 14, &[]);
     late_minute.now_minute = 60;
     assert!(prepare_late(late_minute).is_err());
+    // A bad clock is an error even when a normal refusal (unsaved changes) would also apply.
+    let mut dirty_hour = late_input("2026-09-24", 24, &[]);
+    dirty_hour.dirty = true;
+    assert!(prepare_late(dirty_hour).is_err());
+    let mut dirty_minute = late_input("2026-09-24", 14, &[]);
+    dirty_minute.dirty = true;
+    dirty_minute.now_minute = 60;
+    assert!(prepare_late(dirty_minute).is_err());
 }
 
 #[test]
