@@ -48,7 +48,7 @@ object FocusJson {
         "Stop the timer for $current and start $incoming instead?"
 
     fun finishText(minutes: Int, title: String): String =
-        "You have done $minutes min of $title."
+        "You've done $minutes min of $title."
 
     fun parseReplace(json: String): Pair<String, String> {
         val value = JSONObject(json)

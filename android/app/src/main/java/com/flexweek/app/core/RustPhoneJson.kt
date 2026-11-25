@@ -100,7 +100,7 @@ internal object RustPhoneJson {
         val root = JSONObject(raw)
         if (root.optString("state") == "unreachable" && root.optBoolean("paired") && !root.isNull("last_sync_ms")) {
             val at = Instant.ofEpochMilli(root.getLong("last_sync_ms")).atZone(zone).format(timeFormat)
-            root.put("line", "Your computer isn't reachable. Showing what synced at $at.")
+            root.put("line", "Your computer isn't reachable. Showing the week last synced at $at.")
         }
         // A failure that is not "the computer is off" says what it is, so the student does not wait for a computer
         // that is already on.
@@ -162,7 +162,7 @@ internal object RustPhoneJson {
     fun ffiText(error: com.flexweek.app.bindings.FfiException): String =
         (error as? com.flexweek.app.bindings.FfiException.Failure)?.details ?: error.message ?: UNREADABLE_ERROR
 
-    private const val UNREADABLE_ERROR = "FlexWeek could not finish that. Nothing was changed."
+    private const val UNREADABLE_ERROR = "FlexWeek couldn't finish that. Nothing changed."
 
     fun plan(raw: String): String {
         val root = JSONObject(raw)
@@ -188,7 +188,7 @@ internal object RustPhoneJson {
                 .put("right", "No time yet").put("why", block.optString("why").ifBlank { null }))
         }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
-            .put("summary", "Placed ${placed.length()} of ${placed.length() + waiting.length()}")
+            .put("summary", "Placed ${placed.length()} of ${placed.length() + waiting.length()} homework sessions")
             .put("lines", lines).toString()
     }
 

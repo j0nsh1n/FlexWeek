@@ -90,7 +90,7 @@ fun PlanRecordSheet(
     }
 }
 
-const val NOTHING_TO_MOVE = "Nothing after this time can move. Fixed times stay."
+const val NOTHING_TO_MOVE = "No homework needs to move. Fixed times stay where they are."
 
 @Composable
 fun RunningLateSheet(
@@ -138,13 +138,13 @@ fun RunningLateSheet(
                     Text("$title stays · fixed time", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 Text(
-                    "Homework with no time yet is not placed by Running late. That is Plan's job.",
+                    "Running late doesn't place homework that has no time yet. Use Plan for that.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
-                    Button(onClick = onAccept, enabled = preview != null, modifier = Modifier.heightIn(min = 48.dp)) { Text("Move it") }
+                    Button(onClick = onAccept, enabled = preview != null, modifier = Modifier.heightIn(min = 48.dp)) { Text("Accept late start") }
                 }
             }
         }

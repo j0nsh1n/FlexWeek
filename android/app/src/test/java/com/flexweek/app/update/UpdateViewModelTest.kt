@@ -253,7 +253,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("no-checksum")
         val vm = viewModel(source, FakeInstaller(), FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("checksum", ignoreCase = true))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("verify the update"))
         assertEquals(0, source.downloadCalls)
         assertEquals(0, dir.listFiles()?.size ?: 0)
     }
@@ -262,7 +262,7 @@ class UpdateViewModelTest {
         val source = FakeSource().also { it.release = "available"; it.digest = "not a digest line" }
         val vm = viewModel(source, FakeInstaller(), FakePrefs())
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("checksum", ignoreCase = true))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("verify the update"))
         assertEquals(0, source.downloadCalls)
     }
 
@@ -273,8 +273,8 @@ class UpdateViewModelTest {
         val vm = viewModel(source, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
         val reason = vm.stateAs<UpdateState.Failed>().reason
-        assertTrue(reason, reason.contains("did not match"))
-        assertTrue(reason, reason.contains("discarded"))
+        assertTrue(reason, reason.contains("safety check"))
+        assertTrue(reason, reason.contains("deleted"))
         assertEquals(0, dir.listFiles()?.size ?: 0)
         assertEquals(0, installer.installCalls)
     }
@@ -431,7 +431,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("wont-start")
         val vm = viewModel(FakeSource().also { it.release = "available" }, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("installer could not start"))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("couldn't start the installer"))
         assertTrue(File(dir, "FlexWeek-Android-1.1.0.apk").exists())
     }
 

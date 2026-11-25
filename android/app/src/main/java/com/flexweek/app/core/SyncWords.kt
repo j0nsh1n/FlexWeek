@@ -7,7 +7,7 @@ import org.json.JSONObject
 object SyncWords {
     const val OFF = "Your computer isn't reachable. Check that FlexWeek is open on it."
     const val NEEDS_UPDATE = "FlexWeek needs an update on this phone or your computer. Update both, then try again."
-    const val OTHER = "Sync ran into a problem. Try again in a moment."
+    const val OTHER = "Sync didn't finish. Try again in a moment."
 
     private const val VERSION_TEXT = "unsupported protocol version"
     private val OFF_KINDS = setOf("timeout", "unreachable", "stopped")
@@ -27,7 +27,7 @@ object SyncWords {
         isOff(kind) -> OFF
         needsUpdate(effectiveKind(kind, error)) -> NEEDS_UPDATE
         error.isBlank() -> OTHER
-        else -> "$OTHER ($error)"
+        else -> OTHER
     }
 
     fun pairProblem(kind: String): String = when (kind) {
@@ -40,7 +40,7 @@ object SyncWords {
         "too_many_tries" -> "Too many wrong tries. Start a new code on your computer."
         "version_mismatch" -> NEEDS_UPDATE
         "device_mismatch", "key" ->
-            "This phone could not set up its sync key. Restart FlexWeek and try again."
+            "This phone couldn't set up secure syncing. Restart FlexWeek and try again."
         else -> "Pairing did not finish. Start a new code on your computer and try again."
     }
 
