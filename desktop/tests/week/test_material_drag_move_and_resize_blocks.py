@@ -59,11 +59,20 @@ def block_on(page: QObject, title: str) -> QObject:
 
 
 def on_screen(
-    qapp, window: NativeWindow, screen: str, title: str, day: int = FRIDAY, start: str = "16:00"
+    qapp,
+    window: NativeWindow,
+    screen: str,
+    title: str,
+    day: int = FRIDAY,
+    start: str = "16:00",
+    step: int | None = None,
 ) -> QObject:
-    """Material on Week, or on Day for `day`; returns the named block."""
+    """Material on Week, or on Day for `day`; returns the named block. `step` is set before the block is
+    scrolled into view: setting it republishes the page, which can scroll the hours away (CI, 2026-11-24)."""
     root = material_week(qapp, window)
     seed_club(qapp, window, start)
+    if step is not None:
+        use_step(qapp, window, step)
     if screen == "week":
         page = qml(root, "materialWeek")
     else:
@@ -366,8 +375,7 @@ def test_a_hold_on_overlapping_blocks_moves_the_one_drawn_on_top(
 def test_a_move_lands_on_the_students_step(
     qapp, window: NativeWindow, screen: str, step: int, pixels: int, landed: str
 ) -> None:
-    block = on_screen(qapp, window, screen, "Club")
-    use_step(qapp, window, step)
+    block = on_screen(qapp, window, screen, "Club", step=step)
     start = body_of(block)
     drag(qapp, window, start, QPoint(start.x(), start.y() + pixels))
     assert (club(window)["start"], club(window)["duration_min"]) == (landed, 60)
@@ -392,8 +400,7 @@ def test_a_resize_lands_on_the_students_step_at_either_edge(
 ) -> None:
     """Club is 16:00 to 17:00. An edge 10 px (10.71 minutes) away is at 10 minutes on fives and 15 on
     quarter hours: 17:10 or 17:15 for the bottom, 15:50 or 15:45 for the top."""
-    block = on_screen(qapp, window, screen, "Club")
-    use_step(qapp, window, step)
+    block = on_screen(qapp, window, screen, "Club", step=step)
     at = edge_point(block, edge)
     drag(qapp, window, at, QPoint(at.x(), at.y() + pixels))
     assert (club(window)["start"], club(window)["duration_min"]) == (start, duration)
@@ -413,8 +420,7 @@ def test_a_resize_cannot_leave_a_block_shorter_than_one_step(
     qapp, window: NativeWindow, screen: str, step: int, edge: str, start: str, duration: int
 ) -> None:
     """The plain look keeps a resized edge one step from the other; Material does the same."""
-    block = on_screen(qapp, window, screen, "Club")
-    use_step(qapp, window, step)
+    block = on_screen(qapp, window, screen, "Club", step=step)
     at = edge_point(block, edge)
     drag(qapp, window, at, QPoint(at.x(), at.y() + (2 * ROW if edge == "top" else -2 * ROW)))
     assert (club(window)["start"], club(window)["duration_min"]) == (start, duration)
@@ -428,8 +434,7 @@ def test_a_block_off_the_step_moves_onto_the_steps_marks_not_by_keeping_its_offs
     """The plain look snaps the new time to the step's marks. Club at 16:22 dragged 10 px (10.71 minutes)
     is at 16:32.7: the nearest mark is 16:35 on fives and 16:30 on quarter hours (keeping the offset would
     give 16:33)."""
-    block = on_screen(qapp, window, screen, "Club", start="16:22")
-    use_step(qapp, window, step)
+    block = on_screen(qapp, window, screen, "Club", start="16:22", step=step)
     start = body_of(block)
     drag(qapp, window, start, QPoint(start.x(), start.y() + 10))
     assert (club(window)["start"], club(window)["duration_min"]) == (landed, 60)
@@ -442,8 +447,7 @@ def test_resizing_a_block_off_the_step_puts_only_the_moved_edge_on_a_mark(
 ) -> None:
     """Club is 16:22 to 17:22. Its bottom edge 10 px lower is at 17:32.7: 17:35 on fives (73 minutes long),
     17:30 on quarter hours (68). The start is not touched."""
-    block = on_screen(qapp, window, screen, "Club", start="16:22")
-    use_step(qapp, window, step)
+    block = on_screen(qapp, window, screen, "Club", start="16:22", step=step)
     at = edge_point(block, "bottom")
     drag(qapp, window, at, QPoint(at.x(), at.y() + 10))
     assert (club(window)["start"], club(window)["duration_min"]) == ("16:22", duration)
@@ -456,8 +460,7 @@ def test_the_shortest_off_step_block_keeps_its_end_and_starts_on_a_mark(
 ) -> None:
     """Club is 16:22 to 17:22. Pulling its top edge far down starts it on the last mark a step or more before
     17:22: 17:15 on fives, 17:00 on quarter hours. The end stays at 17:22."""
-    block = on_screen(qapp, window, screen, "Club", start="16:22")
-    use_step(qapp, window, step)
+    block = on_screen(qapp, window, screen, "Club", start="16:22", step=step)
     top = scene_point(block, block.width() / 2, 3)
     drag(qapp, window, top, QPoint(top.x(), top.y() + 2 * ROW))
     assert (club(window)["start"], club(window)["duration_min"]) == (start, duration)
