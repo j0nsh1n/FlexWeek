@@ -1495,3 +1495,26 @@ fn share_minutes_too_large_to_add_are_refused() {
     ], "unplaced": [], "explanations": []});
     assert!(answer_for(&two, &[share(0, 0)], now).is_err());
 }
+
+#[test]
+fn every_entry_of_a_day_list_must_be_a_whole_number() {
+    // Only the first day is used, but a later entry that is not a day is still a refusal.
+    let bad = json!({"title": "Bio", "start": "17:15", "days": [1, {}]});
+    assert!(place_now_sentence(&bad, WEEK).is_err());
+    let targets = vec!["b-sheet".to_string()];
+    let trace = json!({"placed": [placed_row(json!({"days": [3, "Fri"]}))]});
+    assert!(first_placed(&trace, &targets).is_err());
+    assert!(answer_for(&trace, &[], clock("2026-09-24", 19, 0)).is_err());
+    // Missing, null, empty and all-number lists keep working.
+    set_clock_24h(true);
+    let good = json!({"title": "Bio", "start": "17:15", "days": [1, 2]});
+    assert_eq!(
+        place_now_sentence(&good, WEEK).unwrap(),
+        "Placed Bio on Tue 17:15."
+    );
+    let empty = json!({"title": "Bio", "start": "17:15", "days": []});
+    assert_eq!(
+        place_now_sentence(&empty, WEEK).unwrap(),
+        "No free time this week for Bio."
+    );
+}

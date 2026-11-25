@@ -255,13 +255,16 @@ fn opt_int(item: &Value, key: &str) -> Result<Option<i64>, String> {
 fn first_day_of(item: &Value) -> Result<Option<i64>, String> {
     match item.get("days") {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::Array(days)) => match days.first() {
-            None => Ok(None),
-            Some(day) => day
-                .as_i64()
-                .map(Some)
-                .ok_or_else(|| "days must hold whole numbers".to_string()),
-        },
+        Some(Value::Array(days)) => {
+            let mut first = None;
+            for day in days {
+                let day = day
+                    .as_i64()
+                    .ok_or_else(|| "days must hold whole numbers".to_string())?;
+                first.get_or_insert(day);
+            }
+            Ok(first)
+        }
         Some(_) => Err("days must be a list or null".to_string()),
     }
 }
