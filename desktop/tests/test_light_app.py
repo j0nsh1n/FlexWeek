@@ -1,5 +1,5 @@
-"""The light app opens where signing up and skipping setup on a real server does, so a test moved onto
-it checks what it checked before."""
+"""The light app opens where signing up and skipping setup in the running app leaves it, so a test
+moved onto it checks what it checked before."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import account, open_light, open_light_window  # noqa: F401
 from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import free, look_file, qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.window_support import database, free, look_file, qapp, signed_out, window  # noqa: F401
 
 
 def seen(opened: NativeWindow) -> dict:

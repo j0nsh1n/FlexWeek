@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.controller import NativeSession  # noqa: E402
-from desktop.tests.e2e.account_sessions import server  # noqa: E402, F401
+from desktop.tests.e2e.account_sessions import database  # noqa: E402, F401
 from desktop.tests.e2e.saved_weeks import read_week  # noqa: E402
 from desktop.tests.e2e.test_a_week_from_any_day_saves_to_its_stored_weeks import (  # noqa: E402
     SUNDAY,
@@ -66,9 +66,9 @@ OLD = ("school", "08:30", 405, [0, 1, 2, 3, 4])
 @pytest.mark.parametrize("mode", ["keep", "replace", "from_today"])
 @pytest.mark.parametrize("first,opening", [(WEDNESDAY, "2026-11-04"), (SUNDAY, "2026-11-01")])
 def test_each_choice_through_the_client(
-    qapp, server, mode: str, first: int, opening: str
+    qapp, database, mode: str, first: int, opening: str
 ) -> None:
-    session = signed_in_from(qapp, server.origin, f"c{mode[0]}{first}", first)
+    session = signed_in_from(qapp, database, f"c{mode[0]}{first}", first)
     assert session.week_start == opening
     session.set_setup_blocks([dict(SCHOOL), dict(SOCCER)])
     session.save()
@@ -112,8 +112,8 @@ def test_each_choice_through_the_client(
         assert found["2026-11-09"] == [FULL]
 
 
-def test_from_today_on_a_later_open_week_reaches_the_weeks_between(qapp, server) -> None:
-    session = signed_in_from(qapp, server.origin, "lateropen", 0)
+def test_from_today_on_a_later_open_week_reaches_the_weeks_between(qapp, database) -> None:
+    session = signed_in_from(qapp, database, "lateropen", 0)
     assert session.week_start == "2026-11-02"
     session.set_setup_blocks([dict(SCHOOL), dict(SOCCER)])
     session.save()

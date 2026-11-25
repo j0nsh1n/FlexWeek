@@ -146,7 +146,7 @@ paths = [
   "desktop/tests/__init__.py", "desktop/tests/conftest.py", "desktop/tests/light_app.py",
   "desktop/tests/waiting.py", "desktop/tests/fontconfig.conf", "desktop/tests/logic_support.py",
   "desktop/tests/pictures/screen.py", "desktop/tests/pictures/__init__.py",
-  "backend/tests/__init__.py", "backend/tests/conftest.py", "backend/tests/fake_clock.py",
+  "backend/tests/__init__.py", "backend/tests/fake_clock.py",
   "scripts/pictures/", "scripts/brand.py", "scripts/instance_fonts.py",
 ]
 everything = true
@@ -228,7 +228,7 @@ paths = [
   "desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/weekmodel.py",
   "desktop/native/calendar.py", "desktop/native/settings.py", "desktop/native/fonts.py",
   "desktop/native/fields.py", "desktop/native/motion.py",
-  "desktop/native/client.py",
+  "desktop/native/client.py", "desktop/native/listening.py",
   "desktop/native/wire.py", "desktop/native/history.py",
   "desktop/native/files.py", "desktop/native/collector.py",
   "desktop/native/layout_choice.py",
@@ -358,7 +358,7 @@ paths = [
 areas = ["account", "e2e"]
 
 [[rule]]
-paths = ["desktop/native/devices.py", "desktop/server.py"]
+paths = ["desktop/native/devices.py"]
 areas = ["sync", "account", "e2e"]
 
 # Another program's saves (the assistant's) reaching the open window.
@@ -373,15 +373,15 @@ paths = [
   "desktop/linux/", "desktop/windows/", "desktop/build_linux.sh", "desktop/build_windows.ps1",
   "desktop/check_bundle.py", "desktop/finish_linux_bundle.sh", "desktop/package_linux.sh",
   "desktop/smoke_linux_containers.sh", "desktop/smoke_mcp.py", "desktop/readme.py",
-  "desktop/origin.py", "packaging/", "README.md", "scripts/dev-release.sh",
+  "packaging/", "README.md", "scripts/dev-release.sh",
   ".github/workflows/dev-build.yml", ".github/workflows/release-windows.yml",
 ]
 areas = ["updater"]
 
-# --- Backend. The light app runs on the backend's app and storage, so those select every area.
+# --- Backend. The light app runs on the backend's storage and models, so those select every area.
 [[rule]]
 paths = [
-  "backend/__init__.py", "backend/app.py", "backend/storage.py", "backend/models.py",
+  "backend/__init__.py", "backend/storage.py", "backend/models.py",
   "backend/clock.py", "backend/limits.py", "backend/weeks.py", "backend/data/",
 ]
 everything = true

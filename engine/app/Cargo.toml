@@ -12,9 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 flexweek-platform = { path = "../platform" }
+flexweek-service = { path = "../service" }
 flexweek-store = { path = "../store" }
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
 
 [dev-dependencies]
+flexweek-testkit = { path = "../testkit" }
 rusqlite = { version = "0.37.0", features = ["bundled"] }

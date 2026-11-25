@@ -4,17 +4,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
 
-from desktop.server import LocalServer
-from desktop.tests.e2e.account_sessions import server, signed_in, soccer  # noqa: F401
+from desktop.tests.e2e.account_sessions import database, signed_in, soccer  # noqa: F401
 from desktop.tests.logic_support import titles
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
-def test_undo_then_redo_restores_a_saved_fixed_time(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+def test_undo_then_redo_restores_a_saved_fixed_time(qapp: QApplication, database: Path) -> None:
+    session = signed_in(qapp, database, "alice", create=True)
     session.add_block(soccer())
     session.save()
     wait_until(qapp, lambda: session.revision == 1 and not session.busy)

@@ -2,7 +2,7 @@
 # Build the FlexWeek Linux desktop shell (onedir standalone).
 #
 # Produces dist/FlexWeek/FlexWeek — runs without a Python install and without a
-# separate server: the FastAPI backend is bundled and started in-process.
+# server: the window asks the Rust service in its own process.
 # The window is native Qt widgets; Chromium is not compiled
 # in. --onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #
@@ -28,7 +28,7 @@ mkdir -p "$ROOT/build"
 STAGING="$(mktemp -d "$ROOT/build/linux.XXXXXX")"
 trap 'echo "Build staging retained at $STAGING" >&2' ERR
 # mypy and pydantic.mypy are type-checking tools; uvloop, httptools, watchfiles,
-# websockets and yaml are uvicorn extras that desktop/server.py never enables;
+# websockets and yaml are uvicorn extras the app never used (it runs no server);
 # curses, readline and termios are terminal modules whose Fedora builds need a
 # newer glibc than the release promises.
 "$VENV/bin/python" -m nuitka "$ROOT/desktop/main.py" \

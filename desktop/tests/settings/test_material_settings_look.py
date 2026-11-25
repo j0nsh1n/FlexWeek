@@ -9,10 +9,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from backend.app import Preferences
 from desktop.native.material import bridge_settings
 from desktop.native.sheet_rules import CUTOFFS as WIDGET_CUTOFFS
 from desktop.native.weekmodel import hhmm_text, set_clock_24h
@@ -41,7 +41,7 @@ TOKENS = json.loads(
 )
 BLUE_DARK_SURFACE = "#0b0d10"
 BLUE_LIGHT_SURFACE = "#eef1f5"
-FIELDS = set(Preferences.model_fields)
+FIELDS = set(flexweek_engine.preference_fields())
 
 
 def test_the_clock_switch_changes_the_clock_in_the_material_shell(

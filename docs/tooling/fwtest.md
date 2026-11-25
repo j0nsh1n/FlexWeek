@@ -252,8 +252,8 @@ desktop and mutation shards running side by side; the engine mutation shards are
 ## Playing the app
 
 `fwtest rig --play PLAY.json [--out DIR]` lets an agent use FlexWeek the way a student does. The rig starts
-the app on its hidden desktop (never the developer's display or bus), signs in a throwaway account against
-a local server, holds the clock, and then does what the file says with the real pointer and keyboard
+the app on its hidden desktop (never the developer's display or bus), signs in a throwaway account on
+its own database, holds the clock, and then does what the file says with the real pointer and keyboard
 (xdotool). The app starts on Material 3, the only interface, so a play never has to choose it. It records
 what the screen showed after each step. The sound is off.
 

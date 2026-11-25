@@ -264,29 +264,29 @@ def _window_on_setup(tmp_path):
     from PySide6.QtCore import QStandardPaths
     from PySide6.QtWidgets import QApplication
 
+    from backend.storage import initialize
     from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
     from desktop.tests.logic_support import PASSWORD, card_phase, past_recovery, sign_up, wait_until
     from desktop.tests.window_support import look_file
 
     QStandardPaths.setTestModeEnabled(True)
     look_file().unlink(missing_ok=True)
     app = QApplication.instance() or QApplication(["flexweek-play-look-test"])
-    server = LocalServer(tmp_path / "flexweek.db")
-    server.start()
-    window = NativeWindow(server.origin)
+    database = tmp_path / "flexweek.db"
+    initialize(database)
+    window = NativeWindow(database)
     window.show()
     sign_up(app, window, "play_student", PASSWORD)
     past_recovery(app, window)
     wait_until(app, lambda: card_phase(window) == "setup")
-    return app, server, window
+    return app, window
 
 
 def test_empty_seed_honours_large_text(tmp_path):
     from desktop.native.look import effective_look
     from desktop.tests.window_support import free
 
-    app, server, window = _window_on_setup(tmp_path)
+    app, window = _window_on_setup(tmp_path)
     try:
         play.apply_play_look(window, window.session, play.Setup(seed="empty", text="large"))
         window._apply_appearance()
@@ -295,4 +295,3 @@ def test_empty_seed_honours_large_text(tmp_path):
     finally:
         window.hide()
         free(window)
-        server.stop()

@@ -2,7 +2,7 @@
 and activities set up in Setup, Plan never puts homework in school hours, and "Copy last week's fixed
 times" does not say "nothing" while last week holds Setup's blocks.
 
-Driven through a signed-in NativeSession on a real local API, the layer Setup itself writes through
+Driven through a signed-in NativeSession on the real service, the layer Setup itself writes through
 (`set_setup_blocks`), so the test holds whichever way the fix is built (Coder's plan: a standing week
 applied on the read path). Known failures are xfail(strict=True): when the fix lands they turn XPASS,
 which fails the run, so the marker must then be removed.
@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
 
-from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401,E402
+from desktop.tests.logic_support import database, qapp, settled, signed_in, wait_until  # noqa: F401,E402
 
 KNOWN = "known failure (item 1): Setup's blocks live only in the week Setup ran in"
 KNOWN_1A = (
@@ -91,9 +91,9 @@ EXPECTED = {
 
 
 @pytest.fixture()
-def after_setup(qapp, server):  # noqa: F811
+def after_setup(qapp, database):  # noqa: F811
     """A new account that finished Setup with School, Soccer and a Saturday job in the week it is in."""
-    session = signed_in(qapp, server.origin, "standing_week", create=True)
+    session = signed_in(qapp, database, "standing_week", create=True)
     session.set_setup_blocks([dict(SCHOOL), dict(SOCCER), dict(JOB)])
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
@@ -203,9 +203,9 @@ def test_1a_copy_with_only_setup_blocks_last_week_says_they_are_already_here(qap
     assert any(line.rstrip(".") == SETUP_HERE for line in said) and NOTHING not in said, said
 
 
-def test_1a_nothing_to_copy_is_said_for_a_truly_empty_week(qapp, server) -> None:  # noqa: F811
+def test_1a_nothing_to_copy_is_said_for_a_truly_empty_week(qapp, database) -> None:  # noqa: F811
     """Guard: a last week with no blocks at all still says there is nothing to copy."""
-    session = signed_in(qapp, server.origin, "empty_last_week", create=True)
+    session = signed_in(qapp, database, "empty_last_week", create=True)
     said: list[str] = []
     session.status.connect(said.append)
     go_to(qapp, session, plus_weeks(session.week_start, 1))

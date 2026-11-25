@@ -96,7 +96,7 @@ The Linux downloads include a helper that lets an AI assistant you already use (
 
 - **Desktop app**: Python 3.14 with Qt (PySide6), Widgets and QML (Material 3).
 - **Planner and storage**: Rust (`engine/`), built into a Python module with PyO3 and maturin; SQLite (rusqlite).
-- **Local API**: FastAPI and Pydantic, started inside the app on a loopback port.
+- **Saved data**: the Rust service answers the window in the same process; there is no server.
 - **Phone app**: Android, Kotlin with Jetpack Compose, calling the same Rust engine through UniFFI; sync uses iroh.
 - **Packaging**: Linux tarball and AppImage, Windows installers (Inno Setup and WiX), built on GitHub Actions.
 
@@ -117,8 +117,7 @@ On Linux, pip's PySide6 does not include the X11 helpers and keyboard libraries 
 
 Building the Linux download (`./desktop/build_linux.sh`) also needs a C compiler (GCC), Python 3.14's development headers, `patchelf` (installed by `requirements-desktop.txt`) and `readelf` (binutils). The six X11 helpers and the two xkbcommon libraries must be installed, because the build copies them into the bundle. A release is built on Ubuntu 24.04, so nothing in it needs a glibc newer than 2.38; [DESKTOP.md](DESKTOP.md) has the details.
 
-The backend starts inside the app on a loopback port; there is no separate server to run and no page to open in a
-browser.
+The app reads and saves your week itself; there is no server to run and no page to open in a browser.
 
 ## Using FlexWeek
 
@@ -143,21 +142,13 @@ one of the eight recovery codes shown when the account was made.
 ## Data and configuration
 
 FlexWeek keeps its database in your user data folder (on Linux,
-`~/.local/share/FlexWeek/flexweek.db`) and starts its own backend on a private
-loopback port. Nothing needs configuring to use it.
+`~/.local/share/FlexWeek/flexweek.db`) and reads and saves it itself: it runs no
+server and opens no network port (phone sync, once a phone is paired, listens
+for that phone). Nothing needs configuring to use it.
 
 | Setting | Effect |
 |---|---|
 | `--database FILE` | Use this database file instead of the one in your data folder |
-| `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) | Use a FlexWeek API running elsewhere instead of starting one; an invalid value is an error, never a quiet fall back to local. Accounts there are separate from local ones and do not sync |
-
-The API can also run on its own, for development or as a server other copies
-point at: `uvicorn backend.app:app` reads `FLEXWEEK_DATABASE` (default
-`var/flexweek.db`) and `FLEXWEEK_ORIGIN` (default `http://127.0.0.1:8000`) and
-serves the API only, no pages. Non-local origins require HTTPS, and HTTPS uses
-Secure session cookies. A hosted API needs a persistent database directory and
-backups, and trusted reverse proxies configured explicitly so client-address
-throttling sees the real source.
 
 The database and its journals are gitignored. Back up the database with SQLite's
 backup API or with the app stopped; protect backups as private account data.

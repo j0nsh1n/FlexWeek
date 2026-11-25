@@ -208,7 +208,7 @@ def test_start_up_draws_on_the_cpu_only_for_the_version_that_failed(
 
 def test_main_applies_the_saved_cpu_choice_before_the_window_is_made() -> None:
     source = (Path(__file__).parents[2] / "main.py").read_text()
-    assert source.index("apply_saved_cpu_drawing(") < source.index("NativeWindow(origin")
+    assert source.index("apply_saved_cpu_drawing(") < source.index("NativeWindow(database")
 
 
 def test_the_saved_key_does_not_stop_material_from_being_tried_and_is_kept_by_a_look_save(

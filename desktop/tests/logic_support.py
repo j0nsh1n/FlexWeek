@@ -1,4 +1,4 @@
-"""Shared fixtures for the native logic tests: a real local API and signed-in NativeSessions."""
+"""Shared fixtures for the native logic tests: the real service and signed-in NativeSessions."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.storage import initialize
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
@@ -20,7 +22,6 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.client import _error
     from desktop.native.controller import NativeSession
-    from desktop.server import LocalServer
     from desktop.tests.material_support import page_showing
     from desktop.tests.waiting import wait_until  # noqa: F401
 
@@ -36,16 +37,16 @@ def qapp() -> Iterator[QApplication]:
 
 
 @pytest.fixture()
-def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
-    running = LocalServer(tmp_path / "flexweek.db")
-    running.start()
-    yield running
+def database(qapp: QApplication, tmp_path: Path) -> Iterator[Path]:
+    """The saved data sessions open on, as the app opens it at start."""
+    path = tmp_path / "flexweek.db"
+    initialize(path)
+    yield path
     for session in list(HELD):
         with contextlib.suppress(RuntimeError):
             session.client.reset()  # type: ignore[attr-defined]
     HELD.clear()
     qapp.processEvents()
-    running.stop()
 
 
 def card_phase(window: object) -> str | None:
@@ -118,11 +119,11 @@ def past_setup(qapp: QApplication, window: object) -> None:
 def settled(qapp: QApplication, session: NativeSession) -> None:
     """Wait for the foreground request and the background refreshes it starts."""
     wait_until(qapp, lambda: not session.busy)
-    wait_until(qapp, lambda: not any(session.client._replies.values()))
+    wait_until(qapp, lambda: not session.client._waiting)
 
 
-def signed_in(qapp: QApplication, origin: str, username: str, *, create: bool) -> NativeSession:
-    session = NativeSession(origin, qapp)
+def signed_in(qapp: QApplication, database: Path, username: str, *, create: bool) -> NativeSession:
+    session = NativeSession(database, qapp)
     HELD.append(session)
     if create:
         session.register(username, PASSWORD)

@@ -1,29 +1,27 @@
-"""Asynchronous access to the desktop's private Python API."""
+"""Access to FlexWeek's saved data. The session in Rust (`flexweek_engine.NativeCore`,
+engine/app/src/session) sends each request to the service on its own workers, in this process, with no
+server and no network port; its answer is taken back on the window's thread on a later turn of its event
+loop and handed to the request's callbacks here."""
 
 from __future__ import annotations
 
-import contextlib
-import ipaddress
+import itertools
 import json
 import logging
 import re
+import secrets
+import time
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
-from urllib.parse import unquote, urlsplit
+from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QObject, QThread, QTimer, QUrl, Signal
-from PySide6.QtNetwork import (
-    QNetworkAccessManager,
-    QNetworkCookie,
-    QNetworkCookieJar,
-    QNetworkProxy,
-    QNetworkReply,
-    QNetworkRequest,
-)
+import flexweek_engine  # type: ignore[import-untyped]
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from shiboken6 import isValid
 
-REQUEST_TIMEOUT_MS = 30_000
-SESSION_COOKIE = b"flexweek_session"
-MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+from backend import clock as wall_clock
+
 PASSWORD_LENGTH_HINT = "At least 12 characters."
 USERNAME_HINT = "3 to 32 letters, numbers or underscores."
 USERNAME_ERROR = "Use 3 to 32 letters, numbers or underscores, with no spaces."
@@ -58,95 +56,9 @@ class ApiError:
     message: str
 
 
-class _CookieJar(QNetworkCookieJar):
-    def snapshot(self) -> list[QNetworkCookie]:
-        return self.allCookies()
-
-
-def _local_origin(origin: str) -> str:
-    try:
-        parsed = urlsplit(origin)
-        address = ipaddress.ip_address(parsed.hostname or "")
-        host = f"[{address}]" if address.version == 6 else str(address)
-        canonical = f"http://{host}:{parsed.port}"
-        if (
-            not address.is_loopback
-            or parsed.port is None
-            or parsed.port == 0
-            or parsed.username is not None
-            or parsed.password is not None
-            or origin != canonical
-        ):
-            raise ValueError
-    except ValueError:
-        raise ValueError("The desktop API needs a canonical HTTP loopback origin with a port.") from None
-    return canonical
-
-
-def _api_path(path: str) -> None:
-    parsed = urlsplit(path)
-    decoded = unquote(parsed.path)
-    if (
-        not path.startswith("/api/")
-        or parsed.scheme
-        or parsed.netloc
-        or parsed.fragment
-        or "#" in path
-        or "\\" in decoded
-        or "//" in decoded
-        or any(part in {".", ".."} for part in decoded.split("/"))
-        or any(ord(char) < 33 or ord(char) == 127 for char in path)
-        or not decoded.startswith("/api/")
-    ):
-        raise ValueError("Only relative /api/ requests are allowed.")
-
-
-def _field_error(detail: object, names: tuple[str, ...], message: str) -> str | None:
-    items = detail if isinstance(detail, list) else []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        loc = [str(part).lower() for part in (item.get("loc") or [])]
-        if any(name in loc for name in names):
-            return message
-    return None
-
-
-def _password_error(detail: object) -> str | None:
-    return _field_error(detail, ("password", "new_password", "current_password"), PASSWORD_LENGTH_HINT)
-
-
-def _username_error(detail: object) -> str | None:
-    return _field_error(detail, ("username",), USERNAME_ERROR)
-
-
 def _error(status: int, detail: object = None) -> ApiError:
-    if status == 401 and detail == "Incorrect password":
-        return ApiError(status, WRONG_PASSWORD)
-    if status == 401 and detail == "Incorrect username or password":
-        return ApiError(status, SIGN_IN_WRONG)
-    if status == 409 and detail == "Username unavailable":
-        return ApiError(status, USERNAME_TAKEN)
-    if status == 401 and detail == "Incorrect username or recovery code":
-        return ApiError(status, "Wrong username or recovery code. Each code works once; try another one.")
-    if status == 401 and detail == SESSION_ENDED:
-        return ApiError(status, SESSION_ENDED)
-    if status == 422:
-        named = _password_error(detail) or _username_error(detail)
-        if named:
-            return ApiError(status, named)
-    messages = {
-        0: "Could not reach FlexWeek. Your changes may not have been saved. Try again.",
-        401: SIGN_IN_AGAIN,
-        403: "This request was refused. Restart FlexWeek and try again.",
-        404: "This item is no longer available. Reload and try again.",
-        409: "The saved data changed or that name is already in use. Reload and try again.",
-        413: "This request is too large. Reduce its size and try again.",
-        422: "Check the required fields, dates, times and lengths, then try again.",
-        429: TOO_MANY_TRIES,
-        503: "Storage is unavailable. Keep your changes and try again shortly.",
-    }
-    return ApiError(status, messages.get(status, "FlexWeek could not complete this request. Try again."))
+    """The words for a failed request, from the session (engine/app/src/session/words.rs)."""
+    return ApiError(status, flexweek_engine.session_error_words(status, json.dumps(detail, default=str)))
 
 
 def _username_ok(name: str) -> bool:
@@ -185,54 +97,123 @@ def short_password_needed(n: int) -> str:
     return SIGN_UP_SHORT_PASSWORD.format(n=n, unit=unit)
 
 
-def auth_error(error: ApiError, *, creating: bool) -> ApiError:
-    """The words for a sign-in or sign-up that failed on the way. The general ones speak of changes
-    that may not have been saved, which a sign-in never has."""
-    then = "create your account" if creating else "sign in"
-    if error.status == 0:
-        return ApiError(0, f"FlexWeek can't reach its server. Close FlexWeek, open it again, then {then}.")
-    if error.status == 503:
-        return ApiError(503, f"FlexWeek can't open its saved data right now. Wait a minute, then {then}.")
-    return error
+class _Host:
+    """What the session asks of the computer (engine/py/src/session.rs), on the window's thread and on its
+    workers: a clock that only moves forward, the app's clock (which tests set), the name of a restore point
+    a request makes, and randomness."""
+
+    def steady_ms(self) -> int:
+        return int(time.monotonic() * 1000)
+
+    def request_clock(self) -> tuple[int, str]:
+        return int(wall_clock.seconds()), wall_clock.now().strftime("%Y-%m-%dT%H:%M")
+
+    def restore_token(self) -> str:
+        return secrets.token_hex(8)
+
+    def entropy(self) -> object:
+        return secrets
+
+
+HOST = _Host()
+
+
+class _Courier(QObject):
+    """Carries "an answer is ready" from the session's workers to the window's thread. One for the whole
+    program, never freed, so a worker never holds the last reference to a Qt object."""
+
+    woke = Signal(int)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.woke.connect(self.deliver, Qt.ConnectionType.QueuedConnection)
+
+    @Slot(int)
+    def deliver(self, key: int) -> None:
+        client = _CLIENTS.get(key)
+        if client is not None and isValid(client):
+            client._drain()
+
+
+_COURIER: _Courier | None = None
+# Each client by the number its session wakes it with.
+_CLIENTS: weakref.WeakValueDictionary[int, NativeClient] = weakref.WeakValueDictionary()
+_KEYS = itertools.count(1)
+
+
+def _wake(key: int) -> None:
+    """Called by the session on a worker's thread: only posts to the window's thread."""
+    courier = _COURIER
+    if courier is not None:
+        courier.woke.emit(key)
+
+
+def stop_workers() -> None:
+    """At quit: drop requests not started and wait for the ones being answered, so none writes after the
+    app has let go of its files."""
+    flexweek_engine.stop_session_workers()
 
 
 class NativeClient(QObject):
-    expired = Signal()
+    """The window's side of the session: sends requests, keeps what to do with each answer by its number,
+    and takes the session's events when a worker wakes it or the next request reaches its 30-second limit.
+    `inline` answers each request as it is sent (the desktop tests' light app); the answer still comes on a
+    later turn of the window's loop."""
 
-    def __init__(self, origin: str, parent: QObject | None = None) -> None:
+    expired = Signal()
+    # A flow the session ran (signing in, up or out) finished: its event (engine/app/src/session/account.rs).
+    told = Signal(dict)
+
+    def __init__(self, database: str | Path, parent: QObject | None = None, *, inline: bool = False) -> None:
         super().__init__(parent)
-        self.origin = _local_origin(origin)
-        self.account: dict | None = None
-        self.epoch = 0
-        self._replies: dict[QNetworkAccessManager, set[QNetworkReply]] = {}
-        self._manager = self._new_manager([])
+        global _COURIER
+        if _COURIER is None:
+            _COURIER = _Courier()
+        self.database = str(database)
+        key = next(_KEYS)
+        _CLIENTS[key] = self
+        self._core = flexweek_engine.NativeCore(self.database, HOST, lambda: _wake(key), inline)
+        # Requests sent and not yet answered: what to do with each answer, by number.
+        self._waiting: dict[int, tuple[Callable[[dict], None], Callable[[ApiError], None]]] = {}
+        self._limit = QTimer(self)
+        self._limit.setSingleShot(True)
+        self._limit.setTimerType(Qt.TimerType.PreciseTimer)
+        self._limit.timeout.connect(self._drain)
 
     def _check_thread(self) -> None:
         if QThread.currentThread() != self.thread():
             raise RuntimeError("The native API client must be used on its Qt thread.")
 
-    def _new_manager(self, cookies: list[QNetworkCookie]) -> QNetworkAccessManager:
-        manager = QNetworkAccessManager(self)
-        manager.setProxy(QNetworkProxy(QNetworkProxy.ProxyType.NoProxy))
-        jar = _CookieJar(manager)
-        jar.setAllCookies(cookies)
-        manager.setCookieJar(jar)
-        self._replies[manager] = set()
-        return manager
+    def _send(self, command: dict) -> dict:
+        answer = json.loads(self._core.send(json.dumps(command, allow_nan=False)))
+        if not answer.get("ok"):
+            raise ValueError(answer.get("error", "The session refused the command."))
+        return answer
 
-    def _rotate(self, cookies: list[QNetworkCookie]) -> None:
-        previous = self._manager
-        self.epoch += 1
-        self._manager = self._new_manager(cookies)
-        # Abort can emit finished synchronously. Install the new epoch and jar first.
-        for reply in tuple(self._replies[previous]):
-            reply.abort()
-        self._retire(previous)
+    def _frame(self) -> dict:
+        return json.loads(self._core.view("frame"))
 
-    def _retire(self, manager: QNetworkAccessManager) -> None:
-        if manager != self._manager and not self._replies.get(manager):
-            self._replies.pop(manager, None)
-            manager.deleteLater()
+    def command(self, command: dict) -> dict:
+        """One command to the session (engine/app/src/session/mod.rs); a refusal raises ValueError. A command
+        may send a request of the session's own (signing in), so the limit's timer is set again."""
+        self._check_thread()
+        answer = self._send(command)
+        self._arm()
+        return answer
+
+    def view(self, name: str) -> dict:
+        """One of the session's views (engine/app/src/session/mod.rs)."""
+        return json.loads(self._core.view(name))
+
+    @property
+    def account(self) -> dict | None:
+        return self._frame()["account"]
+
+    @property
+    def epoch(self) -> int:
+        """Rises on every sign-in, sign-out and kept session taken up; an answer to a request sent in an
+        earlier one is dropped."""
+        return self._frame()["epoch"]
 
     def set_account(self, identity: dict) -> None:
         self._check_thread()
@@ -243,32 +224,19 @@ class NativeClient(QObject):
             or not identity["username"]
         ):
             raise ValueError("An account needs a valid id and username.")
-        jar = self._manager.cookieJar()
-        assert isinstance(jar, _CookieJar)
-        self.account = {"id": identity["id"], "username": identity["username"]}
-        self._rotate(jar.snapshot())
+        self._send({"cmd": "set_account", "id": identity["id"], "username": identity["username"]})
 
     def reset(self) -> None:
         self._check_thread()
-        self.account = None
-        self._rotate([])
+        self._send({"cmd": "reset"})
 
     def session_token(self) -> str | None:
-        jar = self._manager.cookieJar()
-        for cookie in jar.cookiesForUrl(QUrl(self.origin + "/")):
-            if bytes(cookie.name().data()) == SESSION_COOKIE:
-                return bytes(cookie.value().data()).decode("ascii", "replace") or None
-        return None
+        return self._frame()["token"]
 
     def adopt_session(self, token: str) -> None:
-        """A session kept from an earlier launch. That launch's server was on another port, so the
-        cookie is set again for this origin; the next request says whether it still works."""
+        """A session kept from an earlier launch; the next request says whether it still works."""
         self._check_thread()
-        self.account = None
-        self._rotate([])
-        jar = self._manager.cookieJar()
-        cookie = QNetworkCookie(SESSION_COOKIE, token.encode("ascii"))
-        jar.setCookiesFromUrl([cookie], QUrl(self.origin + "/"))
+        self._send({"cmd": "adopt_session", "token": token})
 
     @staticmethod
     def _notify_error(callback: Callable[[ApiError], None], error: ApiError) -> None:
@@ -284,99 +252,56 @@ class NativeClient(QObject):
         payload: dict | None,
         on_success: Callable[[dict], None],
         on_error: Callable[[ApiError], None],
-    ) -> QNetworkReply | None:
+    ) -> None:
         self._check_thread()
-        _api_path(path)
-        method = method.upper()
-        if method not in {"GET", "POST", "PUT", "DELETE", "PATCH"}:
-            raise ValueError("Unsupported API request method.")
         if payload is not None and not isinstance(payload, dict):
             raise ValueError("API request bodies must be JSON objects.")
-        encoded = json.dumps(payload, allow_nan=False).encode() if payload is not None else b""
-        account_id = self.account["id"] if self.account is not None else None
-        epoch = self.epoch
+        sent = self._send({"cmd": "request", "method": method, "path": path, "body": payload})
+        self._waiting[sent["number"]] = (on_success, on_error)
+        self._arm()
 
-        def finish(status: int, body: bytes, reached: bool) -> None:
-            if epoch != self.epoch:
-                return
-            result: object = None
-            if len(body) <= MAX_RESPONSE_BYTES:
-                with contextlib.suppress(ValueError, UnicodeDecodeError):
-                    result = json.loads(body) if body else {}
-            detail = result.get("detail") if isinstance(result, dict) else None
-            if not 200 <= status < 300 or not reached:
-                self._notify_error(on_error, _error(status, detail))
-                expired = (
-                    status == 401
-                    and account_id is not None
-                    and detail
-                    not in {
-                        "Incorrect password",
-                        "Incorrect username or password",
-                        "Incorrect username or recovery code",
-                    }
-                    and epoch == self.epoch
-                )
-                if expired:
-                    self.expired.emit()
-                return
-            if not isinstance(result, dict) or (not body and status != 204):
-                self._notify_error(on_error, ApiError(status, "FlexWeek returned an unreadable response."))
-                return
-            try:
-                on_success(result)
-            except Exception:
-                logger.error("A native request result handler failed.")
-                self._notify_error(on_error, ApiError(status, "FlexWeek could not display this response."))
+    def _arm(self) -> None:
+        """Look again when the next request reaches its limit: one that never comes back wakes no one."""
+        deadline = self._frame()["next_deadline"]
+        if deadline is None:
+            self._limit.stop()
+        else:
+            self._limit.start(max(0, deadline - HOST.steady_ms()))
 
-        return self._send(method, path, encoded, account_id, finish)
+    def _drain(self) -> None:
+        """Takes the session's next answer: each worker's wake, or the limit's timer, brings one. One per
+        turn of the window's loop, as each answer landed on its own before, so what the window queues while
+        handling one runs before the next is read; with it, the end of the session if that answer said so."""
+        while isValid(self):
+            event = json.loads(self._core.take_event())
+            if event is None:
+                break
+            if event["kind"] == "expired":
+                self.expired.emit()
+                continue
+            if event["kind"] in {"answer", "dropped"}:
+                self._hand(event)
+            else:
+                self.told.emit(event)
+            if isValid(self) and self._core.take_expiry():
+                self.expired.emit()
+            break
+        if isValid(self):
+            self._arm()
 
-    def _send(
-        self,
-        method: str,
-        path: str,
-        encoded: bytes,
-        account_id: int | None,
-        finish: Callable[[int, bytes, bool], None],
-    ) -> QNetworkReply | None:
-        """Send one request to the local server; `finish` gets its status, its body, and whether it got
-        an answer at all. The tests' light app answers in-process here instead (desktop/tests)."""
-        request = QNetworkRequest(QUrl(self.origin + path))
-        request.setAttribute(
-            QNetworkRequest.Attribute.RedirectPolicyAttribute,
-            QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
-        )
-        for name, value in self.headers(account_id).items():
-            request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
-        manager = self._manager
-        reply = manager.sendCustomRequest(request, method.encode("ascii"), QByteArray(encoded))
-        self._replies[manager].add(reply)
-        timer = QTimer(reply)
-        timer.setSingleShot(True)
-        timer.timeout.connect(reply.abort)
-        timer.start(REQUEST_TIMEOUT_MS)
-
-        def finished() -> None:
-            timer.stop()
-            self._replies[manager].discard(reply)
-            try:
-                status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute) or 0
-                body = bytes(reply.readAll().data())
-                finish(status, body, reply.error() == QNetworkReply.NetworkError.NoError)
-            finally:
-                reply.deleteLater()
-                self._retire(manager)
-
-        reply.finished.connect(finished)
-        return reply
-
-    def headers(self, account_id: int | None) -> dict[str, str]:
-        sent = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Origin": self.origin,
-            "X-FlexWeek-Request": "1",
-        }
-        if account_id is not None:
-            sent["X-FlexWeek-Account"] = str(account_id)
-        return sent
+    def _hand(self, event: dict) -> None:
+        """An answer to its request's callbacks; one that no longer counts goes to no one."""
+        callbacks = self._waiting.pop(event["number"], None)
+        if callbacks is None or event["kind"] == "dropped":
+            return
+        on_success, on_error = callbacks
+        if not event["ok"]:
+            self._notify_error(on_error, ApiError(event["status"], event["message"]))
+            return
+        try:
+            on_success(event["body"])
+        except Exception:
+            logger.error("A native request result handler failed.")
+            self._notify_error(
+                on_error, ApiError(event["status"], "FlexWeek could not display this response.")
+            )

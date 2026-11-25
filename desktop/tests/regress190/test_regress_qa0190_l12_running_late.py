@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from desktop.tests.blocks_helper import put_block
-from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401
+from desktop.tests.logic_support import database, qapp, settled, signed_in, wait_until  # noqa: F401
 from desktop.tests.regress190.test_regress_qa0190_p1_split import homework
 
 KNOWN = (
@@ -25,8 +25,8 @@ KNOWN = (
 KNOWN_WORDS = "known failure (L12.3): the preview says '1 tasks move · 0 tasks no longer fit'"
 
 
-def late(qapp, server, name: str, minutes: int, pinned: bool = False) -> tuple[dict, dict, list[str]]:
-    session = signed_in(qapp, server.origin, name, create=True)  # no homework hours: any time of day
+def late(qapp, database, name: str, minutes: int, pinned: bool = False) -> tuple[dict, dict, list[str]]:
+    session = signed_in(qapp, database, name, create=True)  # no homework hours: any time of day
     wait_until(qapp, lambda: session.preferences is not None)
     monday_5pm = datetime.fromisoformat(session.week_start) + timedelta(hours=17)
     session.now_ms = lambda: int(monday_5pm.timestamp() * 1000)
@@ -47,22 +47,22 @@ def late(qapp, server, name: str, minutes: int, pinned: bool = False) -> tuple[d
 
 
 @pytest.mark.parametrize("minutes", [15, 30, 60])
-def test_l12_the_running_block_shifts_by_the_delay_and_keeps_its_length(qapp, server, minutes) -> None:
-    _block, placed, _said = late(qapp, server, f"l12_{minutes}", minutes)
+def test_l12_the_running_block_shifts_by_the_delay_and_keeps_its_length(qapp, database, minutes) -> None:
+    _block, placed, _said = late(qapp, database, f"l12_{minutes}", minutes)
     start = 16 * 60 + 45 + minutes
     wanted = ([0], f"{start // 60:02d}:{start % 60:02d}", 60)
     assert (placed.get("days"), placed.get("start"), placed.get("duration_min")) == wanted, placed
 
 
-def test_l12_nothing_lands_before_now(qapp, server) -> None:
-    _block, placed, _said = late(qapp, server, "l12_floor", 30)
+def test_l12_nothing_lands_before_now(qapp, database) -> None:
+    _block, placed, _said = late(qapp, database, "l12_floor", 30)
     day = (placed.get("days") or [None])[0]
     hh, mm = map(int, placed["start"].split(":"))
     assert day == 0 and hh * 60 + mm >= 17 * 60, placed
 
 
-def test_l12_the_preview_says_1_task_moves(qapp, server) -> None:
-    _block, _placed, said = late(qapp, server, "l12_words", 30)
+def test_l12_the_preview_says_1_task_moves(qapp, database) -> None:
+    _block, _placed, said = late(qapp, database, "l12_words", 30)
     assert said[-1].startswith("1 task moves"), said
 
 
@@ -72,8 +72,8 @@ KNOWN_PINNED = (
 )
 
 
-def test_l12_a_pinned_running_block_also_shifts_by_the_delay(qapp, server) -> None:
+def test_l12_a_pinned_running_block_also_shifts_by_the_delay(qapp, database) -> None:
     """Rule 1 names no exception for a block the student placed by hand; left where it is, it overlaps
     the 17:00-17:30 late block."""
-    _block, placed, said = late(qapp, server, "l12_pinned", 30, pinned=True)
+    _block, placed, said = late(qapp, database, "l12_pinned", 30, pinned=True)
     assert (placed.get("days"), placed.get("start")) == ([0], "17:15"), (placed.get("start"), said)

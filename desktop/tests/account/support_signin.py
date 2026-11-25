@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication
 from desktop.native.kept import KeptSession
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
-from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for, _close
+from desktop.tests.light_app import InProcessApi, _client_for, _close
 from desktop.tests.logic_support import card_phase, past_recovery, past_setup, sign_up
 from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
@@ -56,7 +56,7 @@ class Computer:
         if not keep_look_file:
             look_file().unlink(missing_ok=True)
         with _client_for(self.api):
-            window = NativeWindow(ORIGIN, kept=self.kept)
+            window = NativeWindow(self.api.database, kept=self.kept)
         window.show()
         self.windows.append(window)
         wait_until(self.qapp, lambda: not window.session.busy, what="the launch settling")
