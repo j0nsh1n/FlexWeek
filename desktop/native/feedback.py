@@ -12,7 +12,10 @@ from desktop.native.version import VERSION
 
 # The form's pre-filled link exactly as the form gives it, made with these two sample answers. Empty means
 # no form yet, and then the button is not shown.
-FORM_LINK = ""
+FORM_LINK = (
+    "https://docs.google.com/forms/d/e/1FAIpQLSeA3P9-IWlLc44HPzrNT-FnnEL7D-0FZfTzSXxO9nuhWKJ0rQ/viewform"
+    "?usp=pp_url&entry.1113372711=1.4.0&entry.710379005=test"
+)
 SAMPLE_VERSION = "1.4.0"
 SAMPLE_DEVICE = "test"
 
