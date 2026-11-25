@@ -70,7 +70,9 @@ Item {
             activeFocusOnTab: !root.phone
             Accessible.role: Accessible.Slider
             Accessible.name: "Resize settings sidebar"
-            Accessible.description: "Use Left and Right arrow keys to resize"
+            Accessible.description: "Section list width " + root.navWidth + " pixels. Use Left and Right arrow keys to resize"
+            Accessible.onIncreaseAction: navDivider.stepResize(16)
+            Accessible.onDecreaseAction: navDivider.stepResize(-16)
 
             function stepResize(delta) {
                 if (!root.panel || !root.panel.setNavWidth)

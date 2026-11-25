@@ -221,6 +221,29 @@ def test_dragging_the_day_divider_resizes_the_right_panel_and_remembers_it(
     pump(qapp)
     assert int(bridge.property("daySideWidth")) == 312
 
+    # Assistive technology reads the current width and can adjust it, like SliderRow.
+    from PySide6.QtGui import QAccessible
+
+    iface = QAccessible.queryAccessibleInterface(divider)
+    assert iface is not None
+    assert iface.role() == QAccessible.Role.Slider
+    assert iface.text(QAccessible.Text.Name) == "Resize day sidebar"
+    assert "312" in iface.text(QAccessible.Text.Description)
+    actions = iface.actionInterface()
+    assert actions is not None
+    names = list(actions.actionNames())
+    assert "Increase" in names
+    assert "Decrease" in names
+    # Screen readers invoke the advertised action by name; the convenience
+    # increaseAction() slot does not reach QML handlers, so call doAction.
+    actions.doAction("Increase")
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 328
+    assert "328" in iface.text(QAccessible.Text.Description)
+    actions.doAction("Decrease")
+    pump(qapp)
+    assert int(bridge.property("daySideWidth")) == 312
+
     bridge.settingsBridge.setDensity("comfortable")
     pump(qapp)
 

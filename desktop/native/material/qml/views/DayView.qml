@@ -213,7 +213,9 @@ Item {
         activeFocusOnTab: !root.phone && !root.passive
         Accessible.role: Accessible.Slider
         Accessible.name: "Resize day sidebar"
-        Accessible.description: "Use Left and Right arrow keys to resize"
+        Accessible.description: "Sidebar width " + root.sideWidth + " pixels. Use Left and Right arrow keys to resize"
+        Accessible.onIncreaseAction: sideDivider.stepResize(16)
+        Accessible.onDecreaseAction: sideDivider.stepResize(-16)
 
         function stepResize(delta) {
             if (root.passive || !root.bridge || !root.bridge.setDaySideWidth)

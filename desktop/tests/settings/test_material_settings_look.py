@@ -318,6 +318,29 @@ def test_dragging_the_settings_nav_divider_resizes_collapses_and_remembers_width
     assert panel.property("state")["navWidth"] == 220
     _pump(qapp)
 
+    # Assistive technology reads the current width and can adjust it, like SliderRow.
+    from PySide6.QtGui import QAccessible
+
+    iface = QAccessible.queryAccessibleInterface(divider)
+    assert iface is not None
+    assert iface.role() == QAccessible.Role.Slider
+    assert iface.text(QAccessible.Text.Name) == "Resize settings sidebar"
+    assert "220" in iface.text(QAccessible.Text.Description)
+    actions = iface.actionInterface()
+    assert actions is not None
+    names = list(actions.actionNames())
+    assert "Increase" in names
+    assert "Decrease" in names
+    # Screen readers invoke the advertised action by name; the convenience
+    # increaseAction() slot does not reach QML handlers, so call doAction.
+    actions.doAction("Increase")
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 236
+    assert "236" in iface.text(QAccessible.Text.Description)
+    actions.doAction("Decrease")
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 220
+
 
 def test_positive_saved_corner_override_applies_to_shared_cards_and_buttons(
     qapp: QApplication, window: NativeWindow
