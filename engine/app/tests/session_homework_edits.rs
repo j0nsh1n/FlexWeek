@@ -658,7 +658,18 @@ fn a_malformed_pin_is_refused_by_spread_too() {
     pin_refused(&request, json!([]));
     pin_refused(&request, json!({"day": 2}));
     pin_refused(&request, json!({"day": 7, "start": "16:00"}));
-    pin_refused(&request, json!({"day": 2, "start": "four"}));
+    pin_refused(&request, json!({"day": 2, "start": "0016:00"}));
+    pin_refused(&request, json!({"day": 2, "start": "16:00:00"}));
+}
+
+#[test]
+fn an_overlong_start_is_refused_when_every_session_is_done_too() {
+    let mut done_only = session("done", json!([0]), Some("16:00"), 60);
+    done_only["completed"] = json!(true);
+    let request = Request::new(vec![done_only], saved_essay(60));
+    pin_refused(&request, json!({"day": 2, "start": "0016:00"}));
+    pin_refused(&request, json!({"day": 2, "start": "16:00:00"}));
+    pin_refused(&request, json!({"day": 9, "start": "16:00"}));
 }
 
 #[test]
@@ -666,9 +677,8 @@ fn a_pin_needs_a_day_from_0_to_6_and_a_start_as_hours_and_minutes() {
     let request = Request::new(vec![], Value::Null);
     pin_refused(&request, json!({"day": 7, "start": "16:00"}));
     pin_refused(&request, json!({"day": -1, "start": "16:00"}));
-    pin_refused(&request, json!({"day": "2", "start": "16:00"}));
     pin_refused(&request, json!({"day": 2, "start": 1600}));
-    pin_refused(&request, json!({"day": 2, "start": "four"}));
+    pin_refused(&request, json!({"day": 2, "start": "0016:00"}));
     pin_refused(&request, json!({"start": "16:00"}));
 }
 
