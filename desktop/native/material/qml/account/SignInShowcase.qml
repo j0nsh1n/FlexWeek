@@ -10,10 +10,15 @@ Item {
     property var theme
     property bool reduceMotion: false
     property bool highContrast: false
+    property bool paused: false
+    property int focusedDot: -1
     readonly property bool staticMode: root.reduceMotion || Motion.pace <= 0
     readonly property bool autoAdvancing: slideTimer.running
     property int slideIntervalMs: 4800
     property int currentSlide: 0
+
+    Accessible.role: Accessible.Pane
+    Accessible.name: "FlexWeek preview"
 
     readonly property var slides: [
         {
@@ -80,7 +85,7 @@ Item {
         objectName: "signInSlideTimer"
         interval: root.slideIntervalMs
         repeat: true
-        running: root.visible && !root.staticMode && !panelHover.hovered
+        running: root.visible && !root.staticMode && !panelHover.hovered && !root.paused && root.focusedDot < 0
         onTriggered: root.currentSlide = (root.currentSlide + 1) % root.slides.length
     }
 
@@ -138,13 +143,15 @@ Item {
             anchors.right: parent.right
             spacing: 18
 
-            // Elevated miniature showcase frame
+            // Elevated miniature showcase frame (decorative illustration; hidden from screen readers)
             Item {
                 id: stage
+                objectName: "signInStage"
                 width: Math.min(parent.width, 460)
                 height: 276
                 anchors.horizontalCenter: parent.horizontalCenter
                 clip: true
+                Accessible.ignored: true
 
                 // Slide 0: Week view with auto-placed homework
                 Item {
@@ -178,7 +185,7 @@ Item {
                                 text: "Nov 23 – 27"
                                 color: pal.inkSurface
                                 font.family: M3Font.heading
-                                font.pixelSize: 13
+                                font.pixelSize: M3Font.px(13, 13)
                                 font.weight: 600
                             }
                             Rectangle {
@@ -197,7 +204,7 @@ Item {
                                         text: "Plan homework"
                                         color: pal.inkPrimary
                                         font.family: M3Font.family
-                                        font.pixelSize: 10
+                                        font.pixelSize: M3Font.px(10, 10)
                                         font.weight: 600
                                     }
                                 }
@@ -233,7 +240,7 @@ Item {
                                         text: modelData.d
                                         color: modelData.today ? pal.primary : pal.inkMuted
                                         font.family: M3Font.family
-                                        font.pixelSize: 10
+                                        font.pixelSize: M3Font.px(10, 10)
                                         font.weight: modelData.today ? 700 : 500
                                     }
                                     // School block
@@ -247,7 +254,7 @@ Item {
                                             text: "School"
                                             color: root.classTone.ink
                                             font.family: M3Font.family
-                                            font.pixelSize: 9
+                                            font.pixelSize: M3Font.px(9, 9)
                                             font.weight: 600
                                         }
                                     }
@@ -263,7 +270,7 @@ Item {
                                             text: "Soccer"
                                             color: root.sportTone.ink
                                             font.family: M3Font.family
-                                            font.pixelSize: 9
+                                            font.pixelSize: M3Font.px(9, 9)
                                             font.weight: 600
                                         }
                                     }
@@ -281,7 +288,7 @@ Item {
                                             text: modelData.hw
                                             color: root.hwTone.ink
                                             font.family: M3Font.family
-                                            font.pixelSize: 9
+                                            font.pixelSize: M3Font.px(9, 9)
                                             font.weight: 600
                                         }
                                     }
@@ -325,13 +332,13 @@ Item {
                                     text: "Thursday · 1 thing left"
                                     color: pal.inkSurface
                                     font.family: M3Font.heading
-                                    font.pixelSize: 11
+                                    font.pixelSize: M3Font.px(11, 11)
                                     font.weight: 600
                                 }
                                 Rectangle {
                                     width: parent.width; height: 54; radius: 8; color: root.classTone.fill
                                     Rectangle { width: 3; height: parent.height - 8; x: 2; y: 4; radius: 1.5; color: root.classTone.bar }
-                                    Text { x: 10; y: 8; text: "School · 08:00–14:30"; color: root.classTone.ink; font.family: M3Font.family; font.pixelSize: 10; font.weight: 600 }
+                                    Text { x: 10; y: 8; text: "School · 08:00–14:30"; color: root.classTone.ink; font.family: M3Font.family; font.pixelSize: M3Font.px(10, 10); font.weight: 600 }
                                 }
                                 // Now indicator line
                                 Row {
@@ -344,8 +351,8 @@ Item {
                                     Rectangle { width: 3; height: parent.height - 8; x: 2; y: 4; radius: 1.5; color: root.hwTone.bar }
                                     Column {
                                         x: 10; y: 8; spacing: 2
-                                        Text { text: "History essay"; color: root.hwTone.ink; font.family: M3Font.family; font.pixelSize: 11; font.weight: 600 }
-                                        Text { text: "18:45–19:45 · Due tomorrow"; color: root.hwTone.ink; opacity: 0.8; font.family: M3Font.family; font.pixelSize: 9 }
+                                        Text { text: "History essay"; color: root.hwTone.ink; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
+                                        Text { text: "18:45–19:45 · Due tomorrow"; color: root.hwTone.ink; opacity: 0.8; font.family: M3Font.family; font.pixelSize: M3Font.px(9, 9) }
                                     }
                                 }
                             }
@@ -364,13 +371,13 @@ Item {
                                 color: pal.primaryContainer
                                 Column {
                                     x: 12; y: 12; width: parent.width - 24; spacing: 4
-                                    Text { text: "NOW"; color: pal.primary; font.family: M3Font.family; font.pixelSize: 9; font.weight: 700; font.letterSpacing: 0.8 }
-                                    Text { text: "Free for 1 h 45 m"; color: pal.inkPrimaryContainer; font.family: M3Font.heading; font.pixelSize: 13; font.weight: 700; width: parent.width; elide: Text.ElideRight }
-                                    Text { text: "Next: History essay"; color: pal.inkPrimaryContainer; opacity: 0.85; font.family: M3Font.family; font.pixelSize: 10; width: parent.width; elide: Text.ElideRight }
+                                    Text { text: "NOW"; color: pal.primary; font.family: M3Font.family; font.pixelSize: M3Font.px(9, 9); font.weight: 700; font.letterSpacing: 0.8 }
+                                    Text { text: "Free for 1 h 45 m"; color: pal.inkPrimaryContainer; font.family: M3Font.heading; font.pixelSize: M3Font.px(13, 13); font.weight: 700; width: parent.width; elide: Text.ElideRight }
+                                    Text { text: "Next: History essay"; color: pal.inkPrimaryContainer; opacity: 0.85; font.family: M3Font.family; font.pixelSize: M3Font.px(10, 10); width: parent.width; elide: Text.ElideRight }
                                     Item { width: 1; height: 6 }
                                     Rectangle {
                                         width: parent.width; height: 26; radius: 13; color: pal.primary
-                                        Text { anchors.centerIn: parent; text: "Start essay"; color: pal.inkPrimary; font.family: M3Font.family; font.pixelSize: 10; font.weight: 600 }
+                                        Text { anchors.centerIn: parent; text: "Start essay"; color: pal.inkPrimary; font.family: M3Font.family; font.pixelSize: M3Font.px(10, 10); font.weight: 600 }
                                     }
                                 }
                             }
@@ -384,7 +391,7 @@ Item {
                                 border.color: pal.outlineVariant
                                 Column {
                                     x: 12; y: 10; width: parent.width - 24; spacing: 8
-                                    Text { text: "November"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: 11; font.weight: 600 }
+                                    Text { text: "November"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
                                     Grid {
                                         columns: 7
                                         spacing: 4
@@ -399,7 +406,7 @@ Item {
                                                     text: String(index + 10)
                                                     color: index === 11 ? pal.inkPrimary : pal.inkMuted
                                                     font.family: M3Font.family
-                                                    font.pixelSize: 8
+                                                    font.pixelSize: M3Font.px(8, 8)
                                                     font.weight: index === 11 ? 700 : 400
                                                 }
                                             }
@@ -452,17 +459,17 @@ Item {
                                     }
                                     Column {
                                         anchors.centerIn: parent
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "1"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: 20; font.weight: 700 }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "left"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 9 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "1"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: M3Font.px(20, 20); font.weight: 700 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "left"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(9, 9) }
                                     }
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: parent.width - 92
                                     spacing: 3
-                                    Text { text: "NOW"; color: pal.primary; font.family: M3Font.family; font.pixelSize: 9; font.weight: 700; font.letterSpacing: 0.8 }
-                                    Text { text: "Free for 1 h 45 min"; color: pal.inkPrimaryContainer; font.family: M3Font.heading; font.pixelSize: 16; font.weight: 700 }
-                                    Text { text: "Next: History essay at 18:45"; color: pal.inkPrimaryContainer; opacity: 0.85; font.family: M3Font.family; font.pixelSize: 11 }
+                                    Text { text: "NOW"; color: pal.primary; font.family: M3Font.family; font.pixelSize: M3Font.px(9, 9); font.weight: 700; font.letterSpacing: 0.8 }
+                                    Text { text: "Free for 1 h 45 min"; color: pal.inkPrimaryContainer; font.family: M3Font.heading; font.pixelSize: M3Font.px(16, 16); font.weight: 700 }
+                                    Text { text: "Next: History essay at 18:45"; color: pal.inkPrimaryContainer; opacity: 0.85; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11) }
                                 }
                             }
                         }
@@ -481,13 +488,13 @@ Item {
                                 border.color: pal.outlineVariant
                                 Column {
                                     x: 12; y: 12; width: parent.width - 24; spacing: 8
-                                    Text { text: "Up next · 1"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: 11; font.weight: 600 }
+                                    Text { text: "Up next · 1"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
                                     Rectangle {
                                         width: parent.width; height: 48; radius: 8; color: root.hwTone.fill
                                         Column {
                                             x: 10; y: 8; spacing: 2
-                                            Text { text: "History essay"; color: root.hwTone.ink; font.family: M3Font.family; font.pixelSize: 11; font.weight: 600 }
-                                            Text { text: "18:45–19:45"; color: root.hwTone.ink; opacity: 0.8; font.family: M3Font.family; font.pixelSize: 9 }
+                                            Text { text: "History essay"; color: root.hwTone.ink; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
+                                            Text { text: "18:45–19:45"; color: root.hwTone.ink; opacity: 0.8; font.family: M3Font.family; font.pixelSize: M3Font.px(9, 9) }
                                         }
                                     }
                                 }
@@ -503,19 +510,19 @@ Item {
                                     x: 12; y: 12; width: parent.width - 24; spacing: 8
                                     Row {
                                         spacing: 6
-                                        Text { text: "Done"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: 11; font.weight: 600; anchors.verticalCenter: parent.verticalCenter }
+                                        Text { text: "Done"; color: pal.inkSurface; font.family: M3Font.heading; font.pixelSize: M3Font.px(11, 11); font.weight: 600; anchors.verticalCenter: parent.verticalCenter }
                                         Rectangle {
                                             width: 20; height: 16; radius: 8; color: pal.statusDoneTint
-                                            Text { anchors.centerIn: parent; text: "2"; color: pal.statusDone; font.family: M3Font.family; font.pixelSize: 9; font.weight: 700 }
+                                            Text { anchors.centerIn: parent; text: "2"; color: pal.statusDone; font.family: M3Font.family; font.pixelSize: M3Font.px(9, 9); font.weight: 700 }
                                         }
                                     }
                                     Rectangle {
                                         width: parent.width; height: 34; radius: 8; color: pal.panelSurface
-                                        Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "School · 08:00–14:30"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 10 }
+                                        Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "School · 08:00–14:30"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(10, 10) }
                                     }
                                     Rectangle {
                                         width: parent.width; height: 34; radius: 8; color: pal.panelSurface
-                                        Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "Soccer · 15:00–16:30"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 10 }
+                                        Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: "Soccer · 15:00–16:30"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(10, 10) }
                                     }
                                 }
                             }
@@ -561,7 +568,7 @@ Item {
                                         text: "24:18"
                                         color: pal.inkSurface
                                         font.family: "JetBrains Mono, monospace"
-                                        font.pixelSize: 26
+                                        font.pixelSize: M3Font.px(26, 26)
                                         font.weight: 700
                                     }
                                     Text {
@@ -569,7 +576,7 @@ Item {
                                         text: "Focus · 1 of 4"
                                         color: pal.primary
                                         font.family: M3Font.family
-                                        font.pixelSize: 10
+                                        font.pixelSize: M3Font.px(10, 10)
                                         font.weight: 600
                                     }
                                 }
@@ -579,7 +586,7 @@ Item {
                                 text: "History essay"
                                 color: pal.inkSurface
                                 font.family: M3Font.heading
-                                font.pixelSize: 16
+                                font.pixelSize: M3Font.px(16, 16)
                                 font.weight: 600
                             }
                             Row {
@@ -587,11 +594,11 @@ Item {
                                 spacing: 8
                                 Rectangle {
                                     width: 84; height: 30; radius: 15; color: pal.primary
-                                    Text { anchors.centerIn: parent; text: "Pause"; color: pal.inkPrimary; font.family: M3Font.family; font.pixelSize: 11; font.weight: 600 }
+                                    Text { anchors.centerIn: parent; text: "Pause"; color: pal.inkPrimary; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
                                 }
                                 Rectangle {
                                     width: 108; height: 30; radius: 15; color: pal.secondaryContainer
-                                    Text { anchors.centerIn: parent; text: "Mark finished"; color: pal.inkSecondaryContainer; font.family: M3Font.family; font.pixelSize: 11; font.weight: 600 }
+                                    Text { anchors.centerIn: parent; text: "Mark finished"; color: pal.inkSecondaryContainer; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
                                 }
                             }
                         }
@@ -633,7 +640,7 @@ Item {
                                         color: pal.primaryContainer
                                         M3Icon { anchors.centerIn: parent; name: "computer"; width: 28; height: 28; color: pal.primary }
                                     }
-                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Desktop"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 11; font.weight: 500 }
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Desktop"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 500 }
                                 }
                                 Row {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -653,7 +660,7 @@ Item {
                                         color: pal.primaryContainer
                                         M3Icon { anchors.centerIn: parent; name: "smartphone"; width: 28; height: 28; color: pal.primary }
                                     }
-                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Phone"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 11; font.weight: 500 }
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Phone"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 500 }
                                 }
                             }
                             Rectangle {
@@ -667,7 +674,7 @@ Item {
                                     anchors.centerIn: parent
                                     spacing: 6
                                     M3Icon { name: "check"; width: 14; height: 14; color: pal.statusDone; anchors.verticalCenter: parent.verticalCenter }
-                                    Text { text: "Synced · Encrypted end-to-end"; color: pal.statusDone; font.family: M3Font.family; font.pixelSize: 11; font.weight: 600 }
+                                    Text { text: "Synced · Encrypted end-to-end"; color: pal.statusDone; font.family: M3Font.family; font.pixelSize: M3Font.px(11, 11); font.weight: 600 }
                                 }
                             }
                         }
@@ -691,6 +698,8 @@ Item {
                     font.family: M3Font.heading
                     font.pixelSize: M3Font.px(20)
                     font.weight: 600
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
                 }
                 Text {
                     objectName: "signInSlideSubtitle"
@@ -701,6 +710,8 @@ Item {
                     color: pal.inkMuted
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(14)
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
                 }
             }
 
@@ -709,26 +720,73 @@ Item {
                 objectName: "signInSlideDots"
                 visible: !root.staticMode
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 8
+                spacing: 4
                 Repeater {
+                    id: dotRepeater
                     model: root.slides.length
-                    Rectangle {
+                    Item {
+                        id: dotItem
                         required property int index
                         objectName: "signInDot" + index
                         readonly property bool active: root.currentSlide === index
-                        width: active ? 24 : 8
-                        height: 8
-                        radius: 4
-                        color: active ? pal.primary : pal.outlineVariant
-                        Behavior on width { enabled: !root.staticMode; NumberAnimation { duration: Motion.fade(220, root.reduceMotion) } }
-                        TapHandler {
-                            onTapped: {
-                                root.currentSlide = index
-                                // Do not restart while hovered or paused; the running binding resumes when the pointer leaves.
-                                if (slideTimer.running)
-                                    slideTimer.restart()
+                        width: active ? 28 : 16
+                        height: 24
+                        activeFocusOnTab: activeFocus || (!root.staticMode && root.visible)
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: "Show picture " + (index + 1) + " of " + root.slides.length + ": " + root.slides[index].title
+                        Accessible.checkable: true
+                        Accessible.checked: active
+                        Accessible.onPressAction: dotItem.activate()
+
+                        function activate() {
+                            root.currentSlide = dotItem.index
+                            // Do not restart while hovered, focused or paused; running binding resumes when ready.
+                            if (slideTimer.running)
+                                slideTimer.restart()
+                        }
+
+                        onActiveFocusChanged: {
+                            if (activeFocus)
+                                root.focusedDot = index
+                            else if (root.focusedDot === index)
+                                root.focusedDot = -1
+                        }
+
+                        Keys.onPressed: (event) => {
+                            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                dotItem.activate()
+                                event.accepted = true
+                            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                                var step = event.key === Qt.Key_Right ? 1 : -1
+                                var next = (dotItem.index + step + root.slides.length) % root.slides.length
+                                var target = dotRepeater.itemAt(next)
+                                root.currentSlide = next
+                                if (target)
+                                    target.forceActiveFocus()
+                                event.accepted = true
                             }
                         }
+
+                        Rectangle {
+                            id: dotPill
+                            anchors.centerIn: parent
+                            width: dotItem.active ? 24 : 8
+                            height: 8
+                            radius: 4
+                            color: dotItem.active ? pal.primary : pal.outlineVariant
+                            Behavior on width { enabled: !root.staticMode; NumberAnimation { duration: Motion.fade(220, root.reduceMotion) } }
+                        }
+
+                        M3FocusRing {
+                            anchors.fill: dotPill
+                            anchors.margins: -4
+                            target: dotItem
+                            ring: pal.focusRing
+                            ringRadius: 8
+                        }
+
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: dotItem.activate() }
                     }
                 }
             }

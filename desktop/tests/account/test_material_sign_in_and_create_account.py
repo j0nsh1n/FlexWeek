@@ -282,11 +282,20 @@ def test_a_bad_load_asks_for_a_cpu_copy_instead_of_showing_the_widgets_sign_in(
 def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_reduce_or_off(
     qapp: QApplication, material_launches: LightLaunches
 ) -> None:
-    from desktop.tests.material_support import quick_of
+    from desktop.tests.material_support import focus_quick, quick_of
     from desktop.tests.window_support import look_file
 
     window = material_launches.launch()
     window.resize(1280, 800)
+    window.activateWindow()
+    focus_quick(window)
+    pump(qapp, 10)
+    quick = quick_of(window)
+    assert quick is not None
+    # Place the pointer on the form panel so a leftover Xvfb cursor at (0, 0) does not hover the showcase.
+    form = qml(window, "authSurface")
+    off_spot = form.mapToScene(QPointF(form.width() / 2, form.height() / 2)).toPoint()
+    QTest.mouseMove(quick, off_spot)
     pump(qapp, 10)
     showcase = qml(window, "signInShowcase")
     assert showcase is not None and showcase.property("visible") is True
@@ -299,9 +308,8 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     showcase.setProperty("slideIntervalMs", 60)
     wait_until(qapp, lambda: int(showcase.property("currentSlide")) > 0, timeout=3)
 
-    quick = quick_of(window)
-    assert quick is not None
     dot2 = qml(window, "signInDot2")
+    assert dot2.property("activeFocusOnTab") is True
     spot = dot2.mapToScene(QPointF(dot2.width() / 2, dot2.height() / 2)).toPoint()
     QTest.mouseMove(quick, spot)
     pump(qapp, 5)
@@ -313,13 +321,40 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     pump(qapp, 5)
     assert int(showcase.property("currentSlide")) == 2, "hovered slide must not advance after dot click"
 
-    # Moving the pointer off the showcase onto the form resumes rotation; narrowing hides it and stops timer.
-    form = qml(window, "authSurface")
-    off_spot = form.mapToScene(QPointF(form.width() / 2, form.height() / 2)).toPoint()
+    # Moving the pointer off the showcase onto the form resumes rotation.
     QTest.mouseMove(quick, off_spot)
     pump(qapp, 5)
     assert showcase.property("autoAdvancing") is True
 
+    # Claude #2: indicator dots are keyboard-operable and pause rotation while focused.
+    dot3 = qml(window, "signInDot3")
+    dot3.forceActiveFocus()
+    pump(qapp, 5)
+    QTest.keyClick(quick, Qt.Key.Key_Space)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 3
+    assert showcase.property("autoAdvancing") is False
+    QTest.keyClick(quick, Qt.Key.Key_Right)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 4
+    assert showcase.property("autoAdvancing") is False
+
+    # Focusing password or typing into username pauses rotation; clearing and returning leaves it clean.
+    pwd = qml(window, "password")
+    pwd.forceActiveFocus()
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is False
+    user = qml(window, "username")
+    user.forceActiveFocus()
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is True
+    account(window).setUsername("alex")
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is False
+    account(window).setUsername("")
+    pump(qapp, 5)
+
+    # Narrowing hides the showcase and stops the timer.
     window.resize(700, 800)
     pump(qapp, 10)
     assert showcase.property("visible") is False

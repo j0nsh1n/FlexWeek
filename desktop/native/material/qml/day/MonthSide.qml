@@ -17,7 +17,7 @@ Item {
     property var board
 
     visible: !phone
-    implicitWidth: Math.max(240, miniMonth.width + 32)
+    implicitWidth: Math.max(240, 7 * miniMonth.naturalCell + 12 + 32)
     implicitHeight: open ? (headerBar.height + miniMonth.height + 20) : (headerBar.height + 16)
     height: implicitHeight
     clip: true

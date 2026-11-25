@@ -134,10 +134,8 @@ FocusScope {
                 readonly property real tileWidth: root.secondHalf !== ""
                     ? Math.min(168, Math.max(88, Math.floor((width - 28) / 2)))
                     : Math.min(260, width)
-                readonly property int digitPx: Math.min(
-                    M3Font.px(compact ? 22 : 28),
-                    Math.max(15, Math.floor(tileWidth * 0.22))
-                )
+                readonly property int digitCap: Math.max(15, Math.floor(tileWidth * 0.22))
+                readonly property int digitPx: M3Font.px(compact ? 22 : 28, digitCap)
 
                 // Option C computer <-> phone graphic header
                 Rectangle {
@@ -287,7 +285,7 @@ FocusScope {
                                 text: root.firstHalf
                                 color: pal.inkSurface
                                 font.family: "JetBrains Mono, monospace"
-                                font.pixelSize: inner.digitPx
+                                font.pixelSize: M3Font.px(inner.compact ? 22 : 28, inner.digitCap)
                                 font.weight: 700
                                 font.letterSpacing: inner.compact ? 1.5 : 3
                             }
@@ -318,7 +316,7 @@ FocusScope {
                                 text: root.secondHalf
                                 color: pal.inkSurface
                                 font.family: "JetBrains Mono, monospace"
-                                font.pixelSize: inner.digitPx
+                                font.pixelSize: M3Font.px(inner.compact ? 22 : 28, inner.digitCap)
                                 font.weight: 700
                                 font.letterSpacing: inner.compact ? 1.5 : 3
                             }

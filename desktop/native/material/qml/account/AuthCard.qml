@@ -19,6 +19,9 @@ FocusScope {
     readonly property bool create: mode === "create"
     readonly property bool reset: mode === "reset"
     readonly property bool splitLayout: !phone && width >= 820
+    property bool formInteracted: false
+
+    onModeChanged: formInteracted = false
 
     M3Palette { id: palette; theme: root.theme }
 
@@ -32,6 +35,11 @@ FocusScope {
         theme: root.theme
         reduceMotion: root.reduceMotion
         highContrast: root.highContrast
+        paused: password.activeFocus
+            || recoveryCode.activeFocus
+            || recoverPassword.activeFocus
+            || keep.activeFocus
+            || (username.activeFocus && (root.formInteracted || username.text !== ""))
     }
 
     Rectangle {
@@ -136,7 +144,7 @@ FocusScope {
                     problem: bridge ? bridge.usernameProblem : ""
                     focus: true
                     KeyNavigation.tab: root.reset ? recoveryCode.field : password.field
-                    onEdited: (value) => bridge.setUsername(value)
+                    onEdited: (value) => { root.formInteracted = true; bridge.setUsername(value) }
                     onSubmitted: bridge.submit()
                 }
                 AccountField {
@@ -154,7 +162,7 @@ FocusScope {
                     text: bridge ? bridge.password : ""
                     hint: bridge ? bridge.passwordHint : ""
                     problem: bridge ? bridge.passwordProblem : ""
-                    onEdited: (value) => bridge.setPassword(value)
+                    onEdited: (value) => { root.formInteracted = true; bridge.setPassword(value) }
                     onSubmitted: bridge.submit()
                 }
 
@@ -186,7 +194,7 @@ FocusScope {
                     text: bridge ? bridge.recoveryCode : ""
                     problem: bridge ? bridge.recoveryProblem : ""
                     KeyNavigation.tab: recoverPassword.field
-                    onEdited: (value) => bridge.setRecoveryCode(value)
+                    onEdited: (value) => { root.formInteracted = true; bridge.setRecoveryCode(value) }
                     onSubmitted: bridge.submit()
                 }
                 AccountField {
@@ -203,7 +211,7 @@ FocusScope {
                     secret: true
                     text: bridge ? bridge.newPassword : ""
                     problem: bridge ? bridge.newPasswordProblem : ""
-                    onEdited: (value) => bridge.setNewPassword(value)
+                    onEdited: (value) => { root.formInteracted = true; bridge.setNewPassword(value) }
                     onSubmitted: bridge.submit()
                 }
 
