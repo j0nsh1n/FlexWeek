@@ -21,7 +21,7 @@ from backend.assignments import (
     planned_minutes_from_day,
     unplanned_minutes,
 )
-from backend.models import ProtectedWindow, WorkWindow, parse_due
+from backend.models import parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
@@ -197,6 +197,7 @@ def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str
     return f"{title}: {length_label(minutes)} ready to add before {due_label(due, today)}."
 
 
+HOURS_REFUSED = "Check the days and times of your study hours and protected time."
 SETUP_ALREADY_HERE = (
     "Nothing to copy: School and the fixed times you added in Setup are already in every week."
 )
@@ -4164,13 +4165,13 @@ class NativeSession(QObject):
         if self.account is None or self.preferences is None:
             return False
         try:
-            for window in protected:
-                ProtectedWindow.model_validate(window)
-            if work_windows is not None:
-                for window in work_windows:
-                    WorkWindow.model_validate(window)
-        except ValueError as error:
-            self._say(str(error))
+            flexweek_engine.check_hours_windows(
+                json.dumps(protected), None if work_windows is None else json.dumps(work_windows)
+            )
+        except ValueError:
+            # The engine's reason names fields, not what the student sees; the Study hours sheet checks
+            # its own rows first, so this is rarely reached.
+            self._say(HOURS_REFUSED)
             return False
         body = dict(self.preferences)
         body["protected"] = protected

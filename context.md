@@ -28,8 +28,9 @@
   request and reads the answer, and the window gets one event per flow (`signed_in`, `registered`, `auth_failed`,
   `signed_out`) for its own part (setup answers, the kept file, the focus store, loading the week). Pydantic leaves
   in P4 (Jonathan, 2026-11-23); controller.py checks blocks and homework with the engine (`checked_block`,
-  `checked_homework`, #168), and its remaining pydantic use is the hours windows (ProtectedWindow, WorkWindow). The
-  30-second sign-in
+  `checked_homework`, #168) and the hours windows with the engine (`check_hours_windows`, refused as "Check the
+  days and times of your study hours and protected time.", Jonathan 2026-11-24); it no longer uses pydantic's models.
+  The 30-second sign-in
   words are "FlexWeek stopped responding. ..." (Jonathan, 2026-11-24).
 - `tools/fwtest/port-ledger.toml` supports a `gone` field (the approved decision that removed what a deleted test
   tested, instead of Rust twins; pending Jonathan's confirmation); `fwtest gate` prints each `gone` file the branch
@@ -138,6 +139,9 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-24 (after the AFK run): #165, #166, #172-#176 merged; CI moved to Depot (#153); the hours windows are
+  checked by the engine with a plain refusal (branch feat/p4-hours-windows). Next: group 2's save core with group 3
+  (undo); Jonathan's picks from the Gemini redesign mockups (`~/.flexweek-ui-harness/scratch/design-2.0-richer/`).
 - 2026-11-24 (AFK run, run sheet `~/.flexweek-ui-harness/scratch/rust-2.0.0/p4-afk-2026-11-24.md`): merged #163
   (requests through the Rust session), #164 (status), #167 (autosave, saving before leaving), #168 (block and
   homework checks by the engine) and #169 (strip parity), each after a Gemini 4 Neon PASS and green CI. Held for
