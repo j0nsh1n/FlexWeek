@@ -31,6 +31,9 @@ permissions:
 
 jobs:
   windows:
+    # Developer builds are published as releases too (tag dev, dev-<sha>); the installers are only
+    # for version tags, so those releases skip this job instead of failing the tag check.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
