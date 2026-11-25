@@ -12,6 +12,7 @@ Item {
     property bool highContrast: false
     readonly property bool staticMode: root.reduceMotion || Motion.pace <= 0
     readonly property bool autoAdvancing: slideTimer.running
+    property int slideIntervalMs: 4800
     property int currentSlide: 0
 
     readonly property var slides: [
@@ -77,7 +78,7 @@ Item {
     Timer {
         id: slideTimer
         objectName: "signInSlideTimer"
-        interval: 4800
+        interval: root.slideIntervalMs
         repeat: true
         running: root.visible && !root.staticMode && !panelHover.hovered
         onTriggered: root.currentSlide = (root.currentSlide + 1) % root.slides.length
@@ -723,7 +724,9 @@ Item {
                         TapHandler {
                             onTapped: {
                                 root.currentSlide = index
-                                slideTimer.restart()
+                                // Do not restart while hovered or paused; the running binding resumes when the pointer leaves.
+                                if (slideTimer.running)
+                                    slideTimer.restart()
                             }
                         }
                     }

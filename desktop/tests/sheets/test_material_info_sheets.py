@@ -254,6 +254,18 @@ def test_an_update_found_shows_a_material_sheet_with_what_changed(
     assert _text(root, "updateNotes") == first_lines(NOTES)
     assert _focused(window) == "updateInstall"
 
+    # Finding 12: Update stays a centered floating pop-up at both desktop and narrow/phone widths.
+    for size in ((1280, 800), (480, 720)):
+        window.resize(*size)
+        pump(qapp, 20)
+        card = _one(root, "sheetCard")
+        card_top = float(card.property("y"))
+        card_h = float(card.property("height"))
+        parent_h = float(card.parentItem().property("height"))
+        assert abs((card_top + card_h / 2) - parent_h / 2) < 4, size
+    window.resize(1280, 800)
+    pump(qapp, 10)
+
 
 def test_update_now_starts_the_download_and_shows_progress_and_problems(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch

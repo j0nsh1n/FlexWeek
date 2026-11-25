@@ -716,3 +716,37 @@ def test_the_plan_notice_counts_what_the_plan_left(qapp, window, minutes: int, s
     assert _qml(root, "homeworkEmptyText").property("text") == empty
     kept = next(block for block in session.blocks if block.get("pinned"))
     assert (kept["duration_min"], kept["start"]) == (minutes, essay["start"])
+
+
+def test_homework_card_footer_survives_page_switch_and_place_now_works_from_keyboard(qapp, window) -> None:
+    """Finding 13: footer visibility derives from card data (not child .visible) and Place now is a
+    keyboard-operable button."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    from desktop.tests.material_support import quick_of
+
+    root = _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "sheet", "Math worksheet", 30, due)
+    settled(qapp, window)
+    _pump(qapp)
+
+    # Hide Week and return to it; tag and Place now must remain visible.
+    _bridge(window).showPage("day")
+    _pump(qapp, 10)
+    _bridge(window).showPage("week")
+    _pump(qapp, 10)
+
+    tag = _named(root, "homeworkTag")[0]
+    place_btn = _named(root, "homeworkPlaceNow")[0]
+    assert tag.property("visible") is True
+    assert place_btn.property("visible") is True
+    assert place_btn.property("activeFocusOnTab") is True
+
+    quick = quick_of(window)
+    assert quick is not None
+    place_btn.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Space)
+    wait_until(qapp, lambda: any(b.get("assignment_id") == "sheet" for b in window.session.blocks))

@@ -23,9 +23,12 @@ FocusScope {
 
     anchors.fill: parent
     property int desktopMaxWidth: 560
+    // Opt-in centered floating pop-up at narrow/phone widths too (used by UpdateSheet).
+    property bool alwaysCentered: false
+    readonly property bool bottomSheet: phone && !alwaysCentered
     readonly property int margin: 24
-    readonly property real cardWidth: phone ? width : Math.min(desktopMaxWidth, Math.max(0, width - 32))
-    readonly property real chrome: (phone ? 12 + 4 + 16 : 24) + titleText.height + 16 + 16 + footer.height + 24
+    readonly property real cardWidth: bottomSheet ? width : Math.min(desktopMaxWidth, Math.max(0, width - 32))
+    readonly property real chrome: (bottomSheet ? 12 + 4 + 16 : 24) + titleText.height + 16 + 16 + footer.height + 24
 
     M3Palette { id: pal; theme: root.theme }
 
@@ -104,15 +107,15 @@ FocusScope {
         objectName: "sheetCard"
         z: 1
         width: root.cardWidth
-        height: Math.min(root.height - (root.phone ? 24 : 48), root.chrome + body.implicitHeight)
+        height: Math.min(root.height - (root.bottomSheet ? 24 : 48), root.chrome + body.implicitHeight)
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter: root.phone ? undefined : parent.verticalCenter
-        anchors.bottom: root.phone ? parent.bottom : undefined
+        anchors.verticalCenter: root.bottomSheet ? undefined : parent.verticalCenter
+        anchors.bottom: root.bottomSheet ? parent.bottom : undefined
         color: pal.dialogSurface
         radius: pal.cornerFor(24)
         // A bottom sheet is square where it meets the screen edge.
         Rectangle {
-            visible: root.phone
+            visible: root.bottomSheet
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
@@ -125,7 +128,7 @@ FocusScope {
         TapHandler { }
 
         Rectangle {
-            visible: root.phone
+            visible: root.bottomSheet
             x: (parent.width - 32) / 2
             y: 12
             width: 32
@@ -137,7 +140,7 @@ FocusScope {
             id: titleText
             objectName: "sheetTitle"
             x: root.margin
-            y: root.phone ? 32 : 24
+            y: root.bottomSheet ? 32 : 24
             width: card.width - 2 * root.margin
             text: root.heading
             color: pal.inkSurface

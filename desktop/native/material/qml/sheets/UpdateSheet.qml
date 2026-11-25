@@ -10,6 +10,7 @@ SheetFrame {
     readonly property var f: sheets ? sheets.form : ({})
     heading: f.heading ? f.heading : ""
     desktopMaxWidth: 660
+    alwaysCentered: true
     objectName: "updateSheet"
     initialFocus: install
     onCloseRequested: sheets.closeSheet()

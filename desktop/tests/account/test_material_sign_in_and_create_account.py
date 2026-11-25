@@ -14,6 +14,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.setup_steps import WEEK
@@ -280,6 +282,7 @@ def test_a_bad_load_asks_for_a_cpu_copy_instead_of_showing_the_widgets_sign_in(
 def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_reduce_or_off(
     qapp: QApplication, material_launches: LightLaunches
 ) -> None:
+    from desktop.tests.material_support import quick_of
     from desktop.tests.window_support import look_file
 
     window = material_launches.launch()
@@ -290,6 +293,39 @@ def test_sign_in_showcase_animates_under_normal_motion_and_stays_static_under_re
     assert showcase.property("staticMode") is False
     assert showcase.property("autoAdvancing") is True
     assert qml(window, "signInSlideDots").property("visible") is True
+
+    # Finding 9: prove the timer actually advances slides, clicking a dot while hovered pauses on that
+    # slide instead of restarting rotation, and hiding the showcase stops the timer.
+    showcase.setProperty("slideIntervalMs", 60)
+    wait_until(qapp, lambda: int(showcase.property("currentSlide")) > 0, timeout=3)
+
+    quick = quick_of(window)
+    assert quick is not None
+    dot2 = qml(window, "signInDot2")
+    spot = dot2.mapToScene(QPointF(dot2.width() / 2, dot2.height() / 2)).toPoint()
+    QTest.mouseMove(quick, spot)
+    pump(qapp, 5)
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, spot)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 2
+    assert showcase.property("autoAdvancing") is False
+    QTest.qWait(140)
+    pump(qapp, 5)
+    assert int(showcase.property("currentSlide")) == 2, "hovered slide must not advance after dot click"
+
+    # Moving the pointer off the showcase onto the form resumes rotation; narrowing hides it and stops timer.
+    form = qml(window, "authSurface")
+    off_spot = form.mapToScene(QPointF(form.width() / 2, form.height() / 2)).toPoint()
+    QTest.mouseMove(quick, off_spot)
+    pump(qapp, 5)
+    assert showcase.property("autoAdvancing") is True
+
+    window.resize(700, 800)
+    pump(qapp, 10)
+    assert showcase.property("visible") is False
+    assert showcase.property("autoAdvancing") is False
+    window.resize(1280, 800)
+    pump(qapp, 10)
 
     # Reduce motion and Animations Off both freeze the showcase on a single static scene.
     for motion in ("reduce", "off"):

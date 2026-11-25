@@ -139,9 +139,12 @@ Rectangle {
         }
 
         Item {
+            id: footerRow
+            readonly property bool showTag: card.tag !== ""
+            readonly property bool showPlaceNow: !card.passive
             width: parent.width
-            height: Math.max(chip.visible ? chip.height : 0, placeNowBtn.visible ? placeNowBtn.implicitHeight : 0)
-            visible: chip.visible || placeNowBtn.visible
+            height: Math.max(showTag ? chip.height : 0, showPlaceNow ? placeNowBtn.height : 0)
+            visible: showTag || showPlaceNow
 
             Tag {
                 id: chip
@@ -149,7 +152,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.leftMargin: grip.width + 8
                 anchors.verticalCenter: parent.verticalCenter
-                visible: card.tag !== ""
+                visible: footerRow.showTag
                 theme: card.theme
                 density: card.density
                 reduceMotion: card.reduceMotion
@@ -158,22 +161,23 @@ Rectangle {
                 text: card.tag
             }
 
-            Text {
+            Button {
                 id: placeNowBtn
                 objectName: "homeworkPlaceNow"
-                visible: !card.passive
+                visible: footerRow.showPlaceNow
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                height: 32
+                implicitHeight: 32
+                theme: card.theme
+                density: card.density
+                reduceMotion: card.reduceMotion
+                highContrast: card.highContrast
+                kind: "text"
                 text: "Place now"
-                color: m3.primary
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(12)
-                font.weight: 600
-                HoverHandler { cursorShape: Qt.PointingHandCursor }
-                TapHandler {
-                    gesturePolicy: TapHandler.WithinBounds
-                    onTapped: card.activated()
-                }
+                accessName: "Place " + card.title + " now"
+                activeFocusOnTab: !card.passive
+                onClicked: card.activated()
             }
         }
     }
