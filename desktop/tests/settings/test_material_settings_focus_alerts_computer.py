@@ -6,13 +6,14 @@ from __future__ import annotations
 import re
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlProperty
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from backend import clock as wall_clock
-from desktop.native.window import NativeWindow
+from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.settings.support_material_settings import (
@@ -199,7 +200,7 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     """Findings 3, 5, 6, 7: UI-driven Copy, Start a new code, Close, Escape, focus cycle/restore,
     service loss clearing stale code, pending-callback cancellation, and 320 px layout fit."""
     status: dict | None = {}
-    codes = iter(["1234 5678", "9012 3456", "1234 5678", "1234 5678", "1234 5678", "1234 5678"])
+    codes = iter(["1234 5678", "9012 3456", "1234 5678", "1234 5678", "1234 5678", "1234 5678", "1234 5678"])
     monkeypatch.setattr(
         window.session, "begin_pairing", lambda done: done({"display_code": next(codes)}, None) or True
     )
@@ -248,27 +249,45 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert str(_named(root, "pairingCodeText")[0].property("text")) == "9012 3456"
 
     # At 320 px phone width and Larger text, both tiles and both action buttons stay within the viewport.
-    _panel(window).setTextSize("larger")
-    window.resize(320, 640)
-    _pump(qapp, 15)
-    scroll = _named(root, "pairingScroll")[0]
-    s_left = scroll.mapToScene(QPointF(0, 0)).x()
-    s_right = scroll.mapToScene(QPointF(scroll.width(), 0)).x()
-    for part_name in ("pairingTileFirst", "pairingTileSecond", "pairCopy", "pairNewCode"):
-        part = _named(root, part_name)[0]
-        p_left = part.mapToScene(QPointF(0, 0)).x()
-        p_right = part.mapToScene(QPointF(part.width(), 0)).x()
-        assert p_left >= s_left - 1 and p_right <= s_right + 1, part_name
-    _panel(window).setTextSize("normal")
-    window.resize(1280, 800)
-    _pump(qapp, 10)
+    dialog = _named(root, "pairingDialog")[0]
+    assert QQmlProperty(dialog, "Accessible.name").read() == "Pair a phone"
+    window.setMinimumWidth(320)
+    try:
+        _panel(window).setTextSize("larger")
+        window.resize(320, 640)
+        _pump(qapp, 15)
+        scroll = _named(root, "pairingScroll")[0]
+        s_left = scroll.mapToScene(QPointF(0, 0)).x()
+        s_right = scroll.mapToScene(QPointF(scroll.width(), 0)).x()
+        for part_name in ("pairingTileFirst", "pairingTileSecond", "pairCopy", "pairNewCode"):
+            part = _named(root, part_name)[0]
+            p_left = part.mapToScene(QPointF(0, 0)).x()
+            p_right = part.mapToScene(QPointF(part.width(), 0)).x()
+            assert p_left >= s_left - 1 and p_right <= s_right + 1, part_name
+    finally:
+        _panel(window).setTextSize("normal")
+        window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        _pump(qapp, 10)
 
     # Escape closes the dialog and restores keyboard focus to Pair a phone.
     _named(root, "pairCopy")[0].forceActiveFocus()
     _pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     _pump(qapp, 10)
-    assert _named(root, "pairingDialog")[0].property("visible") is False
+    assert dialog.property("visible") is False
+    assert scene.activeFocusItem().objectName() == "row_pair"
+
+    # Clicking the scrim outside the dialog card also closes it and restores focus to Pair a phone.
+    status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
+    _click(qapp, window, row)
+    wait_until(qapp, lambda: _panel(window).property("state")["pairOpen"] is True)
+    scrim = _named(root, "pairingScrim")[0]
+    outside = scrim.mapToScene(QPointF(4, 4)).toPoint()
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(outside))
+    _pump(qapp, 10)
+    assert dialog.property("visible") is False
+    assert _panel(window).property("state")["pairOpen"] is False
     assert scene.activeFocusItem().objectName() == "row_pair"
 
     # Service loss (pairing_status returns None) closes & clears stale code with no fake 5:00 countdown.

@@ -2566,7 +2566,7 @@ class SettingsBridge(QObject):
             self._pair_code = ""
             self._pair_open = False
             if state != "paired":
-                self._pair_error = pair_problem(state) if state is not None else PAIR_CLOSED
+                self._pair_error = (pair_problem(state) if state is not None else "") or PAIR_CLOSED
         self._publish()
 
     @Slot()

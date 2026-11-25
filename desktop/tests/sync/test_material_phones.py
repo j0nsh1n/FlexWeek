@@ -12,7 +12,7 @@ from flexweek_engine import SyncService
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.settings_copy import DOT_WORDS, RELAY_SENTENCE, UNREACHABLE_WORDS
-from desktop.native.window import NativeWindow
+from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.settings.support_material_settings import (
     _click,
     _named,
@@ -150,8 +150,8 @@ def test_the_clock_warning_is_said_when_changes_were_held_back(
 def test_failed_phone_removal_does_not_override_healthy_sync_status_and_newer_sync_clears_old_error(
     qapp: QApplication, light_desk: NativeWindow, phone: SyncService, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Finding 8: removal failure shows its own note without flipping Synced to Not synced, and a newer
-    successful service sync clears a stale manual sync error."""
+    """Finding 8 & Claude #6: Syncing and linked-never-synced status words, removal failure leaving Synced
+    intact, and a newer successful service sync clearing a stale manual sync error."""
     window = light_desk
     root = _open_settings(qapp, window, "sync")
     _pair(window, phone)
@@ -159,10 +159,35 @@ def test_failed_phone_removal_does_not_override_healthy_sync_status_and_newer_sy
     panel._publish()
     _pump(qapp)
 
-    fake_status = {"syncing": False, "last_error": None, "last_sync_ms": 1000}
-    monkeypatch.setattr(window._sync, "status", lambda: dict(fake_status))
+    fake_status: dict[str, Any] = {"syncing": True, "last_error": None, "last_sync_ms": None}
+    real_sync = window._sync
+
+    class _SyncProxy:
+        def status(self) -> dict[str, Any]:
+            return dict(fake_status)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(real_sync, name)
+
+    monkeypatch.setattr(window, "_sync", _SyncProxy())
     panel._publish()
+    _pump(qapp)
+    assert panel.property("state")["syncStatusWord"] == "Syncing"
+    assert panel.property("state")["syncStatusTone"] == "info"
+    assert str(_named(root, "syncStatusWord")[0].property("text")) == "Syncing"
+
+    # Linked phone that has never synced reports Not synced with the warn tone.
+    fake_status["syncing"] = False
+    panel._publish()
+    _pump(qapp)
+    assert panel.property("state")["syncStatusWord"] == "Not synced"
+    assert panel.property("state")["syncStatusTone"] == "warn"
+
+    fake_status["last_sync_ms"] = 1000
+    panel._publish()
+    _pump(qapp)
     assert panel.property("state")["syncStatusWord"] == "Synced"
+    assert panel.property("state")["syncStatusTone"] == "ok"
 
     # A failed removal writes removeError but leaves Synced intact.
     monkeypatch.setattr(
@@ -194,14 +219,18 @@ def test_sync_status_card_wraps_controls_at_phone_width_and_large_text(
     root = _open_settings(qapp, window, "sync")
     _pair(window, phone)
     panel = _panel(window)
-    panel.setTextSize("large")
-    window.resize(320, 640)
-    panel._publish()
-    _pump(qapp, 15)
-    title_col = _named(root, "syncStatusTitleCol")[0]
-    controls = _named(root, "syncStatusControls")[0]
-    assert float(title_col.width()) >= 160
-    assert float(controls.y()) >= float(title_col.y()) + float(title_col.height()) - 1
-    panel.setTextSize("normal")
-    window.resize(1280, 800)
-    _pump(qapp)
+    window.setMinimumWidth(320)
+    try:
+        panel.setTextSize("large")
+        window.resize(320, 640)
+        panel._publish()
+        _pump(qapp, 15)
+        title_col = _named(root, "syncStatusTitleCol")[0]
+        controls = _named(root, "syncStatusControls")[0]
+        assert float(title_col.width()) >= 160
+        assert float(controls.y()) >= float(title_col.y()) + float(title_col.height()) - 1
+    finally:
+        panel.setTextSize("normal")
+        window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        _pump(qapp)
