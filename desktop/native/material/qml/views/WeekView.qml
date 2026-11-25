@@ -249,7 +249,7 @@ Item {
         anchors.top: leftRow.bottom
         anchors.topMargin: leftRow.visible ? root.outerPad : 0
         anchors.bottom: root.phone ? drawer.top : parent.bottom
-        anchors.bottomMargin: root.phone ? 0 : 4
+        anchors.bottomMargin: 0
         radius: root.phone ? 0 : m3.cornerFor(16)
         color: m3.cardSurface
         border.width: root.phone ? 0 : (root.highContrast ? 1.5 : 1)
@@ -391,7 +391,7 @@ Item {
         anchors.top: root.phone ? undefined : parent.top
         anchors.topMargin: root.phone ? 0 : 0
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: root.phone ? 0 : 4
+        anchors.bottomMargin: 0
         width: root.phone ? parent.width : root.drawerWidth
         height: root.phone ? Math.min(implicitHeight, Math.max(160, parent.height * 0.45)) : undefined
         bridge: root.bridge

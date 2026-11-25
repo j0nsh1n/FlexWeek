@@ -257,7 +257,7 @@ Rectangle {
             objectName: "cardMenu"
             open: false
             focus: true
-            activeFocusOnTab: open && !drawer.passive
+            activeFocusOnTab: activeFocus || (open && !drawer.passive)
             onActiveFocusChanged: {
                 if (!activeFocus && open)
                     drawer.closeCardMenu()

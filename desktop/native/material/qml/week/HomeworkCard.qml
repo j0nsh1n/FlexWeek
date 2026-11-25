@@ -141,10 +141,9 @@ Rectangle {
         Item {
             id: footerRow
             readonly property bool showTag: card.tag !== ""
-            readonly property bool showPlaceNow: !card.passive
             width: parent.width
-            height: Math.max(showTag ? chip.height : 0, showPlaceNow ? placeNowBtn.height : 0)
-            visible: showTag || showPlaceNow
+            height: showTag ? chip.height : 0
+            visible: showTag
 
             Tag {
                 id: chip
@@ -159,25 +158,6 @@ Rectangle {
                 highContrast: card.highContrast
                 kind: card.tagKind
                 text: card.tag
-            }
-
-            Button {
-                id: placeNowBtn
-                objectName: "homeworkPlaceNow"
-                visible: footerRow.showPlaceNow
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                height: 32
-                implicitHeight: 32
-                theme: card.theme
-                density: card.density
-                reduceMotion: card.reduceMotion
-                highContrast: card.highContrast
-                kind: "text"
-                text: "Place now"
-                accessName: "Place " + card.title + " now"
-                activeFocusOnTab: !card.passive
-                onClicked: card.activated()
             }
         }
     }
