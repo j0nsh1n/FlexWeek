@@ -336,6 +336,58 @@ fn copying_without_a_selection_names_what_to_do() {
 }
 
 #[test]
+fn a_stale_or_empty_selection_falls_through_to_the_day_or_today() {
+    let blocks = json!([locked("gym", vec![2], "19:00")]);
+    // Even if the trace still mentions the stale id, a missing block does not decide.
+    let trace = json!({"placed": [{"id": "missing", "days": [1], "start": "14:00"}]});
+    // Gone from the week: the planner day still decides.
+    let found = paste_destination(
+        &blocks,
+        &trace,
+        &selection(Some("missing"), Some(1), "day", "2026-09-23"),
+        WEEK,
+    )
+    .unwrap()
+    .expect("the planner day decides");
+    assert_eq!((found.day, found.start), (Some(2), None));
+    // Gone from the week: today still decides.
+    let found = paste_destination(
+        &blocks,
+        &trace,
+        &selection(Some("missing"), Some(1), "week", WEEK),
+        WEEK,
+    )
+    .unwrap()
+    .expect("today decides");
+    assert_eq!((found.day, found.start), (Some(2), None));
+    // An empty id is no selection.
+    let found = paste_destination(
+        &blocks,
+        &trace,
+        &selection(Some(""), Some(1), "week", WEEK),
+        WEEK,
+    )
+    .unwrap()
+    .expect("today decides");
+    assert_eq!((found.day, found.start), (Some(2), None));
+}
+
+#[test]
+fn an_empty_placed_start_is_no_start() {
+    let blocks = json!([{"id": "rest", "kind": "flexible", "days": [2], "duration_min": 60}]);
+    let trace = json!({"placed": [{"id": "rest", "days": [2], "start": ""}]});
+    let found = paste_destination(
+        &blocks,
+        &trace,
+        &selection(Some("rest"), Some(2), "week", WEEK),
+        WEEK,
+    )
+    .unwrap()
+    .expect("the occurrence decides");
+    assert_eq!((found.day, found.start), (Some(2), None));
+}
+
+#[test]
 fn copying_a_plain_block_copies_its_day() {
     let blocks = json!([locked("piano", vec![2], "18:00")]);
     let copied = clipboard_block(&blocks, Some("piano"), None, "auto", "group-1").unwrap();

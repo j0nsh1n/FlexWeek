@@ -3291,21 +3291,20 @@ class NativeSession(QObject):
 
     def paste_destination(self, today: date | None = None) -> tuple[int, str | None] | None:
         today = today or wall_clock.today()
-        destination = json.loads(
-            flexweek_engine.paste_destination_json(
-                json.dumps(self.blocks),
-                json.dumps(self.trace),
-                self.selected_block_id,
-                self.selected_occurrence_day,
-                self.planner_view,
-                self.first_weekday,
-                self.selected_day,
-                today.isoformat(),
-                self.week_start,
-            )
+        raw = flexweek_engine.paste_destination_json(
+            json.dumps(self.blocks),
+            json.dumps(self.trace),
+            self.selected_block_id,
+            self.selected_occurrence_day,
+            self.planner_view,
+            self.first_weekday,
+            self.selected_day,
+            today.isoformat(),
+            self.week_start,
         )
-        if destination is None:
+        if raw is None:
             return None
+        destination = json.loads(raw)
         return (destination["day"], destination["start"])
 
     def copy_block(self, block_id: str, day: int | None, scope: str = "auto", *, say: bool = True) -> bool:

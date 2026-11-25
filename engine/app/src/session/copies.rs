@@ -592,14 +592,20 @@ pub fn paste_destination(
     selection: &PasteSelection,
     week_start: &str,
 ) -> Result<Option<Destination>, EngineError> {
-    if let (Some(selected), Some(occurrence_day)) =
-        (selection.selected_block_id, selection.selected_occurrence_day)
+    let block_list = rows(blocks, "blocks")?;
+    objects(block_list, "blocks")?;
+    // A stale or empty selection decides nothing: the planner day and today still get asked.
+    if let (Some(selected), Some(occurrence_day)) = (
+        selection.selected_block_id,
+        selection.selected_occurrence_day,
+    ) && !selected.is_empty()
+        && let Some(source) = find_block(block_list, selected)?
     {
-        let blocks = rows(blocks, "blocks")?;
-        let source = find_block(blocks, selected)?;
-        let mut placed = source
-            .filter(|block| truthy(get(block, "start").unwrap_or(None)))
-            .cloned();
+        let mut placed = if truthy(get(source, "start").unwrap_or(None)) {
+            Some(source.clone())
+        } else {
+            None
+        };
         if placed.is_none()
             && let Some(shown) = trace.get("placed")
             && let Value::Array(shown) = shown
@@ -616,9 +622,10 @@ pub fn paste_destination(
             .as_ref()
             .and_then(|block| block.get("start"))
             .and_then(Value::as_str)
+            .filter(|start| !start.is_empty())
             .map(str::to_string);
         return Ok(Some(Destination {
-            day: selection.selected_occurrence_day,
+            day: Some(occurrence_day),
             start,
         }));
     }
