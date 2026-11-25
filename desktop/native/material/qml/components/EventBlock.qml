@@ -27,11 +27,27 @@ Item {
     property real wordsRoom: -1
     property bool showWords: true
 
-    // Absent keys keep the block default: radius 6, pad 6, no shadow, an edge bar.
+    // Absent keys keep the block default: radius 8, pad 6, no shadow, an edge bar.
     readonly property int pad: (theme && theme.cardPad !== undefined) ? theme.cardPad : 6
     readonly property int shadowPx: (theme && theme.shadow !== undefined) ? theme.shadow : 0
     readonly property string blockStyle: (theme && theme.blockStyle) ? theme.blockStyle : "Edge"
-    readonly property int cornerRadius: (theme && theme.corner !== undefined) ? theme.corner : 6
+    readonly property int cornerRadius: (theme && theme.corner !== undefined) ? theme.corner : 8
+    readonly property string categoryIcon: {
+        if (category === "class" || category === "school")
+            return "school"
+        if (category === "exercise" || category === "sports")
+            return "sports_soccer"
+        if (category === "extra" || category === "clubs")
+            return "groups"
+        if (category === "assignments" || category === "homework" || category === "study" || category === "reading")
+            return "menu_book"
+        return ""
+    }
+    readonly property int iconWidth: M3Font.px(13) + 4
+    readonly property bool showCategoryIcon: categoryIcon !== ""
+                                           && (body.width - root.rightInset - root.iconWidth) >= M3Font.px(44)
+                                           && !titleWithIconProbe.truncated
+    readonly property int iconLead: showCategoryIcon ? root.iconWidth : 0
     readonly property string fillOverride: {
         if (!theme)
             return ""
@@ -53,6 +69,18 @@ Item {
     M3Palette { id: palette; theme: root.theme }
     FontMetrics { id: titleFont; font: title.font }
     FontMetrics { id: detailFont; font: detail.font }
+    Text {
+        id: titleWithIconProbe
+        visible: false
+        width: Math.max(0, body.width - root.rightInset - root.iconWidth)
+        text: root.title
+        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+        maximumLineCount: root.titleLines
+        elide: Text.ElideRight
+        font: title.font
+        lineHeight: title.lineHeight
+        lineHeightMode: title.lineHeightMode
+    }
     TextMetrics { id: wholeDetail; font: detail.font; text: root.detail }
     TextMetrics { id: startDetail; font: detail.font; text: root.detailStart }
     // A time line is never cut part-way (Jonathan, 2026-11-09): where the whole range does not fit the
@@ -75,7 +103,7 @@ Item {
     readonly property int titleLines: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
     // Where the last drawn line ends, so a block can place something below its words.
     readonly property real contentBottom: body.y + body.height
-    readonly property real titleBottom: body.y + title.height
+    readonly property real titleBottom: body.y + titleRow.height
 
     readonly property bool darkSurface: palette.dark
 
@@ -141,27 +169,44 @@ Item {
             y: root.wordsTop + root.pad
             width: parent.width - 20
             spacing: 0
-            Text {
-                id: title
-                objectName: "title"
+            Item {
+                id: titleRow
                 width: Math.max(0, parent.width - root.rightInset)
-                text: root.title
-                color: root.textInk
-                opacity: 1
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                maximumLineCount: root.titleLines
-                elide: Text.ElideRight
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(12)
-                font.weight: 600
-                lineHeight: 1.25
-                lineHeightMode: Text.ProportionalHeight
+                height: Math.max(title.height, root.showCategoryIcon ? catIcon.height : 0)
+                M3Icon {
+                    id: catIcon
+                    objectName: "categoryIcon"
+                    visible: root.showCategoryIcon
+                    name: root.categoryIcon
+                    x: 0
+                    y: Math.max(0, Math.round((root.titleLine - height) / 2))
+                    width: M3Font.px(13)
+                    height: width
+                    color: root.past ? palette.inkMuted : root.classBar
+                }
+                Text {
+                    id: title
+                    objectName: "title"
+                    x: root.iconLead
+                    width: Math.max(0, parent.width - root.iconLead)
+                    text: root.title
+                    color: root.textInk
+                    opacity: 1
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                    maximumLineCount: root.titleLines
+                    elide: Text.ElideRight
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(12)
+                    font.weight: 600
+                    lineHeight: 1.25
+                    lineHeightMode: Text.ProportionalHeight
+                }
             }
             Text {
                 id: detail
                 objectName: "detail"
                 width: Math.max(0, parent.width - root.detailInset)
-                visible: root.detail !== "" && !root.detailLost && (!root.fitToHeight || title.height + root.detailLine <= root.room)
+                visible: root.detail !== "" && !root.detailLost && (!root.fitToHeight || titleRow.height + root.detailLine <= root.room)
                 text: root.detailCut ? root.detailStart : root.detail
                 color: root.textInk
                 opacity: 1

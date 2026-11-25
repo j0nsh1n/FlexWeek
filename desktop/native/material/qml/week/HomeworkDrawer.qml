@@ -25,7 +25,11 @@ Rectangle {
 
     M3Palette { id: m3; theme: drawer.theme }
 
-    color: m3.surfaceContainerLow
+    color: m3.panelSurface
+    radius: drawer.phone ? 0 : m3.cornerFor(16)
+    border.width: drawer.phone ? 0 : (drawer.highContrast ? 1.5 : 1)
+    border.color: drawer.highContrast ? m3.outline : m3.outlineVariant
+    clip: true
     implicitHeight: header.implicitHeight + (count > 0 ? list.contentHeight : empty.implicitHeight) + 40
 
     Column {
@@ -42,29 +46,31 @@ Rectangle {
             Text {
                 objectName: "homeworkHeading"
                 width: parent.width - badge.width - parent.spacing
+                anchors.verticalCenter: parent.verticalCenter
                 text: "No time yet · drag onto a day"
                 color: m3.inkSurface
                 wrapMode: Text.WordWrap
                 font.family: M3Font.family
-                font.pixelSize: M3Font.px(16)
-                font.weight: 500
+                font.pixelSize: M3Font.px(15)
+                font.weight: 600
             }
             Rectangle {
                 id: badge
                 objectName: "homeworkBadge"
+                anchors.verticalCenter: parent.verticalCenter
                 width: Math.max(24, countText.implicitWidth + 12)
                 height: 24
                 radius: 12
-                color: m3.secondaryContainer
+                color: m3.primaryContainer
                 Text {
                     id: countText
                     objectName: "homeworkCount"
                     anchors.centerIn: parent
                     text: String(drawer.listed)
-                    color: m3.inkSecondaryContainer
+                    color: m3.inkPrimaryContainer
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(12)
-                    font.weight: 500
+                    font.weight: 600
                 }
                 Accessible.role: Accessible.StaticText
                 Accessible.name: drawer.listed === 1 ? "1 homework needs a time" : drawer.listed + " homework need a time"
@@ -74,13 +80,14 @@ Rectangle {
         Button {
             id: planButton
             objectName: "planHomework"
+            width: parent.width
             theme: drawer.theme
             density: drawer.density
             reduceMotion: drawer.reduceMotion
             highContrast: drawer.highContrast
             kind: enabled ? "filled" : "text"
             mutedWhenDisabled: true
-            icon: "schedule"
+            icon: "auto_awesome"
             text: drawer.bridge ? drawer.bridge.week.planLabel : "Plan my homework"
             accessName: text
             enabled: drawer.bridge ? drawer.bridge.week.canPlan : false
