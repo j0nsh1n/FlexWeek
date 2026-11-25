@@ -211,74 +211,60 @@ class SpotifyPlayer(QObject):
         stop_key: Callable[[], None] = press_media_stop,
     ) -> None:
         super().__init__(parent)
+        from flexweek_engine import SpotifyCore  # type: ignore[import-untyped]
+
+        self._core = SpotifyCore()
         self._remote = remote if remote is not None else system_remote()
         self._stop_key = stop_key
         self.grace_ms, self.give_up_ms, self.poll_ms = GRACE_MS, GIVE_UP_MS, POLL_MS
         self.ask_again_ms = ASK_AGAIN_MS
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._check)
-        self._address: str | None = None
-        self._waited = 0
-        self._asked_at: int | None = None
-        self._late_said = False
-        # What stopping has to undo: FlexWeek asked the app to play, or opened a track that plays.
-        self._started = False
-        self._key_stops_it = False
 
     def play(self, url: str) -> str:
         """Start `url` in Spotify. LISTENING, STARTING or SHOWN, or "" when nothing could open it."""
         self.stop()
         address = app_address(url)
+        reachable = address is not None and self._remote.reachable()
+        running = reachable and self._remote.running()
+        action = self._core.play(address, reachable, running)
         if address is None:
-            return ""
-        if self._remote.reachable():
-            self._address, self._waited, self._late_said = address, 0, False
-            if self._remote.running():
-                self._ask()
-            elif not open_address(address):
-                # No app to start: the browser, which will not play by itself.
-                return SHOWN if open_address(url) else ""
-            self._started = True
+            return action
+        if action == "ask":
+            self._remote.play(address)
+            answer = self._core.asked_to_play(address)
+        else:
+            answer = self._core.app_opened(address, reachable, open_address(address))
+            if answer == "open_browser":
+                answer = self._core.browser_opened(open_address(url))
+        if answer == LISTENING:
             self._timer.start(self.poll_ms)
-            return LISTENING
-        if open_address(address):
-            if address.startswith("spotify:track:"):
-                self._key_stops_it = True
-                return STARTING
-            return SHOWN
-        return SHOWN if open_address(url) else ""
+        return answer
 
     def stop(self) -> None:
         """Stop listening, and pause what FlexWeek started. Music the student had on stays as it was
         when FlexWeek never asked the app for anything."""
         self._timer.stop()
-        if self._started:
+        action = self._core.stop()
+        if action == "pause":
             self._remote.pause()
-        elif self._key_stops_it:
+        elif action == "stop_key":
             self._stop_key()
-        self._started = self._key_stops_it = False
-        self._address, self._asked_at = None, None
-
-    def _ask(self) -> None:
-        if self._address is not None:
-            self._remote.play(self._address)
-            self._asked_at = self._waited
+        self._core.stopped()
 
     def _check(self) -> None:
-        self._waited += self.poll_ms
+        self._core.tick(self.poll_ms)
         running = self._remote.running()
-        if running and self._asked_at is None:
-            # Started by opening its address, and now up to be asked.
-            self._ask()
-        elif running and self._remote.playing():
+        playing = running and self._core.check_playing() and self._remote.playing()
+        ask, heard = self._core.poll(running, playing, self.ask_again_ms)
+        if ask is not None:
+            self._remote.play(ask)
+        if heard:
             self._timer.stop()
             title, artist, _track = self._remote.now_playing()
             self.heard.emit(playing_words(title, artist))
             return
-        elif running and self._asked_at is not None and self._waited - self._asked_at >= self.ask_again_ms:
-            self._ask()
-        if not self._late_said and self._waited >= self.grace_ms:
-            self._late_said = True
+        if self._core.finish_poll(ask is not None, self.grace_ms):
             self.late.emit()
-        if self._waited >= self.give_up_ms:
+        if self._core.give_up(self.give_up_ms):
             self._timer.stop()

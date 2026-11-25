@@ -62,6 +62,28 @@ def test_a_preview_with_nothing_selected_cannot_be_saved(qapp: QApplication, win
     assert window.session.message == "Select at least one item before saving."
 
 
+def test_a_refused_preview_keeps_no_save_attempt(qapp: QApplication, window: NativeWindow) -> None:
+    """Nothing checked, or a checked row that can't be added: refused before any save attempt is kept,
+    so a later accepted preview under the same key gets the id it is given then."""
+    rows = on_top_rows(window)
+    rows[0]["checked"] = False
+    assert window.session.confirm_preview(rows, label="the copied block", attempt_key="paste-1") is False
+    rows[0]["checked"] = True
+    rows[0]["invalid"] = "taken"
+    assert window.session.confirm_preview(rows, label="the copied block", attempt_key="paste-1") is False
+    assert window.session.message == "Uncheck what can't be added before saving."
+    assert "paste-1" not in window.session._attempts
+
+
+def test_pasting_signed_out_with_nothing_copied_says_to_copy_first(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.session.clipboard = None
+    window.session.account = None
+    assert window.session.paste_proposals(0, "16:00") is None
+    assert window.session.message == "Copy a block or day before pasting."
+
+
 def test_a_copied_day_pastes_onto_the_same_day_and_both_stay(
     qapp: QApplication, window: NativeWindow
 ) -> None:

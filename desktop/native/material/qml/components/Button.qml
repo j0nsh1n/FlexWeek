@@ -6,7 +6,7 @@ Item {
     property string density: "comfortable"
     property bool reduceMotion: false
     property bool highContrast: false
-    // filled, tonal, outlined, text, or danger (an answer that deletes or cannot be taken back: the error colour).
+    // filled, tonal, outlined, text, danger, or danger-outlined (red-outlined destructive action).
     property string kind: "filled"
     property string text: "Button"
     property string icon: ""
@@ -16,7 +16,8 @@ Item {
     signal clicked()
 
     readonly property bool quiet: kind === "text"
-    readonly property int padH: quiet ? 12 : 24
+    readonly property int padH: quiet ? 12 : 20
+    readonly property real btnRadius: palette.cornerFor(20, height / 2)
     height: 40
     implicitHeight: 40
     // The icon grows with the label (18 px beside 14 px text) and shares its centre line.
@@ -45,6 +46,8 @@ Item {
             return palette.inkPrimary
         if (root.kind === "danger")
             return palette.inkError
+        if (root.kind === "danger-outlined")
+            return palette.error
         if (root.kind === "tonal")
             return palette.inkSecondaryContainer
         return palette.primary
@@ -54,10 +57,11 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 6
+        radius: root.btnRadius
         color: root.fill
-        border.width: root.kind === "outlined" ? (root.highContrast ? 1.5 : 1) : 0
-        border.color: palette.outline
+        border.width: (root.kind === "outlined" || root.kind === "danger-outlined")
+                      ? (root.highContrast ? 1.5 : 1) : 0
+        border.color: root.kind === "danger-outlined" ? palette.error : palette.outline
         Behavior on color {
             ColorAnimation {
                 duration: Motion.fade(200, root.reduceMotion)
@@ -68,7 +72,7 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 6
+        radius: root.btnRadius
         color: root.ink
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
@@ -79,7 +83,7 @@ Item {
         anchors.fill: parent
         anchors.margins: -4
         ring: palette.focusRing
-        ringRadius: 10
+        ringRadius: root.btnRadius + 4
     }
     Row {
         anchors.centerIn: parent

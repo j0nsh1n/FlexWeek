@@ -14,6 +14,7 @@ from typing import Any
 import flexweek_engine  # type: ignore[import-untyped]
 from pydantic import ValidationError
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from PySide6.QtGui import QGuiApplication
 
 from backend import clock as wall_clock
 from backend.comfort import TIMER_PRESETS, snap_minutes
@@ -53,6 +54,8 @@ from desktop.native.material.theme import (
     PRESETS,
     SAVED_MODES,
     SCALE_RANGE,
+    SETTINGS_NAV_DEFAULT,
+    SETTINGS_NAV_RANGE,
     SHADOW_RANGE,
     _float_in,
     _hex,
@@ -73,6 +76,7 @@ from desktop.native.material.theme import (
     read_look_tier,
     read_material_choice,
     read_saved_material,
+    read_settings_nav_width,
     read_shortcuts,
     reading_problems,
     resolved_mode,
@@ -122,13 +126,23 @@ from desktop.native.weekmodel import hhmm_text
 from desktop.native.work_windows import PRESETS as WORK_PRESETS
 
 _FIELDS = frozenset(flexweek_engine.preference_fields())
-SECTIONS = ("look", "planning", "focus", "alerts", "computer")
+SECTIONS = ("look", "planning", "focus", "alerts", "computer", "sync")
+PAIR_TTL_SECONDS = 300
+SYNC_STATUS_LABELS: dict[str, tuple[str, str]] = {
+    "synced": ("Synced", "ok"),
+    "syncing": ("Syncing", "info"),
+    "problem": ("Not synced", "error"),
+    "idle": ("Not synced", "warn"),
+    "off": ("Not linked", "muted"),
+}
 CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
 REMINDERS = ("off", "5", "10", "15")
 # Minutes before a block that a reminder may fire: the Widgets spinner's range, one minute a step.
 LEAD_MAX = 120
 # How often an open pairing code's countdown and tries are read again.
 PAIR_TICK_MS = 1000
+# How long a Pair waits for the new offer before freeing Copy and Start a new code.
+PAIR_START_TIMEOUT_MS = 15000
 REMINDER_CHIPS = (
     {"label": "Off", "value": "off"},
     {"label": "5m", "value": "5"},
@@ -904,6 +918,14 @@ class PreviewBridge(QObject):
     def reduceMotion(self) -> bool:
         return True
 
+    @Property(int, notify=changed)
+    def daySideWidth(self) -> int:
+        return int(getattr(self._material, "daySideWidth", 312))
+
+    @Slot(int)
+    def setDaySideWidth(self, width: int) -> None:
+        pass
+
 
 class SettingsBridge(QObject):
     """The five sections, and the advanced page that stays a draft until Done."""
@@ -925,6 +947,7 @@ class SettingsBridge(QObject):
         self._letter_keys = False
         self._font = ""
         self._tier = ""
+        self._nav_width = SETTINGS_NAV_DEFAULT
         self._saved: list[dict[str, Any]] = []
         self._study = StudyHours()
         self._school = SchoolHours()
@@ -940,6 +963,16 @@ class SettingsBridge(QObject):
         self._save_error = ""
         self._pair_code = ""
         self._pair_error = ""
+        self._pair_open = False
+        self._pair_gen = 0
+        self._pair_seconds = 0
+        self._pair_tries = 0
+        self._pair_copied = False
+        self._pair_starting = False
+        self._pair_copy_reset = QTimer(self)
+        self._pair_copy_reset.setSingleShot(True)
+        self._pair_copy_reset.setInterval(2000)
+        self._pair_copy_reset.timeout.connect(self._clear_pair_copied)
         # While a code is open: how long it lasts and the tries left, read once a second as the old
         # pairing sheet did.
         self._pair_status = ""
@@ -949,6 +982,8 @@ class SettingsBridge(QObject):
         self._sync_busy = False
         self._clock_warning = ""
         self._sync_problem = ""
+        self._sync_error_at_ms: int | None = None
+        self._remove_error = ""
         self._remove_ask: dict[str, str] = {}
         self._export_text = ""
         self._ask_preset = False
@@ -976,10 +1011,40 @@ class SettingsBridge(QObject):
         self._load_applied(keep_draft=False)
 
     def _watch_phones(self) -> None:
-        if self._section != "computer" or self._bridge.screen != "settings":  # type: ignore[attr-defined]
+        if self._section != "sync" or self._bridge.screen != "settings":  # type: ignore[attr-defined]
             return
-        seen = (self._phone_rows(), self._sync_words())
+        rows = self._phone_rows()
+        seen = (rows, self._sync_words(), self._sync_status_key(bool(rows)))
         if seen != self._phones_seen:
+            self._publish()
+
+    def leave_settings(self) -> None:
+        """Invalidate any pending pairing callback and hide the pairing modal when leaving Settings."""
+        self._cancel_pairing_ui()
+
+    def _cancel_pairing_ui(self) -> None:
+        """Leaving Settings hides the pop-up and clears the published code and countdown,
+        like dismissing it, so the row cannot show a frozen code."""
+        self._pair_gen += 1
+        # A start left pending belongs to the older gen: drop the guard so a new Pair
+        # works, while the late answer is still ignored as stale.
+        was_starting = self._pair_starting
+        self._pair_starting = False
+        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status) or was_starting
+        self._pair_open = False
+        self._pair_code = ""
+        self._pair_status = ""
+        self._pair_seconds = 0
+        self._pair_tries = 0
+        self._pair_copied = False
+        if self._pair_watch.isActive():
+            self._pair_watch.stop()
+        if changed:
+            self._publish()
+
+    def _clear_pair_copied(self) -> None:
+        if self._pair_copied:
+            self._pair_copied = False
             self._publish()
 
     def note_applied(self) -> None:
@@ -994,6 +1059,7 @@ class SettingsBridge(QObject):
         self._letter_keys = read_letter_keys(stored)
         self._font = read_font(stored)
         self._tier = read_look_tier(stored)
+        self._nav_width = read_settings_nav_width(stored)
         self._saved = read_saved_material(stored)
         if not keep_draft:
             self._draft_choice = dict(self._choice)
@@ -1081,11 +1147,14 @@ class SettingsBridge(QObject):
         phones = self._phone_names()
         phone_rows = self._phone_rows()
         sync_words = self._sync_words()
-        self._phones_seen = (phone_rows, sync_words)
+        sync_key = self._sync_status_key(bool(phone_rows))
+        sync_word, sync_tone = SYNC_STATUS_LABELS.get(sync_key, ("Not linked", "muted"))
+        self._phones_seen = (phone_rows, sync_words, sync_key)
         problems = self._problem_rows()
         return {
             "section": self._section,
             "page": self._page,
+            "navWidth": self._nav_width,
             "preset": self._choice["preset"],
             "mode": self._choice["mode"],
             "contrast": self._choice["contrast"],
@@ -1191,13 +1260,23 @@ class SettingsBridge(QObject):
             "pairCode": self._pair_code,
             "pairStatus": self._pair_status,
             "pairError": self._pair_error,
+            "pairOpen": self._pair_open and bool(self._pair_code),
+            "pairSeconds": self._pair_seconds,
+            "pairFraction": max(0.0, min(1.0, self._pair_seconds / float(PAIR_TTL_SECONDS))),
+            "pairTries": self._pair_tries,
+            "pairCopied": self._pair_copied,
+            "pairStarting": self._pair_starting,
             "phones": phones,
             "phoneRows": phone_rows,
             "syncWords": sync_words,
+            "syncStatusKey": sync_key,
+            "syncStatusWord": sync_word,
+            "syncStatusTone": sync_tone,
             "syncBusy": self._sync_busy,
             "canSync": self._sync_service() is not None and bool(phone_rows),
             "clockWarning": self._clock_warning,
             "syncProblem": self._sync_problem,
+            "removeError": self._remove_error,
             "relayNote": RELAY_SENTENCE,
             "askRemove": bool(self._remove_ask),
             "removeName": self._remove_ask.get("name", ""),
@@ -1325,6 +1404,43 @@ class SettingsBridge(QObject):
         except Exception:
             return ""
 
+    def _live_sync_status(self) -> dict[str, Any] | None:
+        service = getattr(self._window, "_sync", None)
+        if service is None:
+            return None
+        try:
+            raw = service.status()
+            return raw if isinstance(raw, dict) else None
+        except Exception:
+            return None
+
+    def _sync_status_key(self, linked: bool) -> str:
+        """Short sync status key derived from live sync service state, clearing stale manual errors once a
+        newer sync succeeds."""
+        if not linked:
+            return "off"
+        status = self._live_sync_status()
+        if status is not None:
+            last_sync_ms = status.get("last_sync_ms")
+            if (
+                self._sync_problem
+                and not status.get("last_error")
+                and last_sync_ms is not None
+                and (self._sync_error_at_ms is None or int(last_sync_ms) > self._sync_error_at_ms)
+            ):
+                self._sync_problem = ""
+                self._sync_error_at_ms = None
+            if self._sync_busy or status.get("syncing"):
+                return "syncing"
+            if status.get("last_error") or self._sync_problem:
+                return "problem"
+            return sync_state(status, linked)
+        if self._sync_busy:
+            return "syncing"
+        if self._sync_problem:
+            return "problem"
+        return "idle"
+
     @Slot()
     def syncNow(self) -> None:
         if self._sync_service() is None or self._sync_busy:
@@ -1335,8 +1451,11 @@ class SettingsBridge(QObject):
 
     def _synced(self, rows: list | None, problem: Exception | None) -> None:
         self._sync_busy = False
+        status = self._live_sync_status()
+        seen_ms = status.get("last_sync_ms") if status is not None else None
         if problem is not None:
             self._sync_problem = f"Sync failed: {problem}"
+            self._sync_error_at_ms = int(seen_ms) if seen_ms is not None else None
             self._clock_warning = ""
             self._publish()
             return
@@ -1344,7 +1463,12 @@ class SettingsBridge(QObject):
             row[1].get("clock_skewed", 0) for row in rows or [] if row[1] is not None and row[2] is None
         )
         self._clock_warning = clock_warning_words(skewed)
-        self._sync_problem = UNREACHABLE_WORDS if any(row[2] is not None for row in rows or []) else ""
+        if any(row[2] is not None for row in rows or []):
+            self._sync_problem = UNREACHABLE_WORDS
+            self._sync_error_at_ms = int(seen_ms) if seen_ms is not None else None
+        else:
+            self._sync_problem = ""
+            self._sync_error_at_ms = None
         self._publish()
 
     @Slot(str)
@@ -1363,7 +1487,7 @@ class SettingsBridge(QObject):
             return
 
         def gone(_answer: Any, problem: Exception | None) -> None:
-            self._sync_problem = f"Could not remove {ask['name']}: {problem}" if problem is not None else ""
+            self._remove_error = f"Could not remove {ask['name']}: {problem}" if problem is not None else ""
             self._window._sync_tick()  # type: ignore[attr-defined]
             self._publish()
 
@@ -1406,6 +1530,8 @@ class SettingsBridge(QObject):
             self._saved,
             self._font,
             self._tier,
+            day_side_width=int(getattr(self._bridge, "daySideWidth", 312)),
+            settings_nav_width=self._nav_width,
         )
         store_material(path, material)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
@@ -1429,7 +1555,30 @@ class SettingsBridge(QObject):
 
     @Property(bool, notify=changed)
     def promptOpen(self) -> bool:
-        return bool(self._prompt) or self._ask_preset or bool(self._remove_ask)
+        pair_visible = (
+            self._pair_open
+            and bool(self._pair_code)
+            and self._bridge.screen == "settings"  # type: ignore[attr-defined]
+            and self._section == "sync"
+            and self._page == "sections"
+        )
+        return bool(self._prompt) or self._ask_preset or bool(self._remove_ask) or pair_visible
+
+    @Slot(int)
+    def setNavWidth(self, width: int) -> None:
+        low, high = SETTINGS_NAV_RANGE
+        clamped = max(low, min(high, int(width)))
+        if clamped == self._nav_width:
+            return
+        self._nav_width = clamped
+        path = self._window._look_path()
+        kept = kept_material(path)
+        if kept is not None:
+            store_material(path, {**kept, "settingsNavWidth": clamped})
+        else:
+            self._commit()
+            return
+        self._publish()
 
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def draftTheme(self) -> dict[str, Any]:
@@ -1443,6 +1592,12 @@ class SettingsBridge(QObject):
     def setSection(self, name: str) -> None:
         if name not in SECTIONS:
             return
+        if name != "sync":
+            self._pair_gen += 1
+            self._pair_open = False
+            self._pair_starting = False
+            if self._pair_watch.isActive():
+                self._pair_watch.stop()
         self._section = name
         self._page = "sections"
         self._prompt = ""
@@ -1450,6 +1605,11 @@ class SettingsBridge(QObject):
 
     @Slot()
     def openAdvanced(self) -> None:
+        self._pair_gen += 1
+        self._pair_open = False
+        self._pair_starting = False
+        if self._pair_watch.isActive():
+            self._pair_watch.stop()
         self._draft_choice = dict(self._choice)
         self._draft = copy.deepcopy(self._advanced)
         self._dirty = False
@@ -2337,18 +2497,47 @@ class SettingsBridge(QObject):
                 self._draft["cat"][role] = item["fixed"]
         self._mark_draft()
 
+    def _in_pairing_view(self) -> bool:
+        return (
+            self._bridge.screen == "settings"  # type: ignore[attr-defined]
+            and self._section == "sync"
+            and self._page == "sections"
+        )
+
     @Slot()
     def pair(self) -> None:
+        # One start in flight at a time: a second activation while the first offer is
+        # still pending is ignored, so the older callback cannot replace a newer offer.
+        if self._pair_starting:
+            return
         session = self._window.session
+        self._pair_gen += 1
+        gen = self._pair_gen
+        self._pair_starting = True
+        self._publish()
 
         def finish(offer: Any, error: Exception | None) -> None:
             def apply() -> None:
+                # Only this start's own answer frees the guard: a stale answer after a dismiss and a
+                # new Pair must leave the newer pending start in place.
+                if gen != self._pair_gen:
+                    return
+                self._pair_starting = False
+                if not self._in_pairing_view():
+                    self._publish()
+                    return
                 if error is not None or not isinstance(offer, dict):
                     self._pair_code = ""
+                    self._pair_status = ""
+                    self._pair_seconds = 0
+                    self._pair_tries = 0
+                    self._pair_open = False
                     self._pair_error = str(error) if error is not None else "Pairing did not start."
                 else:
                     self._pair_code = str(offer.get("display_code") or "")
                     self._pair_error = ""
+                    self._pair_open = bool(self._pair_code)
+                    self._pair_copied = False
                     self._pair_watch.start()
                     self._pair_tick()
                     return
@@ -2357,26 +2546,100 @@ class SettingsBridge(QObject):
             # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
             QTimer.singleShot(0, self, apply)
 
-        if not session.begin_pairing(finish):
+        def expire() -> None:
+            # The start never answered: invalidate it so a late answer drops as stale,
+            # and free Copy and Start a new code instead of wedging them until restart.
+            if gen != self._pair_gen or not self._pair_starting:
+                return
+            self._pair_gen += 1
+            self._pair_starting = False
+            # A code still on screen is no longer the one the computer offers once a newer start was
+            # asked for, so close the pop-up and drop it, as a lost service does; the row says why.
+            self._pair_watch.stop()
             self._pair_code = ""
+            self._pair_status = ""
+            self._pair_seconds = 0
+            self._pair_tries = 0
+            self._pair_open = False
+            self._pair_error = "Pairing did not start."
+            self._publish()
+
+        QTimer.singleShot(PAIR_START_TIMEOUT_MS, self, expire)
+        try:
+            started = session.begin_pairing(finish)
+        except Exception as exc:
+            self._pair_gen += 1
+            self._pair_starting = False
+            self._pair_code = ""
+            self._pair_status = ""
+            self._pair_seconds = 0
+            self._pair_tries = 0
+            self._pair_open = False
+            self._pair_error = str(exc) or "Pairing did not start."
+            self._publish()
+            return
+        if not started:
+            self._pair_starting = False
+            self._pair_code = ""
+            self._pair_status = ""
+            self._pair_seconds = 0
+            self._pair_tries = 0
+            self._pair_open = False
             self._pair_error = "Pairing needs an account on this computer."
             self._publish()
 
+    @Slot()
+    def copyPairCode(self) -> None:
+        if not self._pair_code:
+            return
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(self._pair_code)
+        self._pair_copied = True
+        self._pair_copy_reset.start()
+        self._publish()
+
+    @Slot()
+    def closePairing(self) -> None:
+        """Dismissing the pop-up stops the watch and clears the published code and countdown,
+        so the Settings row cannot show a frozen code."""
+        self._pair_gen += 1
+        # A start left pending belongs to the older gen: drop the guard so a new Pair
+        # works, while the late answer is still ignored as stale.
+        was_starting = self._pair_starting
+        self._pair_starting = False
+        changed = self._pair_open or bool(self._pair_code) or bool(self._pair_status) or was_starting
+        self._pair_open = False
+        self._pair_code = ""
+        self._pair_status = ""
+        self._pair_seconds = 0
+        self._pair_tries = 0
+        self._pair_copied = False
+        if self._pair_watch.isActive():
+            self._pair_watch.stop()
+        if changed:
+            self._publish()
+
     def _pair_tick(self) -> None:
-        """The open code's words: its countdown and tries while it waits, else why it closed."""
+        """The open code's words: its countdown and tries while it waits, else close and clear."""
         status = self._window.session.pairing_status()
         state = status.get("state") if isinstance(status, dict) else None
         if state == "waiting":
-            left = (int(status["expires_at_ms"]) - wall_clock.now_ms()) // 1000
-            tries = tries_words(int(status["tries_left"]))
+            left = max(0, (int(status["expires_at_ms"]) - wall_clock.now_ms()) // 1000)
+            self._pair_seconds = left
+            self._pair_tries = int(status["tries_left"])
+            tries = tries_words(self._pair_tries)
             self._pair_status = f"{countdown_words(left)}. {tries}. {PAIR_ONCE}"
         else:
             self._pair_watch.stop()
             self._pair_status = ""
-            if state is not None:
-                self._pair_code = ""
-                if state != "paired":
-                    self._pair_error = pair_problem(state) or PAIR_CLOSED
+            self._pair_seconds = 0
+            self._pair_tries = 0
+            self._pair_copied = False
+            self._pair_code = ""
+            self._pair_open = False
+            if state != "paired":
+                self._pair_error = (pair_problem(state) if state is not None else "") or PAIR_CLOSED
         self._publish()
 
     @Slot()

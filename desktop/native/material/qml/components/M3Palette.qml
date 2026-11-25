@@ -36,13 +36,13 @@ QtObject {
     readonly property color inkSurface: tone("onSurface", "#0f172a")
     readonly property color inkMuted: tone("onSurfaceVariant", "#475569")
     readonly property color surfaceContainerLowest: tone("surfaceContainerLowest", "#ffffff")
-    readonly property color surfaceContainerLow: tone("surfaceContainerLow", "#ffffff")
-    readonly property color surfaceContainer: tone("surfaceContainer", "#ffffff")
-    readonly property color surfaceContainerHigh: tone("surfaceContainerHigh", "#ffffff")
-    readonly property color surfaceContainerHighest: tone("surfaceContainerHighest", "#ffffff")
-    readonly property color surfaceVariant: tone("surfaceVariant", "#ffffff")
+    readonly property color surfaceContainerLow: tone("surfaceContainerLow", "#f6f8fc")
+    readonly property color surfaceContainer: tone("surfaceContainer", "#edf0f7")
+    readonly property color surfaceContainerHigh: tone("surfaceContainerHigh", "#e3e8f2")
+    readonly property color surfaceContainerHighest: tone("surfaceContainerHighest", "#d8dfec")
+    readonly property color surfaceVariant: tone("surfaceVariant", "#e3e8f2")
     readonly property color outline: tone("outline", "#64748b")
-    readonly property color outlineVariant: tone("outlineVariant", "#e5e9f0")
+    readonly property color outlineVariant: tone("outlineVariant", "#d4dce8")
     readonly property color inverseSurface: tone("inverseSurface", "#2e3036")
     readonly property color inverseOnSurface: tone("inverseOnSurface", "#f0f0f7")
     readonly property color inversePrimary: tone("inversePrimary", "#abc7ff")
@@ -50,8 +50,25 @@ QtObject {
     // Theme object keys (B3a3)
     readonly property color page: tone("page", "#eef1f5")
     readonly property color card: tone("card", "#ffffff")
-    readonly property color edge: tone("edge", "#e5e9f0")
+    readonly property color edge: tone("edge", "#d4dce8")
     readonly property color focusRing: tone("focusRing", "#3d6fc4")
+    // Semantic tonal steps that stay lifted in both light and dark modes (and one-mode presets).
+    readonly property color cardSurface: dark ? surfaceContainerLow : surfaceContainerLowest
+    readonly property color panelSurface: dark ? surfaceContainer : surfaceContainerLow
+    readonly property color dialogSurface: dark ? surfaceContainerHigh : surfaceContainerLowest
+    readonly property color wellSurface: dark ? surfaceContainerHighest : surfaceContainerHigh
+    readonly property bool hasCornerOverride: theme != null && theme.corner !== undefined && theme.corner !== null
+    readonly property bool sharpCorners: hasCornerOverride && Number(theme.corner) === 0
+    function cornerFor(wanted, maxRadius) {
+        if (!hasCornerOverride)
+            return wanted
+        var saved = Math.max(0, Number(theme.corner))
+        if (maxRadius !== undefined && maxRadius !== null)
+            return Math.min(saved, maxRadius)
+        return saved
+    }
+    readonly property color scrim: tone("scrim", "#000000")
+    readonly property color menuShadow: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(0, 0, 0, 0.2)
     // Status colours: dark from spec; light values proposed, not in the spec
     readonly property color statusDone: tone("statusDone", "#276b3f")
     readonly property color statusDueSoon: tone("statusDueSoon", "#8a5a00")

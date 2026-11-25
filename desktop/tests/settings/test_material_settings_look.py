@@ -11,6 +11,8 @@ from pathlib import Path
 
 import flexweek_engine  # type: ignore[import-untyped]
 import pytest
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.material import bridge_settings
@@ -18,6 +20,7 @@ from desktop.native.sheet_rules import CUTOFFS as WIDGET_CUTOFFS
 from desktop.native.weekmodel import hhmm_text, set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
     _click,
@@ -28,6 +31,7 @@ from desktop.tests.settings.support_material_settings import (
     _open_settings,
     _panel,
     _prefs,
+    _pump,
     _qml,
     _show_material,
 )
@@ -114,7 +118,7 @@ def test_every_section_opens_and_names_only_controls_with_a_real_effect(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _open_settings(qapp, window)
-    for name in ("planning", "focus", "alerts", "computer", "look"):
+    for name in ("planning", "focus", "alerts", "computer", "sync", "look"):
         _click(qapp, window, _named(root, "section_" + name)[0])
         wait_until(qapp, lambda name=name: _panel(window).property("state")["section"] == name)
         assert _named(root, name + "Section")
@@ -252,3 +256,123 @@ def test_planning_cutoff_not_on_the_list_is_shown_as_its_own_time(
     state = panel.state
     marked = [item["label"] for item in state["cutoffChoices"] if item["value"] == state["cutoff"]]
     assert marked == [hhmm_text("22:15")]
+
+
+def test_dragging_the_settings_nav_divider_resizes_collapses_and_remembers_width(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _open_settings(qapp, window, "look")
+    panel = _panel(window)
+    nav = _named(root, "sectionNav")[0]
+    divider = _named(root, "settingsNavDivider")[0]
+    assert int(round(nav.width())) == 220
+    assert nav.property("iconOnly") is False
+
+    quick = quick_of(window)
+    assert quick is not None
+    centre = divider.mapToScene(QPointF(divider.width() / 2, divider.height() / 2))
+    start_pt = centre.toPoint()
+    # Dragging the divider left by 120 px narrows the section list into icon-only mode (100 px).
+    end_pt = (centre - QPointF(120, 0)).toPoint()
+    QTest.mousePress(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start_pt)
+    _pump(qapp)
+    QTest.mouseMove(quick, end_pt)
+    _pump(qapp)
+    QTest.mouseRelease(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, end_pt)
+    _pump(qapp)
+
+    assert int(round(nav.width())) == 100
+    assert nav.property("iconOnly") is True
+    assert _material_file().get("settingsNavWidth") == 100
+
+    # Reloading appearance preserves the remembered nav width, and out-of-range values clamp to 72..340.
+    _bridge(window).set_appearance("light", "std")
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 100
+    panel.setNavWidth(40)
+    assert panel.property("state")["navWidth"] == 72
+    panel.setNavWidth(500)
+    assert panel.property("state")["navWidth"] == 340
+
+    # Clicking the divider without moving must not overwrite 340 px when a narrower window caps it.
+    window.resize(800, 800)
+    _pump(qapp, 10)
+    capped = divider.mapToScene(QPointF(divider.width() / 2, divider.height() / 2)).toPoint()
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, capped)
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 340
+    window.resize(1280, 800)
+    _pump(qapp, 10)
+
+    # Keyboard arrows resize the section list through the same clamp and persistence path.
+    panel.setNavWidth(220)
+    _pump(qapp)
+    assert divider.property("activeFocusOnTab") is True
+    divider.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Right)
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 236
+    QTest.keyClick(quick, Qt.Key.Key_Left)
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 220
+    _pump(qapp)
+
+    # Assistive technology reads the current width and can adjust it, like SliderRow.
+    from PySide6.QtGui import QAccessible
+
+    iface = QAccessible.queryAccessibleInterface(divider)
+    assert iface is not None
+    assert iface.role() == QAccessible.Role.Slider
+    assert iface.text(QAccessible.Text.Name) == "Resize settings sidebar"
+    assert "220" in iface.text(QAccessible.Text.Description)
+    actions = iface.actionInterface()
+    assert actions is not None
+    names = list(actions.actionNames())
+    assert "Increase" in names
+    assert "Decrease" in names
+    # Screen readers invoke the advertised action by name; the convenience
+    # increaseAction() slot does not reach QML handlers, so call doAction.
+    actions.doAction("Increase")
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 236
+    assert "236" in iface.text(QAccessible.Text.Description)
+    actions.doAction("Decrease")
+    _pump(qapp)
+    assert panel.property("state")["navWidth"] == 220
+
+
+def test_positive_saved_corner_override_applies_to_shared_cards_and_buttons(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Finding 14: M3Palette.cornerFor honors positive saved corner overrides (within bounds) as well as 0."""
+    root = _open_settings(qapp, window, "sync")
+    panel = _panel(window)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 16.0
+
+    # Positive custom radius (24 px) updates shared cards above their default 16 px.
+    panel.openAdvanced()
+    panel.setCorner(24)
+    panel.done()
+    panel.setSection("sync")
+    _pump(qapp, 10)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 24.0
+
+    # Sharp (0 px) flattens corners completely; reset (-1) restores the default 16 px.
+    panel.openAdvanced()
+    panel.setCorner(0)
+    panel.done()
+    panel.setSection("sync")
+    _pump(qapp, 10)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 0.0
+
+    panel.openAdvanced()
+    panel.setCorner(-1)
+    panel.done()
+    panel.setSection("sync")
+    _pump(qapp, 10)
+    card = _named(root, "syncStatusCard")[0]
+    assert float(card.property("radius")) == 16.0

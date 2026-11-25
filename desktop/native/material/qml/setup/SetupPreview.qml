@@ -27,10 +27,10 @@ Column {
     Rectangle {
         width: parent.width
         height: weekBox.implicitHeight + 24
-        radius: 12
-        color: m3Palette.surfaceContainerLow
+        radius: m3Palette.cornerFor(16)
+        color: m3Palette.cardSurface
         border.width: root.highContrast ? 1.5 : 1
-        border.color: m3Palette.outlineVariant
+        border.color: root.highContrast ? m3Palette.outline : m3Palette.outlineVariant
 
         Column {
             id: weekBox
@@ -126,10 +126,10 @@ Column {
     Rectangle {
         width: parent.width
         height: chosen.implicitHeight + 24
-        radius: 12
-        color: m3Palette.surfaceContainerLow
+        radius: m3Palette.cornerFor(16)
+        color: m3Palette.cardSurface
         border.width: root.highContrast ? 1.5 : 1
-        border.color: m3Palette.outlineVariant
+        border.color: root.highContrast ? m3Palette.outline : m3Palette.outlineVariant
         Column {
             id: chosen
             x: 12

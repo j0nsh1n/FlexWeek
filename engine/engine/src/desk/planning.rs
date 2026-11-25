@@ -1267,6 +1267,19 @@ pub fn occurrence_days(block: &Value) -> EngineResult<Vec<Value>> {
     list_of(&or_default(get(&source, "days")?, json!([])))
 }
 
+fn too_many_minutes() -> EngineError {
+    EngineError::value("those minutes are too many to count")
+}
+
+/// Minutes added, refusing a total no count can hold.
+fn add_minutes(left: i64, right: i64) -> EngineResult<i64> {
+    left.checked_add(right).ok_or_else(too_many_minutes)
+}
+
+fn sub_minutes(left: i64, right: i64) -> EngineResult<i64> {
+    left.checked_sub(right).ok_or_else(too_many_minutes)
+}
+
 pub fn session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i64> {
     let mut total = 0;
     for block in iterate(blocks)? {
@@ -1275,7 +1288,7 @@ pub fn session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i6
             assignment_id,
         ) && !truthy(get(&block, "completed")?)
         {
-            total += py_int(subscript(&block, "duration_min")?)?;
+            total = add_minutes(total, py_int(subscript(&block, "duration_min")?)?)?;
         }
     }
     Ok(total)
@@ -1394,10 +1407,11 @@ fn uncovered_minutes(
     blocks: &Value,
     saved_week: &Value,
 ) -> EngineResult<i64> {
-    Ok(
-        (this_weeks_part(assignment, id, blocks, saved_week)? - session_minutes(blocks, id)?)
-            .max(0),
-    )
+    Ok(sub_minutes(
+        this_weeks_part(assignment, id, blocks, saved_week)?,
+        session_minutes(blocks, id)?,
+    )?
+    .max(0))
 }
 
 /// Minutes of the homework's sessions ticked done in `blocks`.
@@ -1410,7 +1424,10 @@ pub fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResu
         ) && truthy(get(&block, "completed")?)
         {
             // A block with no length counts as nothing, the same as a block with a zero length.
-            total += int_of(&or_default(get(&block, "duration_min")?, json!(0)))?;
+            total = add_minutes(
+                total,
+                int_of(&or_default(get(&block, "duration_min")?, json!(0)))?,
+            )?;
         }
     }
     Ok(total)
@@ -1430,7 +1447,7 @@ pub fn credited_done_minutes(
     match get(assignment, "done_min")?.filter(|value| !value.is_null()) {
         Some(server) => {
             let saved = done_session_minutes(&or_default(Some(saved_week), json!([])), id)?;
-            Ok((py_int(server)? - saved).max(0) + here)
+            add_minutes(sub_minutes(py_int(server)?, saved)?.max(0), here)
         }
         None => Ok(here),
     }
@@ -1472,22 +1489,26 @@ fn this_weeks_part(
     let Some(server) = get(assignment, "unplanned_min")?.filter(|value| !value.is_null()) else {
         // As the server branch below, a homework with no estimate is not an error: it asks for no time.
         let estimate = int_of(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-        return Ok((estimate - done).max(0));
+        return Ok(sub_minutes(estimate, done)?.max(0));
     };
     let saved = session_minutes(&or_default(Some(saved_week), json!([])), id)?;
     let Some(estimate) = get(assignment, "estimate_min")?.filter(|value| !value.is_null()) else {
-        return Ok(py_int(server)? + saved);
+        return add_minutes(py_int(server)?, saved);
     };
     // The server's unplanned number credits the done time it knew of: focus and the saved ticks.
     let server_done = int_of(&or_default(get(assignment, "done_min")?, json!(0)))?;
-    let need = (int_of(estimate)? - crate::plan::done_time(focus, server_done)).max(0);
+    let need = sub_minutes(
+        int_of(estimate)?,
+        crate::plan::done_time(focus, server_done),
+    )?
+    .max(0);
     let later = match get(assignment, "planned_min")?.filter(|value| !value.is_null()) {
-        Some(planned) => py_int(planned)? - saved,
+        Some(planned) => sub_minutes(py_int(planned)?, saved)?,
         // The unplanned number alone is floored at 0, so it says only that later weeks hold at least
         // what it leaves unexplained; read before a focus credit, that bound still holds.
-        None => (need - py_int(server)? - saved).max(0),
+        None => sub_minutes(sub_minutes(need, py_int(server)?)?, saved)?.max(0),
     };
-    Ok((int_of(estimate)? - done).max(0) - later)
+    sub_minutes(sub_minutes(int_of(estimate)?, done)?.max(0), later)
 }
 
 /// What the planner can place: the uncovered minutes, down to a whole quarter hour.
