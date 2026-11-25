@@ -2518,8 +2518,12 @@ class SettingsBridge(QObject):
 
         def finish(offer: Any, error: Exception | None) -> None:
             def apply() -> None:
+                # Only this start's own answer frees the guard: a stale answer after a dismiss and a
+                # new Pair must leave the newer pending start in place.
+                if gen != self._pair_gen:
+                    return
                 self._pair_starting = False
-                if gen != self._pair_gen or not self._in_pairing_view():
+                if not self._in_pairing_view():
                     self._publish()
                     return
                 if error is not None or not isinstance(offer, dict):
@@ -2546,8 +2550,6 @@ class SettingsBridge(QObject):
             # The start never answered: invalidate it so a late answer drops as stale,
             # and free Copy and Start a new code instead of wedging them until restart.
             if gen != self._pair_gen or not self._pair_starting:
-                return
-            if self._pair_open and self._pair_code:
                 return
             self._pair_gen += 1
             self._pair_starting = False
