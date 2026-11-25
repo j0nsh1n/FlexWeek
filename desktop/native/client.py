@@ -44,8 +44,8 @@ SIGN_UP_NO_PASSWORD = "Choose a password with at least 12 characters."
 SIGN_UP_SHORT_PASSWORD = "Add {n} more {unit}. Passwords need at least 12 characters."
 SIGN_UP_LONG_PASSWORD = "Use 128 characters or fewer."
 USERNAME_TAKEN = "That username is taken. Try another."
-# Said when a session ends; about no one field, though its words name two.
-SIGN_IN_AGAIN = "Your session ended. Sign in again."
+# About no one field, though its words name two.
+SIGN_IN_AGAIN = "Sign in again. If you were signing in, check your username and password."
 SESSION_ENDED = "Your session ended. Sign in again."
 logger = logging.getLogger(__name__)
 

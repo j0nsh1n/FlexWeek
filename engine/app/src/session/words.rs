@@ -11,8 +11,9 @@ pub const SIGN_IN_WRONG: &str = "Wrong username or password. Try again, or choos
 pub const USERNAME_TAKEN: &str = "That username is taken. Try another.";
 pub const WRONG_RECOVERY_CODE: &str =
     "Wrong username or recovery code. Each code works once; try another one.";
-/// Said when a session ends.
-pub const SIGN_IN_AGAIN: &str = "Your session ended. Sign in again.";
+/// Said when a session ends, or when sign-in gets a 401 it cannot read.
+pub const SIGN_IN_AGAIN: &str =
+    "Sign in again. If you were signing in, check your username and password.";
 pub const SESSION_ENDED: &str = "Your session ended. Sign in again.";
 pub const UNREADABLE: &str =
     "FlexWeek couldn't read its own answer. Close and reopen it, then try again.";
