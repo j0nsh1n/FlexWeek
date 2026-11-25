@@ -14,6 +14,7 @@ pub mod account;
 pub mod autosave;
 pub mod frame;
 pub mod leaving;
+pub mod spotify;
 pub mod status;
 pub mod words;
 
