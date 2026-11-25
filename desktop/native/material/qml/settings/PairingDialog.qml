@@ -446,7 +446,7 @@ FocusScope {
                     Repeater {
                         model: [
                             "Open FlexWeek on your phone.",
-                            "Go to Settings and pick Link a computer.",
+                            "On your phone, open Pair with your computer.",
                             "Type this 8-character code — it works once."
                         ]
                         Row {

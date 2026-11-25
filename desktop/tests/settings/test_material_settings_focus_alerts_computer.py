@@ -235,6 +235,11 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     assert _named(root, "pairingDialog")[0].property("visible") is True
     assert "3 tries left." in str(_named(root, "pairingStatus")[0].property("text"))
 
+    # The steps name the phone's real screen, not a desktop pointer to it.
+    shown = [str(item.property("text")) for item in _texts(root)]
+    assert any("Pair with your computer" in line for line in shown)
+    assert not any("Link a computer" in line for line in shown)
+
     # Copy code via real UI button writes to the real clipboard.
     QGuiApplication.clipboard().setText("")
     _click(qapp, window, _named(root, "pairCopy")[0])

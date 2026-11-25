@@ -27,7 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-internal const val DESKTOP_PAIR_PATH = "Settings > This computer > Devices > Pair a phone"
+internal const val DESKTOP_PAIR_PATH = "Settings > Phone & sync > Pair a phone"
 
 @Composable
 fun PairScreen(
