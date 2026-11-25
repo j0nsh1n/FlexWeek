@@ -83,12 +83,22 @@ def _read_import(raw: str) -> tuple[bool, bool, str | None]:
         return False, False, None
 
 
+def _readable(items: list[dict]) -> list[dict]:
+    """Text in a file has to be real Unicode: a lone surrogate can be neither saved nor shown, and
+    pydantic refused it here before the engine's checks took over."""
+    try:
+        json.dumps(items, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError("The file has text that can't be read.") from None
+    return items
+
+
 def _checked_import(blocks: str, homework: str) -> tuple[list[dict], list[dict], str | None]:
-    """The models' version of the file's blocks and homework, or the first complaint they make."""
+    """The checked version of the file's blocks and homework, or the first complaint the checks make."""
     try:
         return (
-            _block_models(_read_list(blocks)),
-            [assignment_body(item) for item in _read_list(homework)],
+            _readable(_block_models(_read_list(blocks))),
+            _readable([assignment_body(item) for item in _read_list(homework)]),
             None,
         )
     except Exception as error:
