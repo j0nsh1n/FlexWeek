@@ -41,8 +41,11 @@ modules. `SheetHost.qml` chooses the Material sheet for editing, routines,
 alarms, Help, About, Update, Manage account and Copies of this week. The ring
 screen sits above sheets and Focus.
 
-The shell keeps the session's save, undo, planning, focus, reminder and alarm
-rules. It does not maintain a second planner or timer.
+The Rust session in `engine/app/src/session/` owns request delivery, account flows, status, autosave
+and the decisions made before closing or signing out. `NativeSession` and the Python shell still hold
+the live week and the undo, planning, focus, reminder and alarm rules that have not moved yet. They do
+not maintain a second planner or timer. PR #181 is moving more of those rules into Rust; see
+`ARCHITECTURE.md` for its status.
 
 ## Look and settings
 
@@ -66,7 +69,8 @@ Settings has Look, Planning, Focus, Alerts and This computer. Planning includes
 Open on, planning style, study and school hours, planner rules and drag step.
 Focus includes Short, Standard, Long and Custom timer lengths. Alerts includes
 reminders, sounds, alarms and tray behaviour. This computer includes account,
-setup, updates, keyboard switches, phone pairing and sync.
+setup, updates, keyboard switches, phone pairing and sync. Report a problem opens Jonathan's Google form
+in the browser, with the FlexWeek version and computer details filled in.
 
 Animations are Off, Reduce, Normal or More. Reduce keeps short fades without
 travel. More takes 2.5 times Normal's durations and travels four thirds of
@@ -104,8 +108,9 @@ its card; renaming the block renames it. The timing functions are in
 
 `qml/account/AccountFlow.qml` covers the shell until sign-in, recovery and setup
 are complete. Sign in, Create account and Reset password share one card, with
-Keep me signed in on this computer. New accounts acknowledge eight one-time
-recovery codes before setup.
+Keep me signed in on this computer. At launch, a kept session stays in the Opening phase while it is checked.
+A working session goes straight to the week without flashing the sign-in card. New accounts acknowledge eight
+one-time recovery codes before setup.
 
 Setup is three steps of multiple-choice cards: School hours, Study hours, and
 Look & alerts. A live week preview contains only what the student entered. The
