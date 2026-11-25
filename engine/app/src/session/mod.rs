@@ -15,6 +15,7 @@ pub mod autosave;
 pub mod focus;
 pub mod frame;
 pub mod leaving;
+pub mod plan_previews;
 pub mod preferences;
 pub mod reminders;
 pub mod status;
