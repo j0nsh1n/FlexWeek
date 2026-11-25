@@ -19,6 +19,12 @@ mod more;
 mod rest;
 mod service;
 mod session;
+mod session_focus;
+mod session_homework_edits;
+mod session_preferences;
+mod session_reminders;
+mod session_spotify;
+mod session_transfer;
 mod sync;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
@@ -357,6 +363,12 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     rest::add(m)?;
     service::add(m)?;
     session::add(m)?;
+    session_reminders::add(m)?;
+    session_transfer::add(m)?;
+    session_homework_edits::add(m)?;
+    session_preferences::add(m)?;
+    session_focus::add(m)?;
+    session_spotify::add(m)?;
     db::add(m)?;
     desk::add(m)?;
     desk_rest::add(m)?;

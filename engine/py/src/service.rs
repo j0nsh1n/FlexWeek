@@ -155,6 +155,19 @@ fn checked_homework(text: &str) -> PyResult<String> {
     })
 }
 
+/// A homework's content as a week or day file holds it (no revision), checked and written as the engine's
+/// `assignment_content` does (pydantic's `AssignmentContent`); one it refuses raises ValueError with why.
+#[pyfunction]
+fn checked_homework_content(text: &str) -> PyResult<String> {
+    guard(|| {
+        let value: serde_json::Value =
+            serde_json::from_str(text).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        flexweek_engine::validate::assignment_content(&value)
+            .map(|content| content.to_value().to_string())
+            .map_err(PyValueError::new_err)
+    })
+}
+
 /// The fields a homework save may have (`Assignment.model_fields`): its content's, then the revision.
 #[pyfunction]
 fn homework_fields() -> PyResult<Vec<&'static str>> {
@@ -200,6 +213,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         preference_fields,
         checked_block,
         checked_homework,
+        checked_homework_content,
         homework_fields,
         check_hours_windows
     );
