@@ -46,14 +46,11 @@ class PairViewModel(
         uiState.value = uiState.value.copy(mode = PairInputMode.Qr, problem = null, tried = false)
     }
 
+    /** Keeps the digits only. The space after the fourth is drawn by [PairCodeGrouping], not typed into the
+     * code: a space put into the text moved the digits typed after it out of order (Jonathan, 2026-11-24). */
     fun onCodeChange(raw: String) {
         val digits = raw.filter { it.isDigit() }.take(8)
-        val grouped =
-            when {
-                digits.length <= 4 -> digits
-                else -> digits.substring(0, 4) + " " + digits.substring(4)
-            }
-        uiState.value = uiState.value.copy(code = grouped, problem = null)
+        uiState.value = uiState.value.copy(code = digits, problem = null)
     }
 
     fun submitPair() {
