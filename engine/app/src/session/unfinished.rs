@@ -302,6 +302,9 @@ impl HomeworkCounts {
 pub fn homework_counts(input: HomeworkCountsInput<'_>) -> Result<HomeworkCounts, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
+    if !time::is_calendar_date(input.week_start) {
+        return Err("week_start must be a date written YYYY-MM-DD".to_string());
+    }
     let now_point = screen_now(input.week_start, &input.now)?;
     let assignments_val = Value::Object(input.assignments.clone());
     let open_week = planning::without_missed_times(
@@ -473,6 +476,9 @@ pub struct UnfinishedInput<'a> {
 pub fn unfinished_items(input: UnfinishedInput<'_>) -> Result<Vec<Value>, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
+    if !time::is_calendar_date(input.week_start) {
+        return Err("week_start must be a date written YYYY-MM-DD".to_string());
+    }
     let today_week =
         time::week_start_on(input.now.today, input.first_weekday).map_err(|err| err.message)?;
     let here = input.week_start == today_week;
@@ -577,6 +583,9 @@ pub fn unfinished_preview(
 ) -> Result<UnfinishedPreview, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
+    if !time::is_calendar_date(input.week_start) {
+        return Err("week_start must be a date written YYYY-MM-DD".to_string());
+    }
     // Wall-clock today may be any real date, like the session clock.
     if time::week_start_on(input.plannable_today, 0).is_err() {
         return Err(format!(
@@ -707,6 +716,9 @@ pub fn plan_unfinished(
 ) -> Result<UnfinishedPlan, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
+    if !time::is_calendar_date(input.week_start) {
+        return Err("week_start must be a date written YYYY-MM-DD".to_string());
+    }
     let start = planning::plan_start_at(
         input.week_start,
         input.now.today,

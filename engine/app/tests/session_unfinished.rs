@@ -1037,3 +1037,83 @@ fn the_preview_and_the_card_list_accept_a_january_2100_clock_in_the_last_week() 
     );
     assert!(bad.is_err());
 }
+
+#[test]
+fn unfinished_items_accepts_clocks_whose_week_starts_outside_2000_2099() {
+    // On 2000-01-01 (Saturday), Monday-start derives today_week = 1999-12-27.
+    let early_hw = map_of(vec![assignment("early", "Early", "2000-01-01T08:00", 60)]);
+    let early = unfinished_items(UnfinishedInput {
+        week_start: "2000-01-01",
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &early_hw,
+        assignments_basis: &[],
+        saved_weeks: &[],
+        stored_parts: &[],
+        now: ClockNow::at("2000-01-01", 9, 0),
+    })
+    .unwrap();
+    assert_eq!(early.len(), 1);
+    assert_eq!(early[0]["id"], "early");
+    assert_eq!(early[0]["left_over_state"], "overdue");
+
+    // On 2100-01-04 (Monday), today_week = 2100-01-04 while viewing the last supported week 2099-12-28.
+    let late_hw = map_of(vec![assignment("late", "Late", "2099-12-30T10:00", 60)]);
+    let late = unfinished_items(UnfinishedInput {
+        week_start: "2099-12-28",
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &late_hw,
+        assignments_basis: &[],
+        saved_weeks: &[],
+        stored_parts: &[],
+        now: ClockNow::at("2100-01-04", 9, 0),
+    })
+    .unwrap();
+    assert_eq!(late.len(), 1);
+    assert_eq!(late[0]["id"], "late");
+    assert_eq!(late[0]["left_over_state"], "overdue");
+}
+
+#[test]
+fn unfinished_preview_refuses_week_start_outside_save_range() {
+    let assignments = map_of(vec![assignment("late", "Late", "2099-12-30T10:00", 60)]);
+    for unsavable in ["2100-01-04", "1999-12-27"] {
+        let err = unfinished_preview(
+            UnfinishedPreviewInput {
+                week_start: unsavable,
+                blocks: &[],
+                assignments: &assignments,
+                assignments_basis: &[],
+                assignment_id: "late",
+                now: ClockNow::at(unsavable, 9, 0),
+                plannable_today: unsavable,
+            },
+            "new-1",
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("week_start"),
+            "expected week_start error for {unsavable}, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn left_over_items_from_reports_week_error_before_clock_error() {
+    let err = flexweek_engine::desk::clipboard::left_over_items_from(
+        &json!({}),
+        &json!([]),
+        "bad",
+        "bad",
+        &json!([]),
+        &json!([]),
+        &json!([]),
+    )
+    .unwrap_err();
+    assert!(
+        err.message.contains("week_start"),
+        "expected week_start error first, got: {}",
+        err.message
+    );
+}

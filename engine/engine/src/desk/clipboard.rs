@@ -1,5 +1,6 @@
 //! Copy and paste, collision previews and routines from `desktop/native/reuse.py`.
 
+use chrono::Datelike;
 use serde_json::{Map, Value, json};
 
 use crate::desk::planning::{
@@ -568,6 +569,7 @@ pub fn left_over_items_from(
     committed_blocks: &Value,
     first_part: &Value,
 ) -> EngineResult<Vec<Value>> {
+    crate::shown::shown_parts(today_week)?;
     let moment = crate::model::parse_due(now)?;
     left_over_items_at(
         assignments,
@@ -591,11 +593,18 @@ pub fn left_over_items_at(
     committed_blocks: &Value,
     first_part: &Value,
 ) -> EngineResult<Vec<Value>> {
-    let shown = crate::shown::shown_parts(today_week)?;
+    let day = crate::desk::pydate::from_iso(today_week)?;
+    let offset = i64::from(day.weekday().num_days_from_monday());
+    let shown = if offset == 0 {
+        None
+    } else {
+        let first = crate::desk::pydate::iso_text(day - chrono::Duration::days(offset));
+        Some((first, offset))
+    };
     let first_monday = json!(
         shown
             .as_ref()
-            .map_or(today_week, |(first, _, _)| first.as_str())
+            .map_or(today_week, |(first, _)| first.as_str())
     );
     let Value::Object(table) = assignments else {
         return Err(attribute_error(assignments, "values"));
@@ -622,7 +631,7 @@ pub fn left_over_items_at(
                     continue;
                 }
                 let before = match &shown {
-                    Some((first, _, offset)) if session_week == json!(first) => {
+                    Some((first, offset)) if session_week == json!(first) => {
                         iterate(first_part)?.iter().any(|block| {
                             block.get("assignment_id") == Some(id)
                                 && block["days"].as_array().is_some_and(|days| {
