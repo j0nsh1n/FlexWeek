@@ -2195,13 +2195,11 @@ class NativeWindow(QObject):
         session = self.session
         if self._leaving is not None:
             return False
-        if session.account is None or not (session._held() or session.parked_unsaved_week()):
+        if not session.start_leaving(LEAVE_WAIT_MS, again):
             return True
         timer = QTimer(self)
         timer.setInterval(LEAVE_POLL_MS)
         self._leaving = timer
-        # Which step each poll takes is the session's (engine/app/src/session/leaving.rs).
-        session.client.command({"cmd": "leaving_start", "limit_ms": LEAVE_WAIT_MS, "again": again})
 
         def stop() -> None:
             timer.stop()
@@ -2218,7 +2216,7 @@ class NativeWindow(QObject):
             elif step == "save":
                 session.save()
             elif step == "load":
-                session.load_week(session.parked_unsaved_week())
+                session.load_week(answer["week"])
             elif step == "leave":
                 stop()
                 self._saved_to_leave = True

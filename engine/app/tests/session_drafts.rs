@@ -251,6 +251,79 @@ fn both_reads_must_land_before_a_dirty_week_is_parked() {
 }
 
 #[test]
+fn leaving_reopens_and_saves_each_parked_draft_in_order() {
+    let mut desk = Desk::signed_in("leaving-parked-drafts");
+    desk.load(NEXT);
+    desk.edit(json!([band()]), json!([]), Value::Null);
+    desk.load(FIRST);
+    desk.edit(json!([band()]), json!([]), Value::Null);
+    desk.load("2026-11-16");
+
+    let start =
+        json!({ "cmd": "drafts_leaving_start", "limit_ms": 5000, "again": "close FlexWeek again" });
+    assert_eq!(desk.send(start.clone())["waiting"], true);
+
+    let poll = json!({ "cmd": "drafts_leaving_poll", "poll_ms": 100 });
+    for (expected, operation) in [(NEXT, "save-next"), (FIRST, "save-first")] {
+        let action = desk.send(poll.clone());
+        assert_eq!(action["step"], "load");
+        assert_eq!(action["week"], expected);
+        assert_eq!(
+            desk.choose(action["week"].as_str().unwrap())["action"],
+            "restore"
+        );
+        assert_eq!(desk.send(poll.clone())["step"], "save");
+        desk.save_to_store(operation);
+        assert_eq!(desk.stored(expected)["blocks"][0]["id"], "band");
+    }
+    assert_eq!(desk.send(poll)["step"], "leave");
+    assert_eq!(desk.send(start)["waiting"], false);
+}
+
+#[test]
+fn giving_up_after_a_failed_save_keeps_the_retry_and_the_parked_draft() {
+    let mut desk = Desk::signed_in("leaving-keeps-drafts");
+    desk.load(FIRST);
+    desk.edit(json!([band()]), json!([]), Value::Null);
+    desk.load(NEXT);
+    let open_block = json!({
+        "id": "club", "title": "Club", "kind": "locked", "days": [0], "start": "15:00", "duration_min": 45,
+    });
+    desk.edit(json!([open_block]), json!([]), Value::Null);
+
+    let start =
+        json!({ "cmd": "drafts_leaving_start", "limit_ms": 5000, "again": "sign out again" });
+    assert_eq!(desk.send(start)["waiting"], true);
+    let poll = json!({ "cmd": "drafts_leaving_poll", "poll_ms": 100 });
+    assert_eq!(desk.send(poll.clone())["step"], "save");
+    desk.save("unsaved-club", false);
+    let (ticket, effect) = desk.post();
+    assert_eq!(desk.send(poll.clone())["step"], "wait");
+    assert_eq!(
+        desk.reply(&effect, &offline(), &Value::Null)["action"],
+        "save_failed"
+    );
+    desk.idle(ticket);
+
+    let pending = desk.view("pending_save");
+    assert_eq!(pending["operation_id"], "unsaved-club");
+    let action = desk.send(poll);
+    assert_eq!(action["step"], "give_up");
+    assert_eq!(
+        action["words"],
+        "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. Choose Retry save, then sign out again."
+    );
+    assert_eq!(desk.view("week_start"), NEXT);
+    assert_eq!(desk.view("blocks"), json!([open_block]));
+    assert_eq!(desk.view("pending_save"), pending);
+    assert_eq!(desk.view("meta")["parked_held"], FIRST);
+    assert_eq!(desk.choose(FIRST)["action"], "restore");
+    assert_eq!(desk.view("blocks"), json!([band()]));
+    assert_eq!(desk.stored(NEXT)["blocks"], json!([]));
+    assert_eq!(desk.stored(FIRST)["blocks"], json!([]));
+}
+
+#[test]
 fn a_lost_answer_retries_one_frozen_body_and_a_failed_undo_keeps_its_step() {
     let mut desk = Desk::signed_in("draft-retry-and-undo");
     desk.load(FIRST);

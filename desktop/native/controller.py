@@ -685,6 +685,11 @@ class NativeSession(QObject):
     def autosave_due(self) -> bool:
         return self._draft_command("autosave", signed_in=self.account is not None)["save"]
 
+    def start_leaving(self, limit_ms: int, again: str) -> bool:
+        if self.account is None:
+            return False
+        return self._draft_command("leaving_start", limit_ms=limit_ms, again=again)["waiting"]
+
     def poll_leaving(self, poll_ms: int) -> dict:
         return self._draft_command("leaving_poll", poll_ms=poll_ms)
 
