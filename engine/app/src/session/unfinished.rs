@@ -36,6 +36,13 @@ impl<'a> ClockNow<'a> {
     }
 }
 
+/// A stored Monday is `is_week_start`, which is what the week save checks and
+/// which includes 1999-12-27. A week shown from another weekday is any
+/// supported calendar date. Either one may be opened; 2100-01-04 is neither.
+fn accepted_week_start(week_start: &str) -> bool {
+    time::is_week_start(week_start) || time::is_calendar_date(week_start)
+}
+
 fn validate_clock(now: &ClockNow<'_>) -> Result<(), String> {
     // The clock is any real date; only deadlines are held to 2000..2099.
     if time::week_start_on(now.today, 0).is_err() {
@@ -302,7 +309,7 @@ impl HomeworkCounts {
 pub fn homework_counts(input: HomeworkCountsInput<'_>) -> Result<HomeworkCounts, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
-    if !time::is_calendar_date(input.week_start) {
+    if !accepted_week_start(input.week_start) {
         return Err("week_start must be a date written YYYY-MM-DD".to_string());
     }
     let now_point = screen_now(input.week_start, &input.now)?;
@@ -476,7 +483,7 @@ pub struct UnfinishedInput<'a> {
 pub fn unfinished_items(input: UnfinishedInput<'_>) -> Result<Vec<Value>, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
-    if !time::is_calendar_date(input.week_start) {
+    if !accepted_week_start(input.week_start) {
         return Err("week_start must be a date written YYYY-MM-DD".to_string());
     }
     let today_week =
@@ -583,7 +590,7 @@ pub fn unfinished_preview(
 ) -> Result<UnfinishedPreview, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
-    if !time::is_calendar_date(input.week_start) {
+    if !accepted_week_start(input.week_start) {
         return Err("week_start must be a date written YYYY-MM-DD".to_string());
     }
     // Wall-clock today may be any real date, like the session clock.
@@ -716,7 +723,7 @@ pub fn plan_unfinished(
 ) -> Result<UnfinishedPlan, String> {
     validate_clock(&input.now)?;
     check_blocks(input.blocks, input.assignments_basis)?;
-    if !time::is_calendar_date(input.week_start) {
+    if !accepted_week_start(input.week_start) {
         return Err("week_start must be a date written YYYY-MM-DD".to_string());
     }
     let start = planning::plan_start_at(

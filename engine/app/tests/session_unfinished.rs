@@ -1077,25 +1077,165 @@ fn unfinished_items_accepts_clocks_whose_week_starts_outside_2000_2099() {
 
 #[test]
 fn unfinished_preview_refuses_week_start_outside_save_range() {
-    let assignments = map_of(vec![assignment("late", "Late", "2099-12-30T10:00", 60)]);
-    for unsavable in ["2100-01-04", "1999-12-27"] {
-        let err = unfinished_preview(
+    // The week save accepts `is_week_start`: Mondays from 2000-01-03 through
+    // 2099-12-28, and 1999-12-27 (the Monday of the week that holds 2000-01-01).
+    // 1999-12-20 and 2100-01-04 are the Mondays just outside that, and the save
+    // refuses both. A shown week that is not a Monday stays accepted when it is
+    // a calendar date in 2000..2099, the same pair the homework list uses.
+    let assignments = map_of(vec![assignment("essay", "Essay", "2000-01-02T12:00", 60)]);
+    for unsavable in ["2100-01-04", "1999-12-20"] {
+        let refused = unfinished_preview(
             UnfinishedPreviewInput {
                 week_start: unsavable,
                 blocks: &[],
                 assignments: &assignments,
                 assignments_basis: &[],
-                assignment_id: "late",
-                now: ClockNow::at(unsavable, 9, 0),
-                plannable_today: unsavable,
+                assignment_id: "essay",
+                now: ClockNow::at("2000-01-01", 9, 0),
+                plannable_today: "2000-01-01",
             },
             "new-1",
         )
         .unwrap_err();
         assert!(
-            err.contains("week_start"),
-            "expected week_start error for {unsavable}, got: {err}"
+            refused.contains("week_start"),
+            "expected week_start error for {unsavable}, got: {refused}"
         );
+        let counts_err = homework_counts(HomeworkCountsInput {
+            week_start: unsavable,
+            first_weekday: 0,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            now: ClockNow::at("2000-01-01", 9, 0),
+        })
+        .unwrap_err();
+        assert!(
+            counts_err.contains("week_start"),
+            "homework_counts should refuse {unsavable}, got: {counts_err}"
+        );
+        let items_err = unfinished_items(UnfinishedInput {
+            week_start: unsavable,
+            first_weekday: 0,
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            saved_weeks: &[],
+            stored_parts: &[],
+            now: ClockNow::at("2000-01-01", 9, 0),
+        })
+        .unwrap_err();
+        assert!(
+            items_err.contains("week_start"),
+            "unfinished_items should refuse {unsavable}, got: {items_err}"
+        );
+        let mut ids = ["new-1".to_string()].into_iter();
+        let plan_err = plan_unfinished(
+            UnfinishedPlanInput {
+                week_start: unsavable,
+                blocks: &[],
+                assignments: &assignments,
+                assignments_basis: &[],
+                assignment_ids: &["essay".to_string()],
+                now: ClockNow::at("2000-01-01", 9, 0),
+            },
+            &mut ids,
+        )
+        .unwrap_err();
+        assert!(
+            plan_err.contains("week_start"),
+            "plan_unfinished should refuse {unsavable}, got: {plan_err}"
+        );
+    }
+
+    // 2000-01-01 is Saturday of the week that starts 1999-12-27, so the first
+    // plannable day is 5 and the Sunday due is day 6. Sixty minutes and no
+    // session already holding them preview as one row on those two days.
+    let preview = unfinished_preview(
+        UnfinishedPreviewInput {
+            week_start: "1999-12-27",
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            assignment_id: "essay",
+            now: ClockNow::at("2000-01-01", 9, 0),
+            plannable_today: "2000-01-01",
+        },
+        "new-1",
+    )
+    .unwrap();
+    match preview {
+        UnfinishedPreview::Rows(rows) => {
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0]["week_start"], "1999-12-27");
+            assert_eq!(rows[0]["day"], 5);
+            assert_eq!(rows[0]["original_duration"], 60);
+            assert_eq!(rows[0]["block"]["assignment_id"], "essay");
+            assert_eq!(rows[0]["block"]["duration_min"], 60);
+            assert_eq!(rows[0]["block"]["days"], json!([5, 6]));
+        }
+        UnfinishedPreview::Say(words) => {
+            panic!("1999-12-27 is a savable week start, got: {words}")
+        }
+    }
+
+    let counts = homework_counts(HomeworkCountsInput {
+        week_start: "1999-12-27",
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &assignments,
+        assignments_basis: &[],
+        now: ClockNow::at("2000-01-01", 9, 0),
+    })
+    .unwrap();
+    assert!(counts.overdue_assignment_ids.is_empty());
+    assert!(counts.plan_can_place);
+    assert_eq!(counts.per_assignment["essay"].remaining_min, 60);
+    assert!(!counts.per_assignment["essay"].overdue);
+
+    let items = unfinished_items(UnfinishedInput {
+        week_start: "1999-12-27",
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &assignments,
+        assignments_basis: &[],
+        saved_weeks: &[],
+        stored_parts: &[],
+        now: ClockNow::at("2000-01-01", 9, 0),
+    })
+    .unwrap();
+    assert!(items.is_empty());
+
+    let mut ids = ["new-1".to_string()].into_iter();
+    let plan = plan_unfinished(
+        UnfinishedPlanInput {
+            week_start: "1999-12-27",
+            blocks: &[],
+            assignments: &assignments,
+            assignments_basis: &[],
+            assignment_ids: &["essay".to_string()],
+            now: ClockNow::at("2000-01-01", 9, 0),
+        },
+        &mut ids,
+    )
+    .unwrap();
+    match plan {
+        UnfinishedPlan::Ready {
+            made,
+            ordinary_targets,
+            overdue_targets,
+            blocks,
+        } => {
+            assert_eq!(made, vec!["new-1"]);
+            assert_eq!(ordinary_targets, vec!["new-1"]);
+            assert!(overdue_targets.is_empty());
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(blocks[0]["days"], json!([5, 6]));
+            assert_eq!(blocks[0]["duration_min"], 60);
+        }
+        UnfinishedPlan::Say(words) => {
+            panic!("1999-12-27 is a savable week start, got: {words}")
+        }
     }
 }
 
