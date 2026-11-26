@@ -24,6 +24,7 @@ pub mod plan;
 pub mod plan_previews;
 pub mod preferences;
 pub mod reminders;
+pub mod sheet_check;
 pub mod spotify;
 pub mod status;
 pub mod transfer;

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
 from uuid import uuid4
 
-from pydantic import ValidationError
+import flexweek_engine  # type: ignore[import-untyped]
 
 from backend.slots import (
     DAY_END_MIN,
@@ -192,36 +193,14 @@ BLOCK_PROBLEMS = {
 BLOCK_REFUSED = "FlexWeek can't keep this block as it is. Check its title, days and times."
 
 
-def _block_problem(error: ValidationError) -> str:
-    fields = [str(part) for item in error.errors() for part in item.get("loc") or ()]
-    return next((BLOCK_PROBLEMS[field] for field in fields if field in BLOCK_PROBLEMS), BLOCK_REFUSED)
+def block_sheet_problem(block: dict) -> tuple[str, str] | None:
+    """First failing field and student-facing sentence for a block sheet, or None when valid."""
+    return flexweek_engine.block_sheet_problem(json.dumps(block))
 
 
-def _homework_problem(error: ValueError) -> str:
-    if not isinstance(error, ValidationError):
-        return HOMEWORK_REFUSED
-    first = error.errors()[0]
-    path = tuple(str(part) for part in first.get("loc") or ())
-    field = path[0] if path else ""
-    if field == "title":
-        return (
-            "Keep the homework title under 80 characters."
-            if first["type"] == "string_too_long"
-            else "Give the homework a title."
-        )
-    if field == "estimate_min":
-        return ESTIMATE_ERROR
-    if field == "links":
-        if "url" in path:
-            return "A link needs an http:// or https:// address."
-        if "label" in path:
-            return "Give each link a name under 80 characters."
-        return "Keep no more than 20 links."
-    if field == "checklist":
-        if "text" in path:
-            return "Keep each checklist step under 80 characters."
-        return "Keep no more than 40 checklist steps."
-    return HOMEWORK_PROBLEMS.get(field, HOMEWORK_REFUSED)
+def homework_sheet_problem(homework: dict) -> tuple[str, str] | None:
+    """First failing field and student-facing sentence for a homework sheet, or None when valid."""
+    return flexweek_engine.homework_sheet_problem(json.dumps(homework))
 
 
 def _preset_locked(
