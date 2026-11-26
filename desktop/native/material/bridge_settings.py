@@ -12,13 +12,11 @@ import copy
 from typing import Any
 
 import flexweek_engine  # type: ignore[import-untyped]
-from pydantic import ValidationError
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 
 from backend import clock as wall_clock
 from backend.comfort import TIMER_PRESETS, snap_minutes
-from backend.models import TimeBlock, WeekRequest, valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import feedback
 from desktop.native.calendar import DAY_FULL, DAYS, SETUP_SCHOOL_ID, this_week_line
@@ -1831,7 +1829,7 @@ class SettingsBridge(QObject):
             return
         raw = text.strip()
         try:
-            link = valid_spotify_url(raw)
+            link = flexweek_engine.valid_spotify_url(raw)
         except ValueError:
             self._spotify_error = "Use a link that starts with https://open.spotify.com."
             self._publish()
@@ -2164,12 +2162,11 @@ class SettingsBridge(QObject):
             "category": "class",
         }
         made.update(days=sorted(school.days), start=school.start, duration_min=school.minutes())
-        try:
-            WeekRequest(blocks=[TimeBlock.model_validate(made)])
-        except ValidationError as error:
-            from desktop.native.sheet_rules import _block_problem
+        from desktop.native.sheet_rules import block_sheet_problem
 
-            school.error = _block_problem(error)
+        checked = block_sheet_problem(made)
+        if checked is not None:
+            school.error = checked[1]
             self._publish()
             return
         after = [made if item.get("id") == SETUP_SCHOOL_ID else item for item in repeats]
