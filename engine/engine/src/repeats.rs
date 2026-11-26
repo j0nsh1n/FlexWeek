@@ -329,6 +329,14 @@ fn missed_of(block: &Value) -> Vec<i64> {
         .unwrap_or_default()
 }
 
+fn removed_of(block: &Value) -> Vec<i64> {
+    block
+        .get("removed_days")
+        .and_then(Value::as_array)
+        .map(|days| days.iter().filter_map(Value::as_i64).collect())
+        .unwrap_or_default()
+}
+
 fn id_of(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
 }
@@ -423,9 +431,6 @@ pub fn three_way(old: &Value, new: &Value, held: &Value) -> Value {
     let (old_days, new_days, held_days) = (days_of(old), days_of(new), days_of(held));
     let days: Vec<i64> = (0..7)
         .filter(|day| {
-            if removed_on(held, &Value::from(*day)) {
-                return true;
-            }
             let in_held = held_days.contains(day);
             if in_held == old_days.contains(day) {
                 new_days.contains(day)
@@ -435,22 +440,42 @@ pub fn three_way(old: &Value, new: &Value, held: &Value) -> Value {
         })
         .collect();
     let missed = missed_of(held);
-    let removed: Vec<i64> = days
-        .iter()
-        .copied()
-        .filter(|day| removed_on(held, &Value::from(*day)))
-        .collect();
+    let held_removed = removed_of(held);
     let all_missed = !held_days.is_empty() && held_days.iter().all(|day| missed.contains(day));
-    let (days, missed): (Vec<i64>, Vec<i64>) = if days.is_empty() {
-        (new_days.clone(), new_days)
+    let all_absent = !held_days.is_empty()
+        && held_days
+            .iter()
+            .all(|day| missed.contains(day) || held_removed.contains(day));
+    let has_removed = held_days.iter().any(|day| held_removed.contains(day));
+    let (days, missed, removed): (Vec<i64>, Vec<i64>, Vec<i64>) = if days.is_empty() {
+        if all_missed {
+            (new_days.clone(), new_days, Vec::new())
+        } else {
+            (new_days.clone(), Vec::new(), new_days)
+        }
     } else if all_missed {
-        (days.clone(), days)
-    } else {
-        let kept = missed
+        (days.clone(), days, Vec::new())
+    } else if all_absent && has_removed {
+        let kept_missed: Vec<i64> = missed
             .into_iter()
             .filter(|day| days.contains(day))
             .collect();
-        (days, kept)
+        let removed: Vec<i64> = days
+            .iter()
+            .copied()
+            .filter(|day| !kept_missed.contains(day))
+            .collect();
+        (days, kept_missed, removed)
+    } else {
+        let kept_missed: Vec<i64> = missed
+            .into_iter()
+            .filter(|day| days.contains(day))
+            .collect();
+        let kept_removed: Vec<i64> = held_removed
+            .into_iter()
+            .filter(|day| days.contains(day) && !kept_missed.contains(day))
+            .collect();
+        (days, kept_missed, kept_removed)
     };
     fields.insert("days".into(), json!(days));
     if missed.is_empty() {
@@ -479,7 +504,10 @@ pub fn restated_version(
     match (old, new) {
         (Some(old), Some(new)) => {
             let merged = three_way(old, new, held);
-            if days_of(&merged).is_empty() || !missed_of(&merged).is_empty() {
+            if days_of(&merged).is_empty()
+                || !missed_of(&merged).is_empty()
+                || !removed_of(&merged).is_empty()
+            {
                 Some(held.clone())
             } else {
                 Some(merged)

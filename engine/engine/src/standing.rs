@@ -131,19 +131,41 @@ pub fn uncut_copy(copy: &Value, repeat: Option<&Value>, week_start: &str) -> Eng
     let shown = cut_at_until(repeat, week_start)?
         .map(|block| days_of(&block))
         .unwrap_or_default();
-    let mut days = days_of(copy);
-    let before = days.len();
+    let orig_days = days_of(copy);
+    let mut days = orig_days.clone();
+    let mut added = Vec::new();
     for day in days_of(repeat) {
         if !shown.contains(&day) && !days.contains(&day) {
             days.push(day);
+            added.push(day);
         }
     }
-    if days.len() == before {
+    if added.is_empty() {
         return Ok(copy.clone());
     }
     days.sort_unstable();
     let mut out = copy.clone();
     out["days"] = json!(days);
+    let missed = copy.get("missed_days").and_then(Value::as_array);
+    let all_absent = !orig_days.is_empty()
+        && orig_days.iter().all(|day| {
+            removed_on(copy, &Value::from(*day))
+                || missed.is_some_and(|days| days.contains(&Value::from(*day)))
+        });
+    let has_removed = orig_days
+        .iter()
+        .any(|day| removed_on(copy, &Value::from(*day)));
+    if all_absent && has_removed {
+        let mut removed: Vec<i64> = copy
+            .get("removed_days")
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(Value::as_i64).collect())
+            .unwrap_or_default();
+        removed.extend(added);
+        removed.sort_unstable();
+        removed.dedup();
+        out["removed_days"] = json!(removed);
+    }
     Ok(out)
 }
 

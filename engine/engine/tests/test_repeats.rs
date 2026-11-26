@@ -212,7 +212,11 @@ fn a_copy_left_with_no_day_shows_nothing_rather_than_the_repeat() {
     let merged = three_way(&school(), &new, &only_wednesday);
     assert_eq!(merged["days"], json!([0, 1, 3, 4]));
     assert_eq!(merged["removed_days"], json!([0, 1, 3, 4]));
-    assert!(merged.get("missed_days").is_none_or(|days| days == &json!([])));
+    assert!(
+        merged
+            .get("missed_days")
+            .is_none_or(|days| days == &json!([]))
+    );
 }
 
 #[test]
@@ -232,11 +236,15 @@ fn a_week_emptied_this_week_only_stays_empty_when_the_repeat_gains_or_swaps_days
     let merged = three_way(&soccer(), &gains, &copy);
     assert_eq!(merged["days"], json!([1, 3, 5]));
     assert_eq!(merged["removed_days"], json!([1, 3, 5]));
-    assert!(merged.get("missed_days").is_none_or(|days| days == &json!([])));
+    assert!(
+        merged
+            .get("missed_days")
+            .is_none_or(|days| days == &json!([]))
+    );
     let swaps = with(soccer(), json!({"days": [0, 2, 4]}));
     let merged = three_way(&soccer(), &swaps, &copy);
-    assert_eq!(merged["days"], json!([0, 1, 2, 3, 4]));
-    assert_eq!(merged["removed_days"], json!([0, 1, 2, 3, 4]));
+    assert_eq!(merged["days"], json!([0, 2, 4]));
+    assert_eq!(merged["removed_days"], json!([0, 2, 4]));
 }
 
 #[test]
@@ -250,6 +258,11 @@ fn a_partly_removed_week_keeps_its_removed_and_missed_days_when_a_day_is_added()
     assert_eq!(merged["days"], json!([0, 1, 2, 3, 4, 5]));
     assert_eq!(merged["missed_days"], json!([2]));
     assert_eq!(merged["removed_days"], json!([0, 1, 3, 4, 5]));
+    // When some days are still live, removed days stay removed and a new repeat day lands live.
+    let partly_live = with(school(), json!({"removed_days": [1, 3]}));
+    let merged = three_way(&school(), &new, &partly_live);
+    assert_eq!(merged["days"], json!([0, 1, 2, 3, 4, 5]));
+    assert_eq!(merged["removed_days"], json!([1, 3]));
 }
 
 #[test]
