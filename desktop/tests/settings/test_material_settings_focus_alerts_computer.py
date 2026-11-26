@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication
 from backend import clock as wall_clock
 from desktop.native.window import SIGN_OUT_QUESTION, WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.logic_support import sign_in
 from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
@@ -28,7 +29,7 @@ from desktop.tests.settings.support_material_settings import (
     _texts,
 )
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import PASSWORD, USERNAME, qapp  # noqa: F401
 
 # ruff: noqa: F811
 
@@ -842,3 +843,61 @@ def test_the_sign_out_row_does_not_name_a_missing_account(
     for item in _texts(row):
         assert "Signed in as ." not in str(item.property("text"))
     window.session.account = held
+
+
+def test_signing_out_of_this_computer_opens_the_week_without_the_old_drafts(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Sign out, then sign in: Week is showing, and the drafts left in Settings are gone."""
+    root = _open_settings(qapp, window, "computer")
+    panel = _panel(window)
+    panel.addWorkCustom()
+    panel.toggleSchoolDay(6)
+    panel.setSpotify("not-a-link")
+    saved_clock = (window.session.preferences or {}).get("clock_24h") is True
+    panel._sync_problem = "Sync failed: the old phone"
+    panel._remove_ask = {"id": "old", "name": "Old phone"}
+    panel._unsaved = {"clock_24h": not saved_clock}
+    panel.setReminderLead(999)
+    _pump(qapp)
+    before = panel.property("state")
+    assert before["section"] == "computer"
+    assert before["studyDirty"] is True
+    assert before["schoolDirty"] is True
+    assert before["spotifyError"] == "Use a link that starts with https://open.spotify.com."
+    assert before["notice"] == "Couldn't save that change. Try again."
+    assert before["syncProblem"] == "Sync failed: the old phone"
+    assert before["askRemove"] is True
+    assert before["clock24"] is not saved_clock
+
+    _click(qapp, window, _named(root, "signOut")[0])
+    _bridge(window).sheets.answer("yes")
+    wait_until(qapp, lambda: window.session.account is None and not window.session.busy)
+    _pump(qapp)
+    page = window._material_page
+    assert page is not None and page.root is not None
+    signed_out_rows = _named(page.root, "row_signOut")
+    if signed_out_rows:
+        assert str(signed_out_rows[0].property("subtitle")) == "Your week is saved first."
+    for item in _texts(page.root):
+        assert "Signed in as ." not in str(item.property("text"))
+
+    sign_in(qapp, window, USERNAME, PASSWORD)
+    wait_until(
+        qapp,
+        lambda: window.session.account is not None
+        and window.session.preferences is not None
+        and not window.session.busy,
+    )
+    _pump(qapp)
+    assert _bridge(window).property("screen") == "week"
+    state = panel.property("state")
+    assert state["section"] == "look"
+    assert state["page"] == "sections"
+    assert state["studyDirty"] is False
+    assert state["schoolDirty"] is False
+    assert state["notice"] == ""
+    assert state["spotifyError"] == ""
+    assert state["syncProblem"] == ""
+    assert state["askRemove"] is False
+    assert state["clock24"] is ((window.session.preferences or {}).get("clock_24h") is True)

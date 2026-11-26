@@ -1090,6 +1090,31 @@ class SettingsBridge(QObject):
     def sessionBusy(self) -> bool:
         return self._session_busy
 
+    def clear_account(self) -> None:
+        """Drop this account's Settings drafts and notices. The next sign-in reads its own."""
+        leftover = (
+            self._section != "look"
+            or self._page != "sections"
+            or bool(self._unsaved)
+            or bool(self._notice)
+            or bool(self._spotify_error)
+            or bool(self._sync_problem)
+            or bool(self._remove_ask)
+            or self._study.dirty
+            or self._school.dirty
+        )
+        self._section = "look"
+        self._page = "sections"
+        self._unsaved = {}
+        self._notice = ""
+        self._spotify_error = ""
+        self._sync_problem = ""
+        self._remove_ask = {}
+        self._study.dirty = False
+        self._school.dirty = False
+        if leftover:
+            self._publish()
+
     def _worn_dark(self) -> bool:
         from desktop.native.material.host import appearance_of
 
