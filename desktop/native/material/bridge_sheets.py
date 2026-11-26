@@ -1151,7 +1151,7 @@ class SheetsBridge(QObject):
         self._publish()
 
     def _on_busy(self, _busy: bool) -> None:
-        if self._kind in ("homework", "block"):
+        if self._kind in ("homework", "block", "account"):
             self._publish()
 
     def _on_saved(self, stored: bool, said: str) -> None:
@@ -1760,8 +1760,15 @@ class SheetsBridge(QObject):
     @Slot(str, str, str)
     def accountAct(self, action: str, password: str, new_password: str) -> None:
         """A button of the Account sheet. It closes, then does what the Widgets dialog did once it had
-        closed. Delete stays open under its question, so Cancel finds the fields as they were."""
+        closed. Delete and Sign out stay open under their questions, so Cancel finds the fields as they
+        were. Sign out is the More menu's sign-out, and it stays off while the session is busy."""
         if self._kind != "account":
+            return
+        if action == "signOut":
+            # The prompt draws over this sheet. Closing first would drop the password fields on Cancel.
+            if self._session is not None and self._session.busy:
+                return
+            self._window._log_out()
             return
         acts = self._account_actions
         if action == "delete":
@@ -1963,7 +1970,11 @@ class SheetsBridge(QObject):
         elif kind == "update" and self._update is not None:
             self._form = update_form(self._update, self._update_current, self._update_state)
         elif kind == "account":
-            self._form = account_form(self._session.storage_info, self._session.recovery_remaining)
+            session = self._session
+            self._form = {
+                **account_form(session.storage_info, session.recovery_remaining),
+                "busy": bool(session.busy),
+            }
         elif kind == "restore":
             session = self._session
             self._form = restore_form(

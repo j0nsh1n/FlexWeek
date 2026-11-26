@@ -151,6 +151,18 @@ SheetFrame {
             }
         }
     }
+    Button {
+        objectName: "accountSignOut"
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        kind: "tonal"
+        text: "Sign out"
+        accessName: "Sign out"
+        enabled: !root.f.busy
+        onClicked: root.sheets.accountAct("signOut", "", "")
+    }
     // Deleting is apart from the rest and asks before it does anything.
     Button {
         objectName: "deleteAccount"
