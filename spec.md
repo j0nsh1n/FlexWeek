@@ -52,7 +52,7 @@ Contract for the finished app:
   completed flexible block that has a `start` on one of its candidate days.
   `missed_days` is only valid on a locked block, and every missed day must be one
   of that block's `days`. `removed_days` holds the days School or an activity was
-  deleted "This week only": only on a timed standing block, each one of its `days`
+  deleted from this week ("This day only" or "This week only"): only on a timed standing block, each one of its `days`
   and none of its `missed_days`. Removed days are not shown or counted as busy,
   and the standing week does not bring them back; missed days still show as missed.
 - A week has unique block ids. A pomodoro parent cannot be stored in the same
