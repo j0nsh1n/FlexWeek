@@ -2,7 +2,8 @@
 
 ## Current State (2026-11-26)
 - 2026-11-26: all of P4 group 5 is merged (#194 5C Unfinished counts, #195 5B Running late and previews, #196 5A
-  Plan), with groups 2-4 before it (#185, #186, #188-#190) and the first slices of groups 3 and 6-9 (#181, #184). Also merged today: #191 (School deleted "this week",
+  Plan), with groups 2-4 before it (#185, #186, #188-#190), the first slices of groups 3 and 6-9 (#181) and
+  slice 7B, Spotify (#184). Also merged today: #191 (School deleted "this week",
   or its last day "this day", goes into `removed_days`, not `missed_days`), #192 (Sign out row in Settings > This computer;
   signing out from Settings resets Settings to the week), #193 (an update saves the week before it installs) and #197
   (CI installs the pinned Rust 1.98.1 with rustfmt and clippy before cargo runs). `controller.py` is about 4,000 lines.
@@ -118,7 +119,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-26: every PR through #197 is merged. Run log:
+- 2026-11-26: every PR from #180 to #197 is merged. Run log:
   `~/.flexweek-ui-harness/scratch/afk-2026-11-25/run.md`. Next: plan the rest of P4 (groups 6-9 after their first
   slices, then pydantic's adapters). Follow-ups: a split long task can take a 99-block week past 100 before the save
   refuses it (solver); an older phone app may drop `removed_days` when it re-saves a week; release-windows.yml and the
