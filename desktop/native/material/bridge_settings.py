@@ -1000,6 +1000,9 @@ class SettingsBridge(QObject):
         signal = getattr(session, "week_changed", None)
         if signal is not None:
             signal.connect(self._on_session)
+        busy = getattr(session, "busy_changed", None)
+        if busy is not None:
+            busy.connect(self._on_session)
         week_start_notice().changed.connect(self._on_week_start)
         # The phone list and the sync dot change on the window's own clock, so This computer is read again
         # every few seconds while it is the page on view.
@@ -1151,6 +1154,8 @@ class SettingsBridge(QObject):
         sync_word, sync_tone = SYNC_STATUS_LABELS.get(sync_key, ("Not linked", "muted"))
         self._phones_seen = (phone_rows, sync_words, sync_key)
         problems = self._problem_rows()
+        session = getattr(self._window, "session", None)
+        account = getattr(session, "account", None) or {}
         return {
             "section": self._section,
             "page": self._page,
@@ -1254,6 +1259,8 @@ class SettingsBridge(QObject):
             "developerBuilds": self._window._updates.get("developer_builds") is True,
             "developerBuildsOffered": offers_developer_builds(install_kind()),
             "feedbackAvailable": feedback.available(),
+            "accountName": str(account.get("username") or ""),
+            "sessionBusy": bool(getattr(session, "busy", False)),
             "version": (
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
@@ -2645,6 +2652,13 @@ class SettingsBridge(QObject):
     @Slot()
     def openAccount(self) -> None:
         self._window._open_account()
+
+    @Slot()
+    def signOut(self) -> None:
+        session = getattr(self._window, "session", None)
+        if session is not None and session.busy:
+            return
+        self._window._log_out()
 
     @Slot()
     def runSetup(self) -> None:
