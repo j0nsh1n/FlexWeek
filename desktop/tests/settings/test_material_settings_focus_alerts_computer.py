@@ -818,3 +818,21 @@ def test_this_computer_sign_out_is_disabled_while_the_session_is_busy(
     finally:
         window.session.busy = False
         window.session.busy_changed.emit(False)
+
+
+def test_the_sign_out_row_does_not_name_a_missing_account(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """No account name means the row says the week is saved, and nothing else."""
+    root = _open_settings(qapp, window, "computer")
+    row = _named(root, "row_signOut")[0]
+    held = dict(window.session.account)
+    window.session.account = {"id": held["id"]}
+    window.session.week_changed.emit()
+    _pump(qapp)
+    subtitle = str(row.property("subtitle"))
+    assert subtitle == "Your week is saved first."
+    assert "Signed in as ." not in subtitle
+    for item in _texts(row):
+        assert "Signed in as ." not in str(item.property("text"))
+    window.session.account = held

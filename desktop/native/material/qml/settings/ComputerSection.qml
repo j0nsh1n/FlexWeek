@@ -43,7 +43,9 @@ SectionPage {
         ActionRow {
             key: "signOut"
             title: "Sign out"
-            subtitle: "Signed in as " + (page.st.accountName || "") + ". Your week is saved first."
+            subtitle: page.st.accountName
+                ? "Signed in as " + page.st.accountName + ". Your week is saved first."
+                : "Your week is saved first."
             buttonText: "Sign out"
             buttonEnabled: !page.st.sessionBusy
             onActivated: page.panel.signOut()
