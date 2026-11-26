@@ -90,8 +90,8 @@ SCREENS: list[Screen] = [
         area="sheets",
         prepare=lambda window: _account(window, end=True),
         checks=(
-            "Manage account scrolled down: the five file buttons, then Sign out as a plain tonal button, "
-            "then Delete account apart from them in red, Close in the footer."
+            "Manage account scrolled down: the five file buttons, then Sign out as a tonal button like "
+            "theirs, then Delete account apart as a text button, Close in the footer."
         ),
         sources=SOURCES,
         styles=("material",),
