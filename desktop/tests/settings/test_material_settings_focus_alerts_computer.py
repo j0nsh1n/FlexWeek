@@ -807,17 +807,23 @@ def test_this_computer_sign_out_is_disabled_while_the_session_is_busy(
     root = _open_settings(qapp, window, "computer")
     button = _named(root, "signOut")[0]
     assert button.property("enabled") is True
+    built: list[str] = []
+    _panel(window).changed.connect(lambda: built.append("changed"))
     window.session.busy = True
     try:
         window.session.busy_changed.emit(True)
         _pump(qapp, 20)
         assert button.property("enabled") is False
+        assert built == [], "a busy toggle rebuilds Settings"
         _panel(window).signOut()
         assert asked == []
         assert dict(_bridge(window).sheets.property("ask")) == {}
     finally:
         window.session.busy = False
         window.session.busy_changed.emit(False)
+    _pump(qapp, 20)
+    assert button.property("enabled") is True
+    assert built == [], "clearing busy rebuilds Settings"
 
 
 def test_the_sign_out_row_does_not_name_a_missing_account(

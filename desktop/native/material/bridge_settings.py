@@ -931,6 +931,8 @@ class SettingsBridge(QObject):
     """The five sections, and the advanced page that stays a draft until Done."""
 
     changed = Signal()
+    # The Sign out button reads this on its own. A busy request must not rebuild Settings.
+    busyChanged = Signal()
 
     def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
@@ -997,12 +999,13 @@ class SettingsBridge(QObject):
         self._state: dict[str, Any] = {}
         self._preview = PreviewBridge(parent, self)
         session = getattr(self._window, "session", None)
+        self._session_busy = bool(getattr(session, "busy", False))
         signal = getattr(session, "week_changed", None)
         if signal is not None:
             signal.connect(self._on_session)
         busy = getattr(session, "busy_changed", None)
         if busy is not None:
-            busy.connect(self._on_session)
+            busy.connect(self._on_busy)
         week_start_notice().changed.connect(self._on_week_start)
         # The phone list and the sync dot change on the window's own clock, so This computer is read again
         # every few seconds while it is the page on view.
@@ -1075,6 +1078,17 @@ class SettingsBridge(QObject):
             self._publish()
         except OSError, KeyError, ValueError:
             return
+
+    def _on_busy(self, busy: bool) -> None:
+        busy = bool(busy)
+        if busy == self._session_busy:
+            return
+        self._session_busy = busy
+        self.busyChanged.emit()
+
+    @Property(bool, notify=busyChanged)
+    def sessionBusy(self) -> bool:
+        return self._session_busy
 
     def _worn_dark(self) -> bool:
         from desktop.native.material.host import appearance_of
@@ -1260,7 +1274,6 @@ class SettingsBridge(QObject):
             "developerBuildsOffered": offers_developer_builds(install_kind()),
             "feedbackAvailable": feedback.available(),
             "accountName": str(account.get("username") or ""),
-            "sessionBusy": bool(getattr(session, "busy", False)),
             "version": (
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),

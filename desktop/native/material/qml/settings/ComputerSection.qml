@@ -47,7 +47,7 @@ SectionPage {
                 ? "Signed in as " + page.st.accountName + ". Your week is saved first."
                 : "Your week is saved first."
             buttonText: "Sign out"
-            buttonEnabled: !page.st.sessionBusy
+            buttonEnabled: !page.panel.sessionBusy
             onActivated: page.panel.signOut()
         }
         LinkRow {
