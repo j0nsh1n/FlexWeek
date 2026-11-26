@@ -111,6 +111,11 @@ MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
 DRAW_ERROR_COVERS = MATERIAL_ACCOUNT_PAGES
 # Long enough for the student to read that the update installed before the window goes.
 UPDATE_QUIT_MS = 1200
+# An update that is ready while closing or signing out still waits on its save.
+UPDATE_WAITS_FOR_LEAVING = (
+    "FlexWeek is still saving before it closes, so the update wasn't installed. "
+    "Choose Update now again once that's done."
+)
 # How often the window asks the session whether the week should save itself (the waits are in
 # engine/app/src/session/autosave.rs).
 AUTOSAVE_TICK_MS = 500
@@ -1942,6 +1947,12 @@ class NativeWindow(QObject):
                 row[0].setText(words)
                 row[1].setEnabled(True)
 
+        if self._leaving is not None:
+            # Closing or signing out is already waiting on its save, which would not run `install`
+            # or `stayed`; say so and free the sheet rather than leave it on "Downloading…".
+            self.session._say(UPDATE_WAITS_FOR_LEAVING)
+            stayed()
+            return
         if self._save_before_leaving(install, again="update again", stayed=stayed):
             install()
 

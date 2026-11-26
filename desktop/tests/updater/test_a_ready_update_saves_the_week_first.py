@@ -24,6 +24,10 @@ from desktop.tests.window_support import database, qapp, signed_out, window  # n
 # ruff: noqa: F811
 
 PATH = "/downloaded/flexweek"
+UPDATE_WAITS = (
+    "FlexWeek is still saving before it closes, so the update wasn't installed. "
+    "Choose Update now again once that's done."
+)
 UPDATE_FAILED = (
     "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
     "Choose Retry save, then update again."
@@ -115,3 +119,19 @@ def test_nothing_unsaved_installs_the_update_at_once(
     assert applied == [PATH] and saved_first == [True]
     assert offer.done is True and offer.problems == []
     wait_until(qapp, lambda: quits == [True])
+
+
+def test_an_update_ready_while_closing_waits_installs_nothing_and_frees_the_sheet(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A close or sign-out already waiting on its save does not run the install; the sheet must not stay
+    on "Downloading…"."""
+    session = window.session
+    applied, _saved_first, quits, offer = _watch(window, monkeypatch)
+    monkeypatch.setattr(window, "_leaving", object())
+
+    window._on_update_ready(PATH)
+
+    assert applied == [] and quits == []
+    assert session.message == UPDATE_WAITS
+    assert offer.done is False and offer.problems == [UPDATE_WAITS]
