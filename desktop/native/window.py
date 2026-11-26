@@ -113,7 +113,7 @@ DRAW_ERROR_COVERS = MATERIAL_ACCOUNT_PAGES
 UPDATE_QUIT_MS = 1200
 # An update that is ready while closing or signing out still waits on its save.
 UPDATE_WAITS_FOR_LEAVING = (
-    "FlexWeek is still saving before it closes, so the update wasn't installed. "
+    "FlexWeek is still saving before it closes or signs out, so the update wasn't installed. "
     "Choose Update now again once that's done."
 )
 # How often the window asks the session whether the week should save itself (the waits are in

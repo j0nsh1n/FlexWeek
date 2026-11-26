@@ -25,7 +25,7 @@ from desktop.tests.window_support import database, qapp, signed_out, window  # n
 
 PATH = "/downloaded/flexweek"
 UPDATE_WAITS = (
-    "FlexWeek is still saving before it closes, so the update wasn't installed. "
+    "FlexWeek is still saving before it closes or signs out, so the update wasn't installed. "
     "Choose Update now again once that's done."
 )
 UPDATE_FAILED = (
