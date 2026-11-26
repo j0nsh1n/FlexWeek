@@ -1,5 +1,6 @@
 //! Copy and paste, collision previews and routines from `desktop/native/reuse.py`.
 
+use chrono::Datelike;
 use serde_json::{Map, Value, json};
 
 use crate::desk::planning::{
@@ -568,14 +569,43 @@ pub fn left_over_items_from(
     committed_blocks: &Value,
     first_part: &Value,
 ) -> EngineResult<Vec<Value>> {
-    let shown = crate::shown::shown_parts(today_week)?;
+    crate::shown::shown_parts(today_week)?;
+    let moment = crate::model::parse_due(now)?;
+    left_over_items_at(
+        assignments,
+        saved_weeks,
+        today_week,
+        moment,
+        blocks,
+        committed_blocks,
+        first_part,
+    )
+}
+
+/// `left_over_items_from` with the moment already read, for a caller whose clock may be any real date
+/// (only deadlines are held to 2000 to 2099).
+pub fn left_over_items_at(
+    assignments: &Value,
+    saved_weeks: &Value,
+    today_week: &str,
+    moment: (chrono::NaiveDate, i64),
+    blocks: &Value,
+    committed_blocks: &Value,
+    first_part: &Value,
+) -> EngineResult<Vec<Value>> {
+    let day = crate::desk::pydate::from_iso(today_week)?;
+    let offset = i64::from(day.weekday().num_days_from_monday());
+    let shown = if offset == 0 {
+        None
+    } else {
+        let first = crate::desk::pydate::iso_text(day - chrono::Duration::days(offset));
+        Some((first, offset))
+    };
     let first_monday = json!(
         shown
             .as_ref()
-            .map_or(today_week, |(first, _, _)| first.as_str())
+            .map_or(today_week, |(first, _)| first.as_str())
     );
-    let (today, minute) = crate::model::parse_due(now)?;
-    let moment = (today, minute);
     let Value::Object(table) = assignments else {
         return Err(attribute_error(assignments, "values"));
     };
@@ -601,7 +631,7 @@ pub fn left_over_items_from(
                     continue;
                 }
                 let before = match &shown {
-                    Some((first, _, offset)) if session_week == json!(first) => {
+                    Some((first, offset)) if session_week == json!(first) => {
                         iterate(first_part)?.iter().any(|block| {
                             block.get("assignment_id") == Some(id)
                                 && block["days"].as_array().is_some_and(|days| {
