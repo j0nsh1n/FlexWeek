@@ -10,6 +10,7 @@ use flexweek_engine::desk::grid::{
 use flexweek_engine::shown::{
     apply_repeats_to_shown_week, family_id, replaced_repeat_on_shown_week,
 };
+use flexweek_engine::standing::remove_for_week;
 use flexweek_engine::stored::truthy;
 use flexweek_engine::{EngineError, ErrorKind, repeats};
 use flexweek_service::blocks::check_block;
@@ -240,7 +241,7 @@ impl BlockDelete {
 
 /// A deleted block. Homework and anything but one occurrence take the whole family: School split at a
 /// week's seam is School on each side, so all of it goes together. A standing block deleted for this
-/// week alone stays here missed on every day, or the standing week would bring it back. `None` when
+/// week alone keeps a copy with its removed days, or the standing week would bring it back. `None` when
 /// the block is not in this week: nothing goes.
 pub fn delete_block(input: &BlockDeleteInput) -> Result<Option<BlockDelete>, EngineError> {
     let blocks = rows(input.blocks, "blocks")?.clone();
@@ -295,15 +296,16 @@ pub fn delete_block(input: &BlockDeleteInput) -> Result<Option<BlockDelete>, Eng
     };
     let blocks_after = if setup && !gone.is_empty() && !input.every_week {
         let mut after = kept;
-        after.extend(gone.iter().map(|item| {
-            let mut missed = item.as_object().cloned().unwrap_or_default();
-            let days = item
-                .get("days")
-                .and_then(Value::as_array)
-                .map(|days| json!(days))
-                .unwrap_or(json!([]));
-            missed.insert("missed_days".into(), days);
-            Value::Object(missed)
+        after.extend(gone.into_iter().map(|mut item| {
+            if input.scope == "occurrence" {
+                item["removed_days"] = item["days"].clone();
+                if let Some(fields) = item.as_object_mut() {
+                    fields.shift_remove("missed_days");
+                }
+                item
+            } else {
+                remove_for_week(item)
+            }
         }));
         after
     } else {

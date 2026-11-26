@@ -1,6 +1,6 @@
 //! `desktop/native/controller.py` `delete_block` (1750-1771) and
-//! `grid.rs` `delete_occurrence`. School or a Setup activity taken out of this week alone stays
-//! in it missed on every day, or the standing week would bring it back; every week takes it out.
+//! `grid.rs` `delete_occurrence`. School or a Setup activity taken out of this week keeps a copy
+//! with its removed days, or the standing week would bring it back.
 
 use flexweek_engine::desk::blocks::{BlockDeletion, delete_block, mark_block_done, until_problem};
 use serde_json::{Map, Value, json};
@@ -139,7 +139,7 @@ fn a_homework_session_is_removed_whole() {
 /// controller.py:1763-1768. School, the old sport card, and a Setup activity taken out of this week
 /// stay in it missed on every day they were on; taken out of every week they are gone.
 #[test]
-fn school_and_activities_this_week_stay_missed_and_every_week_go() {
+fn school_and_activities_this_week_keep_removed_days_and_every_week_go() {
     let ids = setup_ids();
     assert!(!ids.is_empty(), "the setup ids are listed");
     for id in ids {
@@ -151,11 +151,11 @@ fn school_and_activities_this_week_stay_missed_and_every_week_go() {
             "days": [0, 3],
             "start": "08:30"
         });
-        let mut missed = block.clone();
-        missed["missed_days"] = json!([0, 3]);
+        let mut removed = block.clone();
+        removed["removed_days"] = json!([0, 3]);
         assert_eq!(
             show(delete(std::slice::from_ref(&block), id, "series", None)),
-            Ok(json!({"label": "deleting School", "blocks": [missed], "lost": []})),
+            Ok(json!({"label": "deleting School", "blocks": [removed], "lost": []})),
             "{id} this week"
         );
         assert_eq!(
@@ -176,6 +176,37 @@ fn school_and_activities_this_week_stay_missed_and_every_week_go() {
             show(delete(&[block], id, "occurrence", Some(3))),
             Ok(json!({"label": "deleting School", "blocks": [monday], "lost": []})),
             "{id} one day of it keeps the other day"
+        );
+    }
+}
+
+/// Jonathan, 2026-11-26 ("Disappear too"): "This day only" on School or an activity makes that day
+/// disappear, even when it is the last day left. It is never marked missed.
+#[test]
+fn this_day_only_on_the_last_day_of_a_standing_block_removes_it_not_misses_it() {
+    for id in setup_ids() {
+        let last = json!({"id": id, "title": "School", "kind": "locked", "duration_min": 60,
+                          "days": [3], "start": "08:30"});
+        let mut removed = last.clone();
+        removed["removed_days"] = json!([3]);
+        assert_eq!(
+            show(delete(
+                std::slice::from_ref(&last),
+                id,
+                "occurrence",
+                Some(3)
+            )),
+            Ok(json!({"label": "deleting School", "blocks": [removed], "lost": []})),
+            "{id} one-day piece"
+        );
+        let mut missed = last.clone();
+        missed["missed_days"] = json!([3]);
+        let mut removed_over_missed = last.clone();
+        removed_over_missed["removed_days"] = json!([3]);
+        assert_eq!(
+            show(delete(&[missed], id, "occurrence", Some(3))),
+            Ok(json!({"label": "deleting School", "blocks": [removed_over_missed], "lost": []})),
+            "{id} a missed last day disappears too"
         );
     }
 }

@@ -46,12 +46,15 @@ Contract for the finished app:
   into assignments on start and are still accepted on saves. A save that uses
   them never changes an existing assignment.
 - Optional block fields the API and storage keep: `assignment_id`, `category`,
-  `completed`, `completed_day`, `missed_days`, `spotify_url`, `focus_sessions`,
+  `completed`, `completed_day`, `missed_days`, `removed_days`, `spotify_url`, `focus_sessions`,
   `focus_minutes`, and pomodoro split fields (`pomodoro_parent_id`,
   `pomodoro_role`, `pomodoro_index`). `completed_day` is only valid on a
   completed flexible block that has a `start` on one of its candidate days.
   `missed_days` is only valid on a locked block, and every missed day must be one
-  of that block's `days`.
+  of that block's `days`. `removed_days` holds the days School or an activity was
+  deleted from this week ("This day only" or "This week only"): only on a timed standing block, each one of its `days`
+  and none of its `missed_days`. Removed days are not shown or counted as busy,
+  and the standing week does not bring them back; missed days still show as missed.
 - A week has unique block ids. A pomodoro parent cannot be stored in the same
   week as the chunks split from it.
 - The solver places every flexible block on the 15-minute grid (Mon–Sun,

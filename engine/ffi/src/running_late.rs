@@ -1,4 +1,5 @@
 use chrono::{Datelike, Timelike};
+use flexweek_engine::standing::removed_on;
 use serde_json::{Value, json};
 
 use crate::account::{availability, clock, load_open_week, work_windows};
@@ -153,7 +154,7 @@ pub(crate) fn running_late(
     // from the end of the late block, not from where the moved session ends.
     let late_end =
         flexweek_engine::time::hhmm_to_minutes(&from_start).unwrap_or(clock_min) + minutes;
-    let stays = unchanged_fixed_blocks(&timed, &settled, late_end);
+    let stays = unchanged_fixed_blocks(&timed, &settled, day, late_end);
     let warning = running_late_warning(&trace_value, &timed, &moves);
     Ok(json!({
         "week_start": week_start,
@@ -240,10 +241,17 @@ fn current_late_block(
     json!({"title": title, "end": end, "end_day": end_day, "minutes": minutes})
 }
 
-fn unchanged_fixed_blocks(before: &[Value], after: &[Value], after_min: i64) -> Vec<Value> {
+fn unchanged_fixed_blocks(
+    before: &[Value],
+    after: &[Value],
+    day: i64,
+    after_min: i64,
+) -> Vec<Value> {
+    let day = Value::from(day);
     let mut stays: Vec<Value> = before
         .iter()
         .filter(|block| block.get("kind").and_then(Value::as_str) == Some("locked"))
+        .filter(|block| !removed_on(block, &day))
         .filter(|block| {
             block
                 .get("start")
@@ -290,10 +298,11 @@ fn running_late_warning(trace: &Value, before: &[Value], moves: &[Value]) -> Opt
             .iter()
             .filter(|block| block.get("kind").and_then(Value::as_str) == Some("locked"))
             .filter(|block| {
-                block
-                    .get("days")
-                    .and_then(Value::as_array)
-                    .is_some_and(|days| days.iter().any(|d| d.as_i64() == Some(day)))
+                !removed_on(block, &Value::from(day))
+                    && block
+                        .get("days")
+                        .and_then(Value::as_array)
+                        .is_some_and(|days| days.iter().any(|d| d.as_i64() == Some(day)))
             })
             .filter_map(|block| {
                 let fixed_start =
@@ -346,9 +355,9 @@ fn running_late_warning(trace: &Value, before: &[Value], moves: &[Value]) -> Opt
             .iter()
             .filter(|b| b.get("kind").and_then(Value::as_str) == Some("locked"))
             .filter(|b| match (days, b.get("days").and_then(Value::as_array)) {
-                (Some(work_days), Some(fixed_days)) => {
-                    work_days.iter().any(|day| fixed_days.contains(day))
-                }
+                (Some(work_days), Some(fixed_days)) => work_days
+                    .iter()
+                    .any(|day| fixed_days.contains(day) && !removed_on(b, day)),
                 _ => false,
             })
             .filter_map(|b| {
@@ -500,6 +509,25 @@ mod tests {
             Some("History essay"),
             "a move names its block by the stored title"
         );
+    }
+
+    #[test]
+    fn running_late_does_not_list_removed_school_as_staying() {
+        let (week, _) = open_at("late-removed-school", "2026-10-05T16:05:00");
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0,1],"removed_days":[0],
+                 "start":"17:00","duration_min":60,"category":"class"},
+                {"id":"activity-1","title":"Band","kind":"locked","days":[0],
+                 "start":"18:00","duration_min":60,"category":"extra"}
+            ]),
+        );
+        let result: Value = serde_json::from_str(&week.running_late(0, 30, 0.0).unwrap()).unwrap();
+        let stays = result["stays"].as_array().unwrap();
+        assert_eq!(stays.len(), 1, "{stays:?}");
+        assert_eq!(stays[0]["title"], "Band");
     }
 
     #[test]

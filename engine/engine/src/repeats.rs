@@ -16,6 +16,7 @@ use crate::desk::grid::{WEEKLY_PREFIX, is_standing_block};
 use crate::desk::pydate::from_iso;
 use crate::error::EngineResult;
 use crate::shown::family_id;
+use crate::standing::removed_on;
 use crate::time::{hhmm_to_minutes, is_calendar_date, monday_of};
 use crate::validate::time_block;
 
@@ -24,7 +25,7 @@ pub const PATCH_FIELDS: [&str; 5] = ["title", "category", "start", "duration_min
 /// Fields a new repeat may leave out: a category, and an end date (#118).
 const OPTIONAL_FIELDS: [&str; 2] = ["category", "until"];
 /// Fields that say which block and when, never compared or patched as a value.
-const SHAPE_FIELDS: [&str; 3] = ["id", "days", "missed_days"];
+const SHAPE_FIELDS: [&str; 4] = ["id", "days", "missed_days", "removed_days"];
 const INTENT_FIELDS: [&str; 10] = [
     "id",
     "scope",
@@ -328,6 +329,14 @@ fn missed_of(block: &Value) -> Vec<i64> {
         .unwrap_or_default()
 }
 
+fn removed_of(block: &Value) -> Vec<i64> {
+    block
+        .get("removed_days")
+        .and_then(Value::as_array)
+        .map(|days| days.iter().filter_map(Value::as_i64).collect())
+        .unwrap_or_default()
+}
+
 fn id_of(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
 }
@@ -355,6 +364,7 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
         return Err(RULE.into());
     };
     fields.shift_remove("missed_days");
+    fields.shift_remove("removed_days");
     for (key, value) in &intent.set {
         // An empty Until takes the end date away: the repeat stands with no end again.
         if key == "until" && (value.is_null() || value.as_str() == Some("")) {
@@ -390,10 +400,8 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
 }
 
 /// `held` after the repeat under it changed from `old` to `new`. A field or a day it shares with `old`
-/// follows `new`; one it changed itself stays. Missed days are the week's own and stay while still
-/// days of it; a block missed on every day (how "this week only" takes one out) stays missed on every
-/// day. When nothing would be left, it is missed on every day of `new`, so the week keeps showing
-/// nothing rather than the repeat coming back.
+/// follows `new`; one it changed itself stays. Day exceptions belong to the week. When nothing
+/// would be left, the copy keeps the repeat's new days so the standing block cannot fill it in.
 pub fn three_way(old: &Value, new: &Value, held: &Value) -> Value {
     let mut out = held.clone();
     let Some(fields) = out.as_object_mut() else {
@@ -432,17 +440,42 @@ pub fn three_way(old: &Value, new: &Value, held: &Value) -> Value {
         })
         .collect();
     let missed = missed_of(held);
+    let held_removed = removed_of(held);
     let all_missed = !held_days.is_empty() && held_days.iter().all(|day| missed.contains(day));
-    let (days, missed): (Vec<i64>, Vec<i64>) = if days.is_empty() {
-        (new_days.clone(), new_days)
+    let all_absent = !held_days.is_empty()
+        && held_days
+            .iter()
+            .all(|day| missed.contains(day) || held_removed.contains(day));
+    let has_removed = held_days.iter().any(|day| held_removed.contains(day));
+    let (days, missed, removed): (Vec<i64>, Vec<i64>, Vec<i64>) = if days.is_empty() {
+        if all_missed {
+            (new_days.clone(), new_days, Vec::new())
+        } else {
+            (new_days.clone(), Vec::new(), new_days)
+        }
     } else if all_missed {
-        (days.clone(), days)
-    } else {
-        let kept = missed
+        (days.clone(), days, Vec::new())
+    } else if all_absent && has_removed {
+        let kept_missed: Vec<i64> = missed
             .into_iter()
             .filter(|day| days.contains(day))
             .collect();
-        (days, kept)
+        let removed: Vec<i64> = days
+            .iter()
+            .copied()
+            .filter(|day| !kept_missed.contains(day))
+            .collect();
+        (days, kept_missed, removed)
+    } else {
+        let kept_missed: Vec<i64> = missed
+            .into_iter()
+            .filter(|day| days.contains(day))
+            .collect();
+        let kept_removed: Vec<i64> = held_removed
+            .into_iter()
+            .filter(|day| days.contains(day) && !kept_missed.contains(day))
+            .collect();
+        (days, kept_missed, kept_removed)
     };
     fields.insert("days".into(), json!(days));
     if missed.is_empty() {
@@ -451,6 +484,11 @@ pub fn three_way(old: &Value, new: &Value, held: &Value) -> Value {
         }
     } else {
         fields.insert("missed_days".into(), json!(missed));
+    }
+    if removed.is_empty() {
+        fields.shift_remove("removed_days");
+    } else {
+        fields.insert("removed_days".into(), json!(removed));
     }
     out
 }
@@ -466,7 +504,10 @@ pub fn restated_version(
     match (old, new) {
         (Some(old), Some(new)) => {
             let merged = three_way(old, new, held);
-            if days_of(&merged).is_empty() || !missed_of(&merged).is_empty() {
+            if days_of(&merged).is_empty()
+                || !missed_of(&merged).is_empty()
+                || !removed_of(&merged).is_empty()
+            {
                 Some(held.clone())
             } else {
                 Some(merged)
@@ -513,11 +554,12 @@ pub fn restated_pieces(
         let missed = missed_of(piece);
         days_of(piece)
             .into_iter()
-            .filter(move |day| !missed.contains(day))
+            .filter(|day| !missed.contains(day) && !removed_on(piece, &Value::from(*day)))
+            .collect::<Vec<_>>()
     };
     // A piece missed on all its days would take the added day missed, so it is never the taker.
     let follows = |piece: &Value| {
-        live(piece).next().is_some() && old.is_some_and(|old| follows_on_every_field(old, piece))
+        !live(piece).is_empty() && old.is_some_and(|old| follows_on_every_field(old, piece))
     };
     let taker = pieces
         .iter()
@@ -548,7 +590,13 @@ pub fn restated_pieces(
         .iter()
         .enumerate()
         .filter(|(at, _)| *at != taker)
-        .flat_map(|(_, piece)| live(piece))
+        .flat_map(|(_, piece)| {
+            live(piece).into_iter().chain(
+                days_of(piece)
+                    .into_iter()
+                    .filter(|day| removed_on(piece, &Value::from(*day))),
+            )
+        })
         .collect();
     let taken = widen(&held_elsewhere);
     pieces
@@ -803,13 +851,14 @@ fn title_of(block: &Value) -> &str {
 pub fn own_changes(copy: &Value, repeat: &Value, week: &[Value], h24: bool) -> Vec<String> {
     let name = title_of(repeat);
     let (repeat_days, copy_days, missed) = (days_of(repeat), days_of(copy), missed_of(copy));
-    if !copy_days.is_empty() && copy_days.iter().all(|day| missed.contains(day)) {
+    let absent = |day: &i64| missed.contains(day) || removed_on(copy, &Value::from(*day));
+    if !copy_days.is_empty() && copy_days.iter().all(absent) {
         return vec![format!("no {name} that week")];
     }
     let showing: Vec<i64> = copy_days
         .iter()
         .copied()
-        .filter(|day| !missed.contains(day))
+        .filter(|day| !absent(day))
         .collect();
     let mut said = Vec::new();
     // Each block a day moved to, with its span and the days it took, in the order first reached.
@@ -827,6 +876,7 @@ pub fn own_changes(copy: &Value, repeat: &Value, week: &[Value], h24: bool) -> V
             let piece = id_of(block).map(family_id) == family;
             id_of(block) != id_of(copy)
                 && !missed_of(block).contains(&day)
+                && !removed_on(block, &Value::from(day))
                 && if piece {
                     days_of(block).contains(&day)
                 } else {

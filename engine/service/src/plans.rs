@@ -220,6 +220,7 @@ pub fn check_plan_request(given: &Value) -> Checked<PlanRequest> {
             block.kind == "locked"
                 && block.days.contains(&recover.missed_day)
                 && !block.missed_days.contains(&recover.missed_day)
+                && !block.removed_days.contains(&recover.missed_day)
         });
         if !fits {
             return refuse("missed occurrence must identify a locked block on that day");

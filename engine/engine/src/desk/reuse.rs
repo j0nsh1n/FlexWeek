@@ -137,6 +137,7 @@ pub fn copied_fixed_block_of(
     copy.insert("focus_sessions".into(), json!(0));
     for key in [
         "assignment_id",
+        "removed_days",
         "pomodoro_parent_id",
         "pomodoro_role",
         "pomodoro_index",

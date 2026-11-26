@@ -92,6 +92,7 @@ pub fn day_copy(copy: &Value, day: &Value) -> EngineResult<Value> {
         return Err(attribute_error(&copy, "get"));
     };
     fields.insert("days".into(), json!([day]));
+    crate::standing::keep_removed_days(fields);
     if let Some(missed) = fields.get("missed_days").cloned()
         && truthy(Some(&missed))
     {
@@ -504,6 +505,7 @@ pub fn merge_imported_blocks(
             };
             fields.insert("id".into(), split_id.clone());
             fields.insert("days".into(), json!([day]));
+            fields.shift_remove("removed_days");
             let mut missed = Vec::new();
             for item in iterate(&list_or_empty(fields.get("missed_days")))? {
                 if eq(&item, day) {
@@ -523,6 +525,7 @@ pub fn merge_imported_blocks(
                     }
                 }
                 kept_fields.insert("days".into(), Value::Array(kept_days));
+                crate::standing::keep_removed_days(kept_fields);
                 kept_fields.insert("missed_days".into(), Value::Array(still));
                 by_id.set(subscript(current, "id")?.clone(), kept)?;
             } else {

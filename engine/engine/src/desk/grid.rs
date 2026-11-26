@@ -119,7 +119,9 @@ pub fn occupied_intervals(blocks: &Value, day: &Value) -> EngineResult<Vec<Value
         if !contains(&list_field(&block, "days")?, day)? {
             continue;
         }
-        if contains(&list_field(&block, "missed_days")?, day)? {
+        if crate::standing::removed_on(&block, day)
+            || contains(&list_field(&block, "missed_days")?, day)?
+        {
             continue;
         }
         let begin = Value::from(minutes_of(subscript(&block, "start")?)?);
@@ -173,6 +175,7 @@ pub fn apply_block_times(
         let held = iterate(&list_field(block, "days")?)?;
         if !eq(&Value::Array(held), &json!([day])) {
             fields.insert("days".into(), json!([day]));
+            crate::standing::keep_removed_days(fields);
             if get(&updated, "completed_day")?.is_some_and(|value| !value.is_null())
                 && let Value::Object(fields) = &mut updated
             {
@@ -240,6 +243,7 @@ pub fn split_occurrence(
         let fields = object_mut(&mut remaining, &current)?;
         fields.insert("days".into(), Value::Array(days));
         fields.insert("missed_days".into(), Value::Array(missed));
+        crate::standing::keep_removed_days(fields);
     }
     let mut occurrence = current.clone();
     let new_id = fresh();
@@ -248,6 +252,7 @@ pub fn split_occurrence(
         let fields = object_mut(&mut occurrence, &current)?;
         fields.insert("id".into(), json!(new_id));
         fields.insert("days".into(), json!([day]));
+        fields.shift_remove("removed_days");
         fields.insert(
             "missed_days".into(),
             if was_missed { json!([day]) } else { json!([]) },
@@ -295,6 +300,7 @@ pub fn delete_occurrence(
         let fields = object_mut(&mut kept, &item)?;
         fields.insert("days".into(), Value::Array(remaining));
         fields.insert("missed_days".into(), Value::Array(missed));
+        crate::standing::keep_removed_days(fields);
         if !nothing_left {
             result.push(kept);
         }
@@ -337,6 +343,7 @@ pub fn apply_block_edit(
             fields.insert("id".into(), made.clone());
             fields.insert("days".into(), json!([day]));
             fields.insert("missed_days".into(), Value::Array(missed));
+            fields.shift_remove("removed_days");
         }
         let mut out = Vec::new();
         for item in split {
@@ -391,7 +398,10 @@ pub fn relocate_block(
     let Some(block) = found else {
         return Ok(None);
     };
-    if !contains(&list_field(&block, "days")?, from_day)? || !truthy(get(&block, "start")?) {
+    if !contains(&list_field(&block, "days")?, from_day)?
+        || crate::standing::removed_on(&block, from_day)
+        || !truthy(get(&block, "start")?)
+    {
         return Ok(None);
     }
     let for_date = |item: &Value| -> EngineResult<Value> {
@@ -404,6 +414,7 @@ pub fn relocate_block(
         };
         let fields = object_mut(&mut out, item)?;
         fields.insert("days".into(), json!([to_day]));
+        fields.shift_remove("removed_days");
         if linked {
             fields.insert("pinned".into(), json!(true));
         }
@@ -597,6 +608,9 @@ pub enum Placed {
 }
 
 pub fn placement_on(block: &Value, day: &Value, trace: Option<&Value>) -> EngineResult<Placed> {
+    if crate::standing::removed_on(block, day) {
+        return Ok(Placed::NotToday);
+    }
     let trace = trace.cloned().unwrap_or(Value::Null);
     let found = or_default(Some(&trace), json!({}));
     let placements = match get(&found, "placed")? {
@@ -769,15 +783,23 @@ pub const WEEKLY_PREFIX: &str = "weekly-";
 /// made. Setup itself still makes and stops only its own (`is_setup_block`).
 pub fn is_standing_block(block: &Value) -> EngineResult<bool> {
     let id = py_str(&or_default(get(block, "id")?, json!("")));
-    Ok(is_setup_block(block)? || crate::shown::family_id(&id).starts_with(WEEKLY_PREFIX))
+    Ok(is_standing_id(&id))
 }
 
 pub fn is_setup_block(block: &Value) -> EngineResult<bool> {
     let id = py_str(&or_default(get(block, "id")?, json!("")));
-    let id = crate::shown::family_id(&id);
-    Ok(id == crate::desk::calendar::SETUP_SCHOOL_ID
+    Ok(is_setup_id(crate::shown::family_id(&id)))
+}
+
+pub(crate) fn is_standing_id(id: &str) -> bool {
+    let family = crate::shown::family_id(id);
+    is_setup_id(family) || family.starts_with(WEEKLY_PREFIX)
+}
+
+fn is_setup_id(id: &str) -> bool {
+    id == crate::desk::calendar::SETUP_SCHOOL_ID
         || id == "sport"
-        || id.starts_with(crate::desk::calendar::SETUP_ACTIVITY_PREFIX))
+        || id.starts_with(crate::desk::calendar::SETUP_ACTIVITY_PREFIX)
 }
 
 pub fn span_problem(
@@ -865,6 +887,7 @@ pub fn span_clash(
             continue;
         }
         if !contains(&list_field(&other, "days")?, day)?
+            || crate::standing::removed_on(&other, day)
             || contains(&list_field(&other, "missed_days")?, day)?
         {
             continue;

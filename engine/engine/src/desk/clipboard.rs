@@ -227,7 +227,7 @@ pub fn proposals_from_clipboard(
         }
         let series = eq(subscript(entry, "scope")?, &json!("series"));
         let days = if series {
-            list_of(subscript(source, "days")?)?
+            occurrence_days(source)?
         } else {
             vec![json!(target_day)]
         };
@@ -358,11 +358,25 @@ pub fn merge_preview_rows(rows: &Value, operation_id: &str) -> EngineResult<Vec<
 
 pub fn routine_source_blocks(blocks: &Value) -> EngineResult<Vec<Value>> {
     let mut kept = Vec::new();
-    for block in iterate(blocks)? {
+    for mut block in iterate(blocks)? {
         if eq(get(&block, "kind")?.unwrap_or(null()), &json!("locked"))
             && !truthy(get(&block, "assignment_id")?)
             && !truthy(get(&block, "pomodoro_role")?)
         {
+            if block
+                .get("removed_days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| !days.is_empty())
+            {
+                let active = occurrence_days(&block)?;
+                if active.is_empty() {
+                    continue;
+                }
+                if let Value::Object(fields) = &mut block {
+                    fields.insert("days".into(), Value::Array(active));
+                    fields.shift_remove("removed_days");
+                }
+            }
             kept.push(block);
         }
     }
@@ -373,10 +387,16 @@ pub fn routine_template(block: &Value, template_id: &str) -> EngineResult<Value>
     let mut body = Map::new();
     body.insert("template_id".into(), json!(template_id));
     body.insert("title".into(), subscript(block, "title")?.clone());
-    body.insert(
-        "days".into(),
-        Value::Array(list_of(subscript(block, "days")?)?),
-    );
+    let days = if block
+        .get("removed_days")
+        .and_then(Value::as_array)
+        .is_some_and(|days| !days.is_empty())
+    {
+        occurrence_days(block)?
+    } else {
+        list_of(subscript(block, "days")?)?
+    };
+    body.insert("days".into(), Value::Array(days));
     body.insert("start".into(), subscript(block, "start")?.clone());
     body.insert(
         "duration_min".into(),

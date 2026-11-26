@@ -1401,6 +1401,9 @@ pub fn is_work_session(block: &Value) -> bool {
 }
 
 fn day_on_day(block: &Value, day_index: i64) -> bool {
+    if crate::standing::removed_on(block, &Value::from(day_index)) {
+        return false;
+    }
     let days: Vec<i64> = block
         .get("days")
         .and_then(Value::as_array)
@@ -1657,11 +1660,12 @@ fn dates_between(start: NaiveDate, end: NaiveDate) -> Vec<NaiveDate> {
 }
 
 fn month_on_day(block: &Value, day_index: i64) -> bool {
-    block
-        .get("days")
-        .and_then(Value::as_array)
-        .map(|a| a.iter().any(|v| v.as_i64() == Some(day_index)))
-        .unwrap_or(false)
+    !crate::standing::removed_on(block, &Value::from(day_index))
+        && block
+            .get("days")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().any(|v| v.as_i64() == Some(day_index)))
+            .unwrap_or(false)
 }
 
 fn placed_on_day(block: &Value, day_index: i64) -> bool {

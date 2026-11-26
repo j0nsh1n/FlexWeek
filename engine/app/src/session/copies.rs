@@ -576,6 +576,35 @@ pub fn clipboard_block(
             words: None,
         });
     };
+    let mut cleaned = source.clone();
+    let source = if source
+        .get("removed_days")
+        .and_then(Value::as_array)
+        .is_some_and(|days| !days.is_empty())
+    {
+        let active = planning::occurrence_days(source)?;
+        if active.is_empty() {
+            return Ok(ClipboardBlock {
+                clipboard: None,
+                words: None,
+            });
+        }
+        if let Some(day) = day
+            && flexweek_engine::standing::removed_on(source, &json!(day))
+        {
+            return Ok(ClipboardBlock {
+                clipboard: None,
+                words: None,
+            });
+        }
+        if let Some(fields) = cleaned.as_object_mut() {
+            fields.insert("days".into(), Value::Array(active));
+            fields.shift_remove("removed_days");
+        }
+        &cleaned
+    } else {
+        source
+    };
     let source_day = match day {
         Some(day) => json!(day),
         None => get(source, "days")?
