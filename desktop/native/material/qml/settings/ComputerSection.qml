@@ -12,7 +12,7 @@ SectionPage {
         ToggleRow {
             key: "startAtLogin"
             visible: !!page.st.showLogin
-            title: "Launch FlexWeek at login"
+            title: "Open FlexWeek when I log in"
             subtitle: "Open when you sign in to this computer."
             isOn: !!page.st.startAtLogin
             onFlipped: (value) => page.panel.setStartAtLogin(value)

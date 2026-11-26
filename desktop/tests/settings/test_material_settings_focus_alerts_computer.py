@@ -46,7 +46,7 @@ def test_the_focus_section_writes_audio_and_the_link(
 
     link = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS"
     _panel(window).setSpotify("https://example.com/not-spotify")
-    assert _panel(window).property("state")["spotifyError"] == "Use a link from open.spotify.com."
+    assert _panel(window).property("state")["spotifyError"] == "Use a link that starts with https://open.spotify.com."
     assert _prefs(window).get("default_spotify_url") != "https://example.com/not-spotify"
     _panel(window).setSpotify(link)
     wait_until(qapp, lambda: _prefs(window).get("default_spotify_url") == link)
@@ -392,7 +392,7 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
     for state, problem in (
         ("expired", "That code has expired. Start a new one."),
         ("too_many_tries", "Too many wrong tries. Start a new code."),
-        ("idle", "That code is no longer open. Start a new one."),
+        ("idle", "That code isn't active anymore. Start a new one."),
     ):
         status = {"state": "waiting", "expires_at_ms": wall_clock.now_ms() + 60_000, "tries_left": 3}
         _click(qapp, window, row)

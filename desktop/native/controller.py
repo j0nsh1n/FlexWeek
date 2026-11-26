@@ -20,28 +20,21 @@ from backend.models import parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
-    apply_block_edit,
-    apply_repeat_changes,
-    block_family,
     blocks_by_weekday,
     date_for_day,
     day_in_week,
     day_names,
     days_through,
-    delete_occurrence,
     due_day_in_week,
     first_plannable_day,
     hand_move,
     is_series,
-    is_standing_block,
     local_stamp,
     monday_of,
     month_anchor_date,
     month_for_view,
     one_day_note,
     repeat_changes,
-    repeat_leaves_week,
-    replaced_repeat_on_shown_week,
     routine_on_week,
     shifted_month,
     stored_weeks_of,
@@ -141,7 +134,7 @@ from desktop.native.weekmodel import (
     moved_words,
 )
 
-WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
+WEEK_OVER = "That week is over. Open this week or a later one, then plan again."
 
 
 def first_placed(trace: dict, targets: object) -> tuple[int, int] | None:
@@ -171,14 +164,14 @@ def left_sentence(left: object) -> str:
 
 
 def plan_sentence(placed: int, waiting: int, left: object = ()) -> str:
-    """How much homework a plan placed, counting homework only. `waiting` is homework whose sessions
-    found no room; `left` is homework with minutes no session holds, by title and minutes."""
+    """How many targeted sessions a plan placed. `waiting` is homework whose sessions found no room;
+    `left` is homework with minutes no session holds, by title and minutes."""
     if placed == 0:
-        said = "Nothing placed."
+        said = "No homework was placed."
     else:
-        said = f"Placed {placed} homework block{'s' if placed != 1 else ''}."
+        said = f"Placed {placed} session{'s' if placed != 1 else ''}."
     if waiting:
-        said += f" {waiting} with no time yet."
+        said += f" {waiting} still needs a time."
     return said + left_sentence(left)
 
 
@@ -187,7 +180,7 @@ def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str
     return f"{title}: {length_label(minutes)} ready to add before {due_label(due, today)}."
 
 
-HOURS_REFUSED = "Check the days and times of your study hours and protected time."
+HOURS_REFUSED = "Check the days and times in Study hours and Protected time."
 
 
 # Blocks and homework are checked and written as the engine does it (engine/service/src/blocks.rs and
@@ -213,20 +206,6 @@ def _week_write(week_start: str, blocks: list[dict], revision: int | list[int]) 
 ROUTINE_STATUS = frozenset(
     ("Saving…", "Saved.", "Saving preferences…", "Saved preferences.", "Loading…", "This week.")
 )
-
-
-def _stamp_edited(changes: list[dict], edited: str, today: str, first_weekday: int) -> list[dict]:
-    """The changes as the save sends them. `keep` stays as the form built it."""
-    if edited == "keep":
-        return changes
-    stamped = []
-    for change in changes:
-        item = {**change, "edited": edited}
-        if edited == "from_today":
-            item["today"] = today
-            item["first_weekday"] = first_weekday
-        stamped.append(item)
-    return stamped
 
 
 def _late_summary(moved: int) -> str:
@@ -1285,10 +1264,12 @@ class NativeSession(QObject):
         }
 
     def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
-        validated = _checked_block(block)
-        verb = "editing " if any(item["id"] == validated["id"] for item in self.blocks) else "adding "
-        blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
-        self._touch(verb + validated["title"], blocks=blocks, keep={validated["id"]})
+        edit = json.loads(
+            flexweek_engine.block_edit_json(
+                json.dumps(self.blocks), json.dumps(block), scope, day, str(uuid4())
+            )
+        )
+        self._touch(edit["label"], blocks=edit["blocks"], keep={edit["block_id"]})
 
     def add_homework(
         self, assignment: dict, *, days: list[int] | None = None, spread: bool = False
@@ -1331,20 +1312,16 @@ class NativeSession(QObject):
         """Let a block go where the student dropped or picked it, by the one rule the phone shares.
         Homework moved this way is pinned, so no plan moves it back, and it is one Undo step."""
         answer = self.judge_hand_move(block_id, from_day, day, start, end)
-        if not answer["moved"]:
-            self._say(answer["problem"])
+        decision = json.loads(
+            flexweek_engine.block_hand_json(
+                json.dumps(self.blocks), json.dumps(answer), block_id
+            )
+        )
+        if not decision["moved"]:
+            self._say(decision["problem"])
             return False
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is not None and not block.get("start"):
-            label = "placing " + block["title"]
-        elif block is not None and is_series(block):
-            label = "moving " + block["title"] + " on one day"
-        elif block is not None:
-            label = "editing " + block["title"]
-        else:
-            label = None
         self.needs_time.pop(block_id, None)
-        self._touch(label, blocks=answer["blocks"], keep={answer["block_id"]})
+        self._touch(decision["label"], blocks=decision["blocks"], keep={decision["block_id"]})
         return True
 
     def place_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
@@ -1422,48 +1399,34 @@ class NativeSession(QObject):
     def setup_repeats(self, blocks: list[dict]) -> list[dict]:
         """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
         time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
-        made = [_checked_block(block) for block in blocks]
-        weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
-        return made + weekly
+        return json.loads(
+            flexweek_engine.setup_standing_json(
+                json.dumps(self.repeats), json.dumps(blocks)
+            )
+        )
 
     def change_repeats(self, after: list[dict], label: str, edited: str = "keep") -> None:
         """The repeats become `after` from this week on: the open week changes now by the rule the
         store applies to later weeks, and the next save sends the changes. `edited` is how a later
         week that has its own edit is treated."""
-        changes = repeat_changes(self.repeats, after, self.week_start)
-        if not changes:
+        raw = flexweek_engine.repeat_edit_json(
+            json.dumps(self.blocks),
+            json.dumps(self.repeats),
+            json.dumps(after),
+            json.dumps(self._saved_repeats),
+            json.dumps(self._repeat_send),
+            self.week_start,
+            edited,
+            self.today_iso(),
+            self.first_weekday,
+        )
+        if raw is None:
             return
-        stamped = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
-        send = self._against_saved(changes, after)
-        intents = _stamp_edited(send, edited, self.today_iso(), self.first_weekday)
-        # From today on, this week and every earlier week stay exactly as they are.
-        if stamped and repeat_leaves_week(stamped[0], self.week_start):
-            self._touch(label, intents=intents)
+        edit = json.loads(raw)
+        if edit["leaves_week"]:
+            self._touch(label, intents=edit["stamped"])
             return
-        if edited in ("replace", "from_today"):
-            # Days on `after` count from Monday. The open week counts from its first day, so the
-            # engine turns them. A stop has no body and comes off the week.
-            by_id = {item["id"]: item for item in after}
-            blocks = self.blocks
-            for block_id in {item["id"] for item in changes}:
-                blocks = replaced_repeat_on_shown_week(
-                    blocks, self.week_start, block_id, by_id.get(block_id)
-                )
-            repeats = list(after)
-        else:
-            blocks, repeats = apply_repeat_changes(self.blocks, self.repeats, changes, self.week_start)
-        self._touch(label, blocks=blocks, repeats=repeats, intents=intents)
-
-    def _against_saved(self, changes: list[dict], after: list[dict]) -> list[dict]:
-        """A repeat that already has a held intent changes again before the server took the first:
-        its intent is measured from what the server last said, so it carries both changes."""
-        held = {item["id"] for item in self._repeat_send or []}
-        if not held & {item["id"] for item in changes}:
-            return changes
-        from_saved = {
-            item["id"]: item for item in repeat_changes(self._saved_repeats, after, self.week_start)
-        }
-        return [from_saved.get(item["id"], item) if item["id"] in held else item for item in changes]
+        self._touch(label, blocks=edit["blocks"], repeats=edit["repeats"], intents=edit["stamped"])
 
     def repeat_diff(self, after: list[dict]) -> list[dict]:
         """The repeat changes from what stands now to `after`, as the save would send them."""
@@ -1761,7 +1724,7 @@ class NativeSession(QObject):
         if item is None or self.account is None or self.conflict:
             return False
         if self.busy or self.dirty or self.pending_save is not None:
-            self._say("Saving your last change… Delete will work in a moment.")
+            self._say("Saving your last change… Try Delete again in a moment.")
             return False
         key = f"delete-homework|{self.account['id']}|{assignment_id}|{int(item.get('revision') or 0)}"
         operation_id = self._operation(key)
@@ -1815,32 +1778,22 @@ class NativeSession(QObject):
         this week alone keeps it here missed on every day, or the standing week would bring it back;
         `every_week` takes it out of the standing week too. `label` names the Undo step when the delete
         is part of a larger change."""
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None:
+        raw = flexweek_engine.block_delete_json(
+            json.dumps(self.blocks),
+            json.dumps(self.repeats),
+            block_id,
+            scope,
+            day,
+            every_week,
+            self.selected_block_id,
+            label,
+        )
+        if raw is None:
             return
-        setup = is_standing_block(block)
-        family = block_family(block_id)
-        if block.get("assignment_id") or scope != "occurrence":
-            # School split at a week's seam is School on each side: all of it goes together.
-            going = {
-                item["id"] for item in self.blocks
-                if item["id"] == block_id or (setup and block_family(item["id"]) == family)
-            }
-            gone = [item for item in self.blocks if item["id"] in going]
-            blocks = [item for item in self.blocks if item["id"] not in going]
-        else:
-            blocks = delete_occurrence(self.blocks, block_id, day)
-            gone = [] if any(item["id"] == block_id for item in blocks) else [block]
-        repeats = None
-        if setup and gone:
-            if every_week:
-                repeats = [item for item in self.repeats if item["id"] != family]
-            else:
-                missed = [{**item, "missed_days": list(item.get("days") or [])} for item in gone]
-                blocks = [*blocks, *missed]
-        if self.selected_block_id == block_id:
+        decision = json.loads(raw)
+        if decision["clear_selection"]:
             self.select_block(None, None)
-        self._touch(label or "deleting " + block["title"], blocks=blocks, repeats=repeats)
+        self._touch(decision["label"], blocks=decision["blocks"], repeats=decision["repeats"])
 
     def delete_selected(self) -> bool:
         if self.selected_block_id is None:
@@ -2046,7 +1999,7 @@ class NativeSession(QObject):
         fits all of it, instead of the planner's usual order, and says where it went in `placed_where`.
         """
         if self.planning:
-            self._say("Planning… one moment.")
+            self._say("Already planning…")
             return
         if self.conflict:
             self._say("This week changed in another window. Choose More > Reload this week, then try again.")
@@ -2054,9 +2007,9 @@ class NativeSession(QObject):
         if self.pending_save is not None:
             if everything:
                 self._replan_after_save = True
-                self._say("Saving your last change… Plan will work in a moment.")
+                self._say("Saving your last change… Try Plan again in a moment.")
                 return
-            self._say("Saving your last change… Plan will work in a moment.")
+            self._say("Saving your last change… Try Plan again in a moment.")
             return
         self.plan_asked_week = self.week_start
         self.placed_where = ""
@@ -2342,7 +2295,7 @@ class NativeSession(QObject):
             for block in blocks
         ]
         split, count = split_solved(week, trace, self.preferences)
-        return (split, f" Split {count} into focus chunks.") if count else (blocks, "")
+        return (split, f" Split {count} into focus sessions and breaks.") if count else (blocks, "")
 
     def _operation(self, key: str) -> str:
         return self._draft_command("attempt", key=key, new=str(uuid4()))["id"]
@@ -2757,7 +2710,7 @@ class NativeSession(QObject):
             sources = [block for block in sources if block["id"] in allowed]
         title = name.strip()
         if not title or not sources:
-            self._say("Name the routine and select at least one fixed commitment.")
+            self._say("Name the routine and select at least one fixed time.")
             return False
         templates = [routine_template(block, str(uuid4())) for block in sources]
         fingerprint = clipboard_fingerprint(
@@ -2899,14 +2852,14 @@ class NativeSession(QObject):
         if item is None or left <= 0:
             return ""
         title = item.get("title") or "This homework"
-        return f"{title} has {length_label(left)} left, less than the 15 minutes Plan places."
+        return f"{title} has {length_label(left)} left. Plan needs at least 15 minutes."
 
     def plan_unfinished(self, assignment_id: str) -> list[dict] | None:
         item = self.assignments.get(assignment_id)
         minutes = self.remaining_for(assignment_id)
         if item is None or minutes < 15:
             short = self._too_short_to_plan(item, assignment_id)
-            self._say(short or "That homework is already fully planned.")
+            self._say(short or "There's no time left to plan for this homework.")
             return None
         due_day = due_day_in_week(item.get("due"), self.week_start)
         days = days_through(due_day, first_plannable_day(self.week_start))
@@ -2984,7 +2937,7 @@ class NativeSession(QObject):
             if late:
                 late_targets.add(block["id"])
         if not targets:
-            self._say(short or "That homework already has a time.")
+            self._say(short or "There's no time left to plan for this homework.")
             return
         dirty_before = self.dirty
         if made:
@@ -3184,11 +3137,9 @@ class NativeSession(QObject):
             remaining = int(data.get("remaining_min") or 0)
             if not sessions:
                 if remaining:
-                    self._say(
-                        f"{length_label(remaining)} remains, but it doesn't fit the 15-minute planning grid."
-                    )
+                    self._say(f"{length_label(remaining)} remains. FlexWeek plans in 15-minute steps.")
                 else:
-                    self._say("All of this homework is already focused or planned.")
+                    self._say("There's no time left to plan for this homework.")
                 self.spread_preview = None
                 # Allow splitting made nothing, so a later Spread of this homework is an ordinary one.
                 self._allow_split_pending = None
@@ -3216,8 +3167,8 @@ class NativeSession(QObject):
             summary = spread_ready_sentence(item["title"], total, item["due"], self.today_iso())
             if remaining:
                 summary += (
-                    f" {length_label(remaining)} can't fit the 15-minute grid and has not been "
-                    "dropped from the homework total."
+                    f" {length_label(remaining)} is still included in the homework's total time, "
+                    "but it's less than the 15 minutes Plan can add."
                 )
             self.spread_preview = {
                 "assignment_id": assignment_id,
@@ -3492,12 +3443,12 @@ class NativeSession(QObject):
             return
         link = self.spotify_url()
         if not link:
-            self._say("Add a Spotify link in Settings, under Alerts. Focus has started.")
+            self._say("Focus started without Spotify. Add a link under Settings > Alerts.")
             return
         from desktop.native.spotify import open_in_app
 
         if not open_in_app(link):
-            self._say("Spotify didn't open. Focus has started.")
+            self._say("Focus started without Spotify because the app didn't open.")
 
     def confirm_replace_focus(self) -> bool:
         pending = self._pending_focus
@@ -4055,11 +4006,11 @@ class NativeSession(QObject):
 
     def create_restore_point(self, label: str) -> None:
         if self.account is None or not label.strip():
-            self._say("Give the restore point a name.")
+            self._say("Name the saved copy.")
             return
         key = flexweek_engine.create_restore_operation_key(self.account["id"], label.strip())
         ticket = self._begin()
-        self._say("Saving restore point…")
+        self._say("Saving a copy…")
 
         def ok(data: dict) -> None:
             # The point exists now. The same name asked for again is a new backup, not a retry.
@@ -4072,7 +4023,7 @@ class NativeSession(QObject):
                     json.dumps(self.restore_points), json.dumps(point)
                 )
             )
-            self._say("Saved restore point " + point.get("label", label) + ".")
+            self._say("Saved copy " + point.get("label", label) + ".")
             self.week_changed.emit()
 
         self.client.request(

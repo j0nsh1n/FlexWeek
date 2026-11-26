@@ -133,7 +133,10 @@ fn test_week_export_carries_referenced_homework_and_drops_unknown_links() {
 
 #[test]
 fn test_parse_rejects_newer_versions_and_plain_text() {
-    assert_eq!(error_of(""), "Empty file.");
+    assert_eq!(
+        error_of(""),
+        "Nothing imported: the file is empty. Choose a FlexWeek week or day file."
+    );
     assert_eq!(
         error_of("not json"),
         "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. Export it again from FlexWeek."
@@ -141,7 +144,7 @@ fn test_parse_rejects_newer_versions_and_plain_text() {
     let newer = json!({"format": "flexweek-week", "version": 99, "blocks": []}).to_string();
     assert_eq!(
         error_of(&newer),
-        "Export came from a newer FlexWeek (version 99)."
+        "Nothing imported: this file came from a newer FlexWeek (version 99). Update FlexWeek, then try again."
     );
 }
 

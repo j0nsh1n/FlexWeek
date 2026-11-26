@@ -19,6 +19,7 @@ mod more;
 mod rest;
 mod service;
 mod session;
+mod session_block_edits;
 mod session_changes;
 mod session_copies;
 mod session_focus;
@@ -366,6 +367,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     rest::add(m)?;
     service::add(m)?;
     session::add(m)?;
+    session_block_edits::add(m)?;
     session_copies::add(m)?;
     session_reminders::add(m)?;
     session_changes::add(m)?;

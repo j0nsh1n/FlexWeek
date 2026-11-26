@@ -62,8 +62,8 @@ from desktop.native.weekmodel import added_words, hhmm_text, length_label
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
-WAIT_SAVE = "Saving your last change… Save will work in a moment."
-WAIT_DELETE = "Saving your last change… Delete will work in a moment."
+WAIT_SAVE = "Saving your last change… Try Save again in a moment."
+WAIT_DELETE = "Saving your last change… Try Delete again in a moment."
 UNDO_ALSO = "Undo also takes back anything changed after it."
 MAX_NAMED_WEEKS = 3
 DISCARD = {
@@ -1037,7 +1037,7 @@ class SheetsBridge(QObject):
                 title = titles.get(move["block_id"], move["block_id"])
                 changes.append(_late_move(move, block, title, session.week_start))
             changes.extend(
-                block["title"] + " no longer fits and will stay on the task list."
+                block["title"] + " no longer fits and will stay under Not placed yet."
                 for block in trace.get("unplaced") or []
             )
             if not changes:
@@ -1181,9 +1181,9 @@ class SheetsBridge(QObject):
         return {
             "kind": "unfinished",
             "heading": "Unfinished",
-            "intro": "Overdue and left from last week, then homework that still needs a time.",
+            "intro": "Homework that's overdue or left from last week, then homework that still needs a time.",
             "rows": rows,
-            "empty": "Nothing is left over." if not rows else "",
+            "empty": "No homework is overdue, left from last week or waiting for a time." if not rows else "",
         }
 
     def open_preview(self, draft: PreviewDraft) -> None:
@@ -1481,7 +1481,7 @@ class SheetsBridge(QObject):
             self._publish()
             return
         if not self._routine_days:
-            self._routine_error = "Choose at least one weekday to copy."
+            self._routine_error = "Choose at least one day."
             self._publish()
             return
         week = session.week_start

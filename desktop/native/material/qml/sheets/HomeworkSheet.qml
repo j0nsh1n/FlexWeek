@@ -348,7 +348,7 @@ SheetFrame {
             density: root.density
             reduceMotion: root.reduceMotion
             highContrast: root.highContrast
-            label: "Energy preference"
+            label: "Preferred time of day"
             options: root.f.energyOptions ? root.f.energyOptions : []
             value: root.f.energy
             onPicked: (v) => root.sheets.setText("energy", v)

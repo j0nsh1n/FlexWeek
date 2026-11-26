@@ -131,7 +131,7 @@ Column {
             theme: page.theme
             width: parent.width
             visible: bridge ? bridge.schoolHint : false
-            text: "No school days picked means no school on the calendar."
+            text: "No school days picked: School won't appear on the calendar."
         }
         HelpText {
             objectName: "setupThisWeek"

@@ -144,7 +144,7 @@ class StudyHours:
             )
             for (_s1, end1), (start2, _e2) in zip(spans, spans[1:], strict=False):
                 if start2 < end1:
-                    return f"That overlaps protected time already on {DAY_FULL[day]}."
+                    return f"That overlaps another protected time on {DAY_FULL[day]}."
         return ""
 
     def saved_windows(self) -> list[dict[str, Any]]:

@@ -23,6 +23,6 @@ def qapp() -> Iterator[QApplication]:
 
 def test_plan_sentence_and_the_panel_share_one_placed_wording() -> None:
     """The toast and the panel both say Placed, in the toast's sentence."""
-    assert plan_sentence(2, 1) == "Placed 2 homework blocks. 1 with no time yet."
-    assert plan_sentence(1, 0) == "Placed 1 homework block."
-    assert plan_sentence(0, 1) == "Nothing placed. 1 with no time yet."
+    assert plan_sentence(2, 1) == "Placed 2 sessions. 1 still needs a time."
+    assert plan_sentence(1, 0) == "Placed 1 session."
+    assert plan_sentence(0, 1) == "No homework was placed. 1 still needs a time."

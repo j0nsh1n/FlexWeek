@@ -9,11 +9,11 @@ use flexweek_engine::time::week_start_on;
 use flexweek_engine::{EngineError, EngineResult};
 use serde_json::{Value, json};
 
-const PLACE_FIRST: &str = "Place a work block that isn't finished before starting focus.";
+const PLACE_FIRST: &str = "Give an unfinished homework session a time before starting focus.";
 const HOMEWORK_NOT_LOADED: &str = "This homework did not load, so the focus time was not counted. \
 Reload the week and try again.";
-const TIMER_STOPPED: &str = "Schedule restored. The previous focus timer was stopped because \
-its session no longer exists.";
+const TIMER_STOPPED: &str =
+    "Schedule restored. The focus timer stopped because its homework session no longer exists.";
 
 /// A shared null, since a borrowed `Value::Null` temporary would not live long enough.
 static NULL: Value = Value::Null;

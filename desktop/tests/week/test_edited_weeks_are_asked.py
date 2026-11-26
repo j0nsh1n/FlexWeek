@@ -375,8 +375,8 @@ def test_the_question_defaults_to_except_edited(qapp, window, after_setup, monke
     school_hours(qapp, window, monkeypatch)
     assert seen["body"] == "The week of 16 November has its own School times."
     assert seen["answers"] == [
-        ("keep", "Except edited", "filled", True),
-        ("replace", "All weeks", "danger", False),
+        ("keep", "Keep edited weeks", "filled", True),
+        ("replace", "Replace all weeks", "danger", False),
         ("from_today", "From today on", "danger", False),
         ("stay", "Cancel", "text", False),
     ]

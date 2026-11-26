@@ -187,7 +187,7 @@ class FakeFlexWeekCore : FlexWeekCore {
                     put("state", "unreachable")
                     put(
                         "line",
-                        "Your computer isn't reachable. Showing what synced at $lastSyncAt.",
+                        "Your computer isn't reachable. Showing the week last synced at $lastSyncAt.",
                     )
                 }
         }

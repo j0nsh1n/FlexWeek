@@ -97,7 +97,7 @@ def test_plan_overdue_leaves_the_pinned_session_and_adds_a_new_one(qapp, window)
     fresh = next(item for item in bio if item["id"] != session_id)
     assert (kept["days"], kept["start"], kept.get("pinned")) == ([WEDNESDAY], "15:15", True)
     assert (fresh["days"], fresh["start"], fresh["duration_min"]) == ([SATURDAY], "11:15", 60)
-    assert session.message == "Placed 1 homework block."
+    assert session.message == "Placed 1 session."
     assert session.assignments["bio"]["due"] == due
     assert next(item for item in session.blocks if item["id"] == "class") == before_class
     session.plan_left(["bio"])
@@ -147,7 +147,7 @@ def test_overdue_plan_with_no_room_does_not_add_an_unplaced_block(qapp, window) 
     session.plan_left(["bio"])
     settled(qapp, window)
     assert session.blocks == before
-    assert session.message == "Nothing placed. Bio reading still has 1 h with no time."
+    assert session.message == "No homework was placed. Bio reading still has 1 h with no time."
     session.reload()
     settled(qapp, window)
     assert session.blocks == before
@@ -237,7 +237,7 @@ def test_plan_overdue_moves_a_future_session(qapp, window) -> None:
     bio = next(item for item in session.blocks if item["id"] == session_id)
     # The class ends at 11:00 and the default leaves 15 minutes after it.
     assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
-    assert session.message == "Placed 1 homework block."
+    assert session.message == "Placed 1 session."
     assert "prefer_earliest" not in bio
 
 

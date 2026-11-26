@@ -67,7 +67,7 @@ fun PairScreen(
                 )
             }
             Text(
-                "Point the camera at the code. Both devices need the same Wi‑Fi this first time.",
+                "Point the camera at the code on your computer.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -123,8 +123,8 @@ fun PairScreen(
             }
         }
         Text(
-            "The phone joins the account that is already on your computer and keeps a full copy. " +
-                "Nothing goes through the internet unless the two cannot see each other.",
+            "The phone joins the account already on your computer and keeps a full copy. " +
+                "FlexWeek uses the same Wi-Fi when it can, or a public relay run by n0. The relay can't read your week.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

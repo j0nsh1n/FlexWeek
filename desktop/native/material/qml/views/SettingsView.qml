@@ -264,7 +264,7 @@ Item {
         highContrast: Ui.highContrast
         open: !!root.st.askRemove
         title: "Remove " + (root.st.removeName || "this phone") + "?"
-        body: "The phone keeps what it has and gets nothing new from this computer. To link it again, pair it once more."
+        body: "The phone keeps its current data but won't sync with this computer anymore. Pair it again to reconnect."
         buttons: [
             { label: "Keep phone", value: "keep", kind: "text" },
             { label: "Remove phone", value: "remove", kind: "filled" }

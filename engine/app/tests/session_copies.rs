@@ -180,7 +180,7 @@ fn a_start_outside_planned_hours_is_refused_in_words() {
     let block = locked("soccer", vec![3], "25:00");
     assert_eq!(
         date_problem(&problem_input(Some(&block), 3, 1, None)).unwrap(),
-        Some("That's outside the hours FlexWeek plans in, so it stayed where it was.".to_string())
+        Some("FlexWeek can't use that time, so the block stayed where it was.".to_string())
     );
 }
 

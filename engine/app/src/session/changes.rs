@@ -718,7 +718,7 @@ pub fn acknowledge_repeats(
 }
 
 /// What a refused Undo says once the week is read again as it is saved.
-pub const TRAVEL_REFUSED: &str = "Undo did not go through. Your week was reloaded as it's saved.";
+pub const TRAVEL_REFUSED: &str = "Undo didn't save. Your week was reloaded as it's saved.";
 
 /// How the window recovers from a failed save.
 #[derive(Debug, PartialEq, Eq)]

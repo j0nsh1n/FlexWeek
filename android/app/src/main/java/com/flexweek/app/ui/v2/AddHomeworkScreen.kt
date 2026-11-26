@@ -146,8 +146,8 @@ fun AddHomeworkScreen(
                     }
                 }
                 Text(
-                    if (draft.sessions == "one") "In one go means one homework session."
-                    else "Spread over days means more than one session.",
+                    if (draft.sessions == "one") "In one go keeps all the time in one session."
+                    else "Spread over days splits the time into more than one session.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),

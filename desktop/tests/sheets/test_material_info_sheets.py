@@ -417,7 +417,9 @@ def test_sign_out_asks_in_a_material_prompt_with_the_same_words(
     pump(qapp, 40)
     ask = dict(_sheets(window).property("ask"))
     assert ask["title"] == "Sign out"
-    assert ask["body"] == "Your week is saved on this computer, under this account. Sign in again to see it."
+    assert ask["body"] == (
+        "Sign out? Your week is saved on this computer, under this account. Sign in again to see it."
+    )
     assert ask["body"] == SIGN_OUT_QUESTION.format(where="this computer")
     assert [(a["label"]) for a in ask["answers"]] == ["Cancel", "Sign out"]
     assert _text(root, "sheetTitle") == "Sign out"
@@ -432,7 +434,7 @@ def test_sign_out_says_in_full_where_the_week_lives(
     window._log_out()
     pump(qapp, 20)
     assert dict(_sheets(window).property("ask"))["body"] == (
-        "Your week is saved on this computer, under this account. Sign in again to see it."
+        "Sign out? Your week is saved on this computer, under this account. Sign in again to see it."
     )
 
 

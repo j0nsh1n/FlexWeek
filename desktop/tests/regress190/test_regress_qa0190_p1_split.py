@@ -89,7 +89,7 @@ def test_p1_1_next_weeks_plan_places_all_three_whole_before_their_due_days(qapp,
     plan(qapp, session)
     next_week(qapp, session)
     said = plan(qapp, session)
-    assert "All your homework already has a time." not in said, said
+    assert "No homework was placed." not in said, said
     placed = {ident: minutes(session, ident, placed=True) for ident, _e, _d in FRESH_EYES}
     assert placed == {ident: estimate for ident, estimate, _d in FRESH_EYES}, placed
 

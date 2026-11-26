@@ -20,10 +20,10 @@ from desktop.native.tones import FALLBACK, SOUNDS
 from desktop.native.weekmodel import hhmm_text
 
 MAX_ALARMS = 20
-NO_DAY = "Pick at least one day"
+NO_DAY = "Pick at least one day."
 BAD_LINK = "Use an https://open.spotify.com share link."
 FULL = f"You can have up to {MAX_ALARMS} alarms."
-NOT_SAVED = "Could not save that."
+NOT_SAVED = "Couldn't save the alarm. Try again."
 ALARM_SOUNDS = tuple(
     {"label": "Spotify link" if name == "spotify" else name.title(), "value": name} for name in SOUNDS
 )

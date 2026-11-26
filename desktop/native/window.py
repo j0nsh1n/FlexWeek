@@ -103,7 +103,7 @@ OUTSIDE_CHECK_MS = 2000
 
 
 
-SIGN_OUT_QUESTION = "Your week is saved on {where}, under this account. Sign in again to see it."
+SIGN_OUT_QUESTION = "Sign out? Your week is saved on {where}, under this account. Sign in again to see it."
 RECOVERY_CHOOSE = "Choose where to save"
 # The pages Material 3 answers for, as its own screens.
 MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
@@ -1245,7 +1245,7 @@ class NativeWindow(QObject):
         return choice
 
     def _pose_edited(self, line: str) -> str | None:
-        """The three answers, or None for Cancel. Asked on Material's answers sheet, Except edited the
+        """The three answers, or None for Cancel. Asked on Material's answers sheet, Keep edited weeks the
         default. Material not on screen means no answer, so nothing changes."""
         bridge = self._account_bridge()
         material = self._surface == "material" and not self._material_gave_up
@@ -1281,8 +1281,8 @@ class NativeWindow(QObject):
             "title": "Edited weeks",
             "body": line,
             "answers": [
-                {"id": "keep", "label": "Except edited", "kind": "filled", "default": True},
-                {"id": "replace", "label": "All weeks", "kind": "danger"},
+                {"id": "keep", "label": "Keep edited weeks", "kind": "filled", "default": True},
+                {"id": "replace", "label": "Replace all weeks", "kind": "danger"},
                 {"id": "from_today", "label": "From today on", "kind": "danger"},
                 {"id": "stay", "label": "Cancel", "kind": "text"},
             ],
@@ -1290,7 +1290,7 @@ class NativeWindow(QObject):
                 {
                     "id": "keep",
                     "title": "Keep my edited weeks",
-                    "line": "Updates the other weeks. Weeks you changed yourself keep their own times.",
+                    "line": "Changes only weeks you haven't edited. Your edited weeks keep their own times.",
                 },
                 {
                     "id": "from_today",
@@ -2022,7 +2022,7 @@ class NativeWindow(QObject):
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
         machine, since starting at login is a property of the machine rather than of the account."""
         if autostart.sync(wanted) is None and wanted:
-            self.session._say("This machine doesn't support starting at login.")
+            self.session._say("This computer doesn't support opening FlexWeek at login.")
 
     def _log_out(self) -> None:
         question = SIGN_OUT_QUESTION.format(where="this computer")
@@ -2138,7 +2138,7 @@ class NativeWindow(QObject):
                 body["material"] = material
             path.write_text(json.dumps(body) + "\n")
         except OSError:
-            self.session._say("Could not save the look for this device.")
+            self.session._say("FlexWeek couldn't save this computer's look.")
 
     def _apply_appearance(self) -> None:
         """Set the Animations level from the preference and the look worn."""
