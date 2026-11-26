@@ -15,6 +15,7 @@ use flexweek_engine::stored::truthy;
 use flexweek_store::Revision;
 use serde_json::{Map, Value, json};
 
+use super::autosave;
 use super::changes::{self, SaveAnswer, SaveDraft, SaveFailureKind, StepPlace, Travel};
 use super::week::{self, DraftFlags, History, LoadFinish, LoadReply, LoadRoute, ReadWeek, Row};
 
@@ -566,12 +567,13 @@ impl Drafts {
         self.put("dirty_assignments", json!(ids));
     }
 
-    pub(super) fn save_flags(&self) -> (bool, bool, bool) {
-        (
-            truthy(Some(self.field("conflict"))),
-            self.flags().dirty,
-            self.week.pending.is_some(),
-        )
+    pub(super) fn autosave_week(&self, signed_in: bool) -> autosave::Week {
+        autosave::Week {
+            signed_in,
+            conflict: truthy(Some(self.field("conflict"))),
+            dirty: truthy(Some(self.field("dirty"))),
+            pending: self.week.pending.is_some(),
+        }
     }
 
     pub(super) fn leave_flags(&self) -> (bool, bool) {

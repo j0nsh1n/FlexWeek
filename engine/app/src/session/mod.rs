@@ -168,32 +168,15 @@ impl Session {
                 let owner = command["owner"].as_str().map(str::to_string);
                 self.delete_account(text("password")?, owner)
             }
-            Some(cmd @ ("autosave" | "drafts_autosave")) => {
-                let flag = |name: &str| -> Result<bool, String> {
-                    command[name]
-                        .as_bool()
-                        .ok_or_else(|| format!("{name} is true or false"))
-                };
-                let (conflict, dirty, pending) = if cmd == "drafts_autosave" {
-                    self.drafts.save_flags()
-                } else {
-                    (flag("conflict")?, flag("dirty")?, flag("pending")?)
-                };
-                let week = autosave::Week {
-                    signed_in: flag("signed_in")?,
-                    conflict,
-                    dirty,
-                    pending,
-                };
+            Some("drafts_autosave") => {
+                let signed_in = command["signed_in"]
+                    .as_bool()
+                    .ok_or("signed_in is true or false")?;
+                let week = self.drafts.autosave_week(signed_in);
                 let busy = self.status.busy();
-                // The clock is read only when a save could be due, as the window did.
-                let save = !(!week.signed_in || busy || week.conflict)
-                    && self.autosave.due(week, busy, self.frame.steady_ms());
-                let mut answer = json!({ "save": save });
-                if cmd == "drafts_autosave" {
-                    answer["versions"] = self.drafts.versions();
-                }
-                Ok(answer)
+                let save =
+                    week.can_save(busy) && self.autosave.due(week, busy, self.frame.steady_ms());
+                Ok(json!({ "save": save, "versions": self.drafts.versions() }))
             }
             Some("autosave_times") => {
                 let time = |name: &str| -> Result<Option<i64>, String> {
