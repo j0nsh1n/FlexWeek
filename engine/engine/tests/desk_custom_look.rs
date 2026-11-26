@@ -88,7 +88,10 @@ fn test_saved_looks_are_named_saved_renamed_duplicated_deleted_and_reset() {
         rename_look(&json!(saved), "Late night", "Exams"),
         "already a look called Exams",
     );
-    refused(delete_look(&json!(saved), "Nope"), "No saved look");
+    refused(
+        delete_look(&json!(saved), "Nope"),
+        "no saved look called Nope",
+    );
     // What the look file holds is read back whole, and a broken or doubled entry left out.
     let mut stored = saved.clone();
     stored.push(json!({"base": "neon", "name": "Bad"}));
@@ -198,7 +201,7 @@ fn test_a_look_is_exported_as_a_small_versioned_file_and_imported_back() {
 fn test_an_import_says_plainly_what_was_wrong() {
     let huge = format!("{{{}}}", " ".repeat(70000));
     let cases = [
-        ("not json at all", "could not be read"),
+        ("not json at all", "couldn't read this file as a look"),
         ("[1, 2]", "isn't a FlexWeek look"),
         (r#"{"base": "paper"}"#, "isn't a FlexWeek look"),
         (

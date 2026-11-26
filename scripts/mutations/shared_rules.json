@@ -30,7 +30,7 @@
  {
   "file": "desktop/native/window.py",
   "name": "a notice keeps an Undo that would take back a later change",
-  "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
+  "old": "        elif stored and self._notice_step is not None and self.session.last_step_token() != self._notice_step:\n",
   "new": "        elif False:\n",
   "test": "desktop/tests/week/test_material_shared_rules.py::test_a_notice_loses_its_undo_when_a_later_change_is_saved"
  },
@@ -238,11 +238,11 @@
   "test": "desktop/tests/sheets/test_material_manage_account_words.py::test_a_saved_backup_says_where_it_went_and_to_keep_it_private"
  },
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/transfer.rs",
   "name": "an import for another week does not say to go to that week",
-  "old": "                + \". Go to that week, then import again.\"\n",
-  "new": "                + \".\"\n",
-  "test": "desktop/tests/sheets/test_material_manage_account_words.py::test_a_day_file_for_another_week_is_refused_and_nothing_changes"
+  "old": "            \"Nothing imported: this file is for {}. Go to that week, then import again.\",\n",
+  "new": "            \"Nothing imported: this file is for {}.\",\n",
+  "test": "cargo:flexweek-app:session_transfer:another_weeks_file_is_refused_with_words_naming_that_week"
  },
  {
   "file": "desktop/native/settings_copy.py",

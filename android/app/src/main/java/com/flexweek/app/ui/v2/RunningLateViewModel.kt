@@ -55,7 +55,7 @@ class RunningLateViewModel(
                 error = null
             } else {
                 preview = null
-                error = root.optString("error").ifBlank { "Running late could not look at your day." }
+                error = root.optString("error").ifBlank { "Couldn't preview Running late. Try again." }
             }
         }
     }
@@ -73,7 +73,7 @@ class RunningLateViewModel(
             // Either way the preview is spent: accepted, or stale because the week changed under it.
             preview = null
             if (answer.optBoolean("ok", false)) onAccepted()
-            else error = answer.optString("error").ifBlank { "Running late could not move that. Try again." }
+            else error = answer.optString("error").ifBlank { "Couldn't apply Running late. Try again." }
         }
     }
 }

@@ -25,7 +25,7 @@ pub const SLACK_WORDS: [(&str, &str); 3] = [
     ("tight", "Tight"),
     ("ok", "Plenty of time"),
 ];
-pub const NOT_PLANNED: &str = "Not planned yet.";
+pub const NOT_PLANNED: &str = "Not placed yet.";
 pub const HOMEWORK: &str = "assignments";
 pub const END_OF_DAY: i64 = 24 * 60;
 pub const LEFTOVER: [(&str, &str); 4] = [

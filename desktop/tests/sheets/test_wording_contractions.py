@@ -133,19 +133,26 @@ def test_user_facing_copy_uses_contractions() -> None:
 
 
 def test_the_controllers_notices_use_contractions() -> None:
-    source = (NATIVE / "controller.py").read_text(encoding="utf-8")
+    # The session's notices are moving into the engine (2.0.0, P4); each is checked wherever it is now.
+    engine = NATIVE.parents[1] / "engine"
+    places = [
+        NATIVE / "controller.py",
+        engine / "engine/src/desk/history.rs",
+        *sorted((engine / "app/src/session").glob("*.rs")),
+    ]
+    source = "\n".join(path.read_text(encoding="utf-8") for path in places)
     for wanted in (
         "There's nothing to copy from last week yet.",
-        "That's outside the hours FlexWeek plans in, so it stayed where it was.",
+        "FlexWeek can't use that time, so the block stayed where it was.",
         "That block isn't on that date.",
         "That change can't be undone. Reload and try again.",
         "That change can't be redone. Reload and try again.",
-        "Undo did not go through. Your week was reloaded as it's saved.",
+        "Undo didn't save. Your week was reloaded as it's saved.",
         "Uncheck what can't be added before saving.",
         "There's nothing available to add.",
-        " remains, but it doesn't fit the 15-minute planning grid.",
-        " can't fit the 15-minute grid and has not been ",
-        "Place a work block that isn't finished before starting focus.",
+        " remains. FlexWeek plans in 15-minute steps.",
+        " is still included in the homework's total time, ",
+        "Give an unfinished homework session a time before starting focus.",
     ):
         assert wanted in source, wanted
 

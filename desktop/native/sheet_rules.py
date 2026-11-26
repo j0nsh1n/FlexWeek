@@ -157,7 +157,7 @@ def day_range_and_words(days: list[int] | tuple[int, ...], week_start: str = "")
     return f"{head} and {last}"
 
 
-SPREAD_NOTHING = "Nothing left to spread: the rest is already done or focused."
+SPREAD_NOTHING = "Nothing left to spread: all of this homework is already done or has focus time recorded."
 
 # No-break space before the last word, so a narrow sheet never leaves "45." alone on a line.
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or\u00a045."

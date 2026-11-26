@@ -433,7 +433,9 @@ pub(crate) fn set_homework_done(
         flexweek_store::AssignmentSave::Ready(_) => {}
         flexweek_store::AssignmentSave::Conflict => {
             rollback(&db);
-            return Err(failure("homework changed on another device"));
+            return Err(failure(
+                "This homework changed on another device. Sync, then try again.",
+            ));
         }
         flexweek_store::AssignmentSave::OverLimit => {
             rollback(&db);
@@ -586,7 +588,7 @@ mod tests {
         assert_eq!(out["no_time_yet"][0]["id"], "poster-session");
         assert_eq!(out["no_time_yet"][0]["minutes"], 60);
         assert_eq!(out["no_time_yet"][0]["due"], "2026-10-09T16:00");
-        assert_eq!(out["no_time_yet"][0]["reason"], "Not planned yet.");
+        assert_eq!(out["no_time_yet"][0]["reason"], "Not placed yet.");
         assert_eq!(out["no_time_yet"][0]["category"], "homework");
         assert_eq!(
             out["due_homework"]

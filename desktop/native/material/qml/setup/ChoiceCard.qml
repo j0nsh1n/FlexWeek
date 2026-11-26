@@ -1,8 +1,8 @@
 import QtQuick
 import components 1.0
 
-// One choice out of several: a card that shows what it does and, when picked, a check and the
-// secondary container fill. Space and Return pick it.
+// One choice out of several: an elevated M3 card that shows what it does and, when picked,
+// a check badge and the secondary container fill. Space and Return pick it.
 Item {
     id: root
     property var theme
@@ -17,27 +17,27 @@ Item {
     property string accessName: ""
     signal chosen()
 
-    implicitWidth: 320
-    implicitHeight: Math.max(64, words.implicitHeight + 24)
-    height: implicitHeight
+    implicitWidth: 260
+    implicitHeight: Math.max(68, words.implicitHeight + 24)
 
     M3Palette { id: palette; theme: root.theme }
     property bool keyDown: false
+    readonly property real cardRadius: palette.cornerFor(14)
 
     Rectangle {
         id: shape
         anchors.fill: parent
-        radius: 8
-        color: root.selected ? palette.secondaryContainer : palette.surfaceContainerLow
+        radius: root.cardRadius
+        color: root.selected ? palette.secondaryContainer : palette.cardSurface
         border.width: root.selected ? 2 : (root.highContrast ? 1.5 : 1)
-        border.color: root.selected ? palette.primary : palette.outlineVariant
+        border.color: root.selected ? palette.primary : (root.highContrast ? palette.outline : palette.outlineVariant)
         Behavior on color {
             ColorAnimation { duration: Motion.fade(200, root.reduceMotion) }
         }
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 8
+        radius: root.cardRadius
         color: root.selected ? palette.inkSecondaryContainer : palette.inkSurface
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
@@ -47,19 +47,26 @@ Item {
         anchors.fill: parent
         anchors.margins: -4
         ring: palette.focusRing
-        ringRadius: 12
+        ringRadius: root.cardRadius + 4
     }
     Item {
         id: mark
         x: 16
         anchors.verticalCenter: parent.verticalCenter
-        width: 24
-        height: 24
-        M3Icon {
+        width: 22
+        height: 22
+        Rectangle {
             visible: root.selected
             anchors.fill: parent
-            name: "check"
+            radius: 11
             color: palette.primary
+            M3Icon {
+                anchors.centerIn: parent
+                width: 14
+                height: 14
+                name: "check"
+                color: palette.inkPrimary
+            }
         }
         Rectangle {
             visible: !root.selected
@@ -75,34 +82,34 @@ Item {
     Column {
         id: words
         anchors.left: mark.right
-        anchors.leftMargin: 16
+        anchors.leftMargin: 14
         anchors.right: parent.right
         anchors.rightMargin: 16
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 2
+        spacing: 4
         Text {
             width: parent.width
             text: root.title
             wrapMode: Text.WordWrap
             color: root.selected ? palette.inkSecondaryContainer : palette.inkSurface
-            font.family: M3Font.family
-            font.pixelSize: M3Font.px(16)
-            font.weight: 500
+            font.family: M3Font.heading
+            font.pixelSize: M3Font.px(15)
+            font.weight: 600
         }
         Rectangle {
             visible: root.tag !== ""
             width: tagText.implicitWidth + 16
             height: M3Font.px(20)
             radius: height / 2
-            color: root.selected ? palette.surface : palette.primaryContainer
+            color: root.selected ? palette.cardSurface : palette.primaryContainer
             Text {
                 id: tagText
                 anchors.centerIn: parent
                 text: root.tag
                 color: root.selected ? palette.inkSecondaryContainer : palette.inkPrimaryContainer
                 font.family: M3Font.family
-                font.pixelSize: M3Font.px(12)
-                font.weight: 500
+                font.pixelSize: M3Font.px(11)
+                font.weight: 600
             }
         }
         Text {
@@ -112,7 +119,7 @@ Item {
             wrapMode: Text.WordWrap
             color: root.selected ? palette.inkSecondaryContainer : palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: M3Font.px(14)
+            font.pixelSize: M3Font.px(13)
         }
     }
 

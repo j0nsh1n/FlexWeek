@@ -721,7 +721,10 @@ fn test_due_today_with_no_study_time_left_says_so() {
     assert_eq!(ids(&trace.unplaced), ["hw"]);
     let (reason, message) = unplaced_reason(&trace, "hw");
     assert_eq!(reason, "NO_STUDY_TIME_TODAY");
-    assert_eq!(message, "Due today and no study time is left today.");
+    assert_eq!(
+        message,
+        "It's due today, and there's no study time left today."
+    );
 }
 
 #[test]

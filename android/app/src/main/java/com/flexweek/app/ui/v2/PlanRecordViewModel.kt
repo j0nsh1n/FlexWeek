@@ -38,7 +38,7 @@ class PlanRecordViewModel(
             val raw = withContext(workerDispatcher) { core.planWeek(core.currentWeekStart()) }
             val root = JSONObject(raw)
             if (!root.optBoolean("ok", false)) {
-                error = root.optString("error", "Could not plan.")
+                error = root.optString("error", "Couldn't plan your homework. Try again.")
                 return@launch
             }
             record = V2Json.parsePlanRecord(raw)
@@ -56,7 +56,7 @@ class PlanRecordViewModel(
             val raw = withContext(workerDispatcher) { core.acceptPlan(preview.previewId, newOpId()) }
             if (!JSONObject(raw).optBoolean("ok", false)) {
                 // The sheet shows the reason in place of the plan, which is stale once the core refused it.
-                error = JSONObject(raw).optString("error").ifBlank { "Could not accept." }
+                error = JSONObject(raw).optString("error").ifBlank { "Couldn't accept this plan. Try planning again." }
                 record = null
                 return@launch
             }

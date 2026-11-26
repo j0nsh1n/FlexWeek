@@ -31,16 +31,17 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 8
+        radius: palette.cornerFor(12)
         color: root.fill
-        border.width: root.highContrast ? 1.5 : 0
-        border.color: palette.outline
-    }
-    Rectangle {
-        visible: root.showBar
-        width: 4
-        height: parent.height
-        color: root.bar
+        border.width: root.highContrast ? 1.5 : (root.tinted ? 0 : 1)
+        border.color: root.highContrast ? palette.outline : palette.outlineVariant
+        clip: true
+        Rectangle {
+            visible: root.showBar
+            width: 4
+            height: parent.height
+            color: root.bar
+        }
     }
     M3Icon {
         id: glyph

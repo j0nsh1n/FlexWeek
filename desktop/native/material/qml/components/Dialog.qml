@@ -42,7 +42,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: "#000000"
+        color: palette.scrim
         opacity: 0.32
         TapHandler { onTapped: root.close() }
     }
@@ -51,9 +51,11 @@ FocusScope {
         objectName: "dialogCard"
         width: Math.min(440, Math.max(0, root.width - 32))
         height: column.implicitHeight + 48
-        radius: 8
+        radius: palette.cornerFor(24)
         anchors.centerIn: parent
-        color: palette.surfaceContainerHigh
+        color: palette.dialogSurface
+        border.width: root.highContrast ? 1.5 : (palette.dark ? 1 : 0)
+        border.color: root.highContrast ? palette.outline : palette.outlineVariant
         clip: true
         Column {
             id: column

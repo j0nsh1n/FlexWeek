@@ -214,7 +214,7 @@ class RemindersViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                state = state.copy(problem = error.message ?: "Could not unlink. Try again.")
+                state = state.copy(problem = error.message ?: "Couldn't unpair this computer. Try again.")
             } finally {
                 state = state.copy(syncing = false)
             }

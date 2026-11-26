@@ -20,8 +20,7 @@ it needs no internet, and it uses no AI service. Made for the Congressional App 
 - **Your week, your way**: the week can start on any day; School hours and activities repeat every week, with one-week
   changes when you need them.
 - **Focus timer** that counts toward the homework it is for, and **reminders and alarms** for what comes next.
-- **Two styles**: the standard style, with several page designs, ten colour themes and an editor for your own, and a
-  Material 3 style; both light and dark, with keyboard shortcuts throughout.
+- **Material 3 interface** with light and dark modes, colour presets, text-size choices and keyboard shortcuts.
 - **Phone app** for Android that syncs with your computer, and an optional **assistant helper** for AI assistants
   that speak MCP.
 
@@ -47,7 +46,7 @@ Checksum files (`.sha256`) sit next to those downloads if you want to confirm th
 
 1. Open FlexWeek. The first screen is Sign in. Choose "New here? Create an account" under it and pick a username and a password. The account and your week are saved on this computer; nothing is sent anywhere.
 2. Save the recovery codes FlexWeek shows next. One of them resets your password if you forget it.
-3. Setup goes a page at a time: a style, your week (school and other fixed times), how homework gets a time, reminders and the alarm sound, and your first homework. You can skip any page and change all of it later in Settings (the gear).
+3. Setup has three steps: School hours, Study hours, and Look & alerts. Each offers multiple-choice cards and a live week preview. You can skip any step and change your choices later in Settings.
 4. Press Plan my homework. FlexWeek places each homework around the fixed times and says, in plain words, anything it could not place or had to move. Drag a block to move it yourself; Undo puts it back.
 
 ### Linux libraries
@@ -74,7 +73,7 @@ On Debian or Ubuntu without a full desktop, such as a container or a minimal ins
 
 ## Phone app
 
-FlexWeek also runs on an Android phone (Android 8.0 or newer). Pair it with your computer in Settings > This computer > Devices: the computer shows an 8-digit code, you type it on the phone, and the code works once and lasts 5 minutes. The phone runs the same engine as your computer and syncs your real homework both ways. When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send. With no phone linked, the computer opens no network connection and contacts no relay. How to build the app is in [docs/android.md](docs/android.md).
+FlexWeek also runs on an Android phone (Android 8.0 or newer). Pair it with your computer in Settings > Phone & sync > Pair a phone: the computer shows an 8-digit code, you type it on the phone, and the code works once and lasts 5 minutes. The phone runs the same engine as your computer and syncs your real homework both ways. When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send. With no phone linked, the computer opens no network connection and contacts no relay. How to build the app is in [docs/android.md](docs/android.md).
 
 **Get it.** Download `FlexWeek-Android-<version>.apk` from the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest), open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with the project's own key, not Google Play's. After that, the app offers each new release itself (Settings), and installing it over the old one keeps your data. The phone has Today, Week, Add homework, Plan, Running late, a focus timer, reminders and an Up next home-screen widget, and syncs; it does not have Month or Day screens.
 
@@ -94,7 +93,7 @@ The Linux downloads include a helper that lets an AI assistant you already use (
 
 ## Tech stack
 
-- **Desktop app**: Python 3.14 with Qt (PySide6), Widgets and QML (Material 3).
+- **Desktop app**: Python 3.14 with Qt (PySide6) and Material 3 in Qt Quick/QML.
 - **Planner and storage**: Rust (`engine/`), built into a Python module with PyO3 and maturin; SQLite (rusqlite).
 - **Saved data**: the Rust service answers the window in the same process; there is no server.
 - **Phone app**: Android, Kotlin with Jetpack Compose, calling the same Rust engine through UniFFI; sync uses iroh.
@@ -127,15 +126,13 @@ one of the eight recovery codes shown when the account was made.
 - **Adding**: press **Add** in the top bar for homework, or its arrow for a fixed time or School hours, or drag on the
   calendar. A **fixed time** (school, practice) never moves when you plan; **homework** is placed by Plan my homework
   in free time before it is due.
-- **Changing**: a click opens anything on the calendar, and a right-click offers Open, Duplicate, Finished and Delete.
-  Undo brings back what you deleted or moved. Ctrl+K finds any action or homework by typing.
+- **Changing**: a click opens anything on the calendar, and a right-click offers its actions, including Duplicate,
+  Finished and Delete. Undo brings back what you deleted or moved. F1 opens Help.
 - **Saving**: every change saves on its own a moment later and retries if a save fails. A save that clashes with
   another window is never written over; FlexWeek asks you to reload the saved week instead.
-- **Looks**: the look starts on System, which follows your device's light or dark setting. Settings (the gear) holds
-  the look and layout: Today's app and Timeline are the standard designs, the rest are under Experimental styles, and
-  **Customise…** edits any of the ten colour themes and saves it as your own. Material 3 is one more style, chosen
-  under Settings > Look, with its own seed colour, palette style and contrast; you can switch back without a restart.
-  Animations can be Normal, More, Reduce (fades only) or Off.
+- **Looks**: Settings > Look holds the Material preset, System/Light/Dark mode, contrast, density, text size and
+  advanced controls. Named looks can be saved, applied, exported and imported. Animations can be Normal, More,
+  Reduce (fades only) or Off.
 - **Older weeks**: a week exported from an older browser-based build can be imported after you sign in. Import
   replaces the current week after you confirm it, and leaves invalid data untouched.
 
@@ -183,11 +180,11 @@ spec.md under Validation & Tooling.
 ## Progress
 
 [CHANGELOG.md](CHANGELOG.md) lists what each version changed, and the [roadmap](roadmap.md) lists what is being worked
-on. Developer builds of the newest work are published on GitHub as a pre-release named `dev` (Linux tarball only); turn
-them on with Settings > This computer > Get developer builds. Windows packages are built on GitHub Actions when a
-release is made; nobody has yet run the installers on a real Windows PC for this project, so a first install there
-still needs a person to click through SmartScreen and report back. How the downloads are built and released is in
-[DESKTOP.md](DESKTOP.md) and [docs/github-release.md](docs/github-release.md).
+on. `scripts/dev-release.sh` starts a developer build from `main` on Depot CI. It normally publishes to GitHub as the
+`dev` pre-release in about four minutes (Linux tarball only); turn developer builds on with Settings > This computer >
+Get developer builds. Windows packages are built on GitHub Actions for versioned releases, not developer-build releases.
+Jonathan ran 1.5.0 on a real Windows PC; the 2.0.0 rewrite's Windows pieces still need a real-PC check. How the
+downloads are built and released is in [DESKTOP.md](DESKTOP.md) and [docs/github-release.md](docs/github-release.md).
 
 AI assistance was used throughout development. These models wrote, reviewed or checked code, tests and documents under
 j0nsh1n's direction, who decided what was built and checked what shipped:

@@ -364,7 +364,7 @@ class BlockDraft:
         for day in self.days:
             found = span_clash(self.session.blocks, self.original["id"], day, self.start, self.end)
             if found:
-                return f"{found} is at that time too. Both will show, one slightly over the other."
+                return f"{found} is at that time too. Both will stay visible and overlap slightly."
         return ""
 
     def candidate(self) -> dict | None:
@@ -394,7 +394,7 @@ class BlockDraft:
         else:
             made["missed_days"] = [day for day in made.get("missed_days", []) if day in made["days"]]
         if made["kind"] != "locked":
-            self.error = "Use the homework editor for flexible work."
+            self.error = "Use the homework editor for homework sessions."
             return None
         if self.scope == "occurrence" and self.series_days is not None:
             made["days"] = sorted(self.series_days)

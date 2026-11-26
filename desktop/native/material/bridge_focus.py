@@ -161,7 +161,7 @@ class FocusBridge(QObject):
     @Property(str, notify=changed)
     def endQuestion(self) -> str:
         session = self._session()
-        question = f"You have done {session.focus_elapsed_min()} min of {self.title}."
+        question = f"You've done {session.focus_elapsed_min()} min of {self.title}."
         if (self._state() or {}).get("assignmentId") in (session.assignments or {}):
             question += " It counts toward the homework."
         return question

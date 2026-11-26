@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(answer["moved"], json!(false), "{answer}");
         assert_eq!(
             answer["problem"],
-            json!("That block is not in this week, so nothing moved.")
+            json!("That block isn't in this week, so nothing moved.")
         );
     }
 

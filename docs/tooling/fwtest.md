@@ -238,7 +238,8 @@ the log cannot name the tests that shared its worker.
 | `engine` | builds the engine wheel and fwtest once | 1 |
 | `verify-engine` | fwtest's and the engine's `cargo fmt --check`, `clippy -D warnings`, `cargo test` | 1 |
 | `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, the port ledger, backend tests, diff checks | 1 |
-| `desktop` | every test file under `desktop/tests` and `scripts/rig`, offscreen, through `fwtest run` | 4 |
+| `desktop` | every selected test file under `desktop/tests`, `scripts/rig` and `scripts/pictures`, offscreen, through `fwtest run`; the opt-in `regress184` and `regress190` suites are left out | 4 |
+| `screens` | Rust screen tests in `engine/testkit/tests`, driving the Python app through the test door | 1 |
 | `rig` | the real-pointer rig playing Material, Day (`material-day-light.json`) and Week (`material-light.json`), under Xvfb; a step that is NOT DONE fails the job | 2 |
 | `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |
 | `mutate-python` | every other mutation case (pull requests and by hand) | 6 |

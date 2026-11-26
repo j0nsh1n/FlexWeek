@@ -64,6 +64,8 @@ def update_form(update: dict, current: str, state: dict) -> dict[str, Any]:
     """The update sheet: what is ready, what changed, and how the download is going."""
     return {
         "heading": f"FlexWeek {update['version']} is ready",
+        "version": str(update["version"]),
+        "current": str(current),
         "detail": f"You have {current}. Updating keeps your account and your weeks.",
         "notes": first_lines(update.get("notes") or ""),
         "status": state["status"],

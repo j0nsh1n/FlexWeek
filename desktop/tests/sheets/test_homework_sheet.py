@@ -197,7 +197,7 @@ def test_more_details_carry_course_type_energy_notes_links_and_steps(
     sheets.setText("energy", "high")
     sheets.setText("notes", "Bring goggles")
     sheets.addLink()
-    assert sheets.form["detailsError"] == "A link needs a label and an http(s) address."
+    assert sheets.form["detailsError"] == "Give the link a name and an address that starts with http:// or https://."
     sheets.setText("linkLabel", "Rubric")
     sheets.setText("linkUrl", "https://example.org/rubric")
     sheets.addLink()

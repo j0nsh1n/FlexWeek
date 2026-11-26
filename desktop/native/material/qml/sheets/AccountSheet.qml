@@ -75,8 +75,8 @@ SheetFrame {
         reduceMotion: root.reduceMotion
         highContrast: root.highContrast
         kind: "filled"
-        text: "Replace password"
-        accessName: "Replace password"
+        text: "Change password"
+        accessName: "Change password"
         onClicked: root.sheets.accountAct("password", currentPassword.text, newPassword.text)
     }
     Text {
