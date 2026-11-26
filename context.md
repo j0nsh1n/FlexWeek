@@ -125,7 +125,9 @@ preview. Recorded `operation_id` values make a retried write return the first re
   refuses it (solver); an older phone app may drop `removed_days` when it re-saves a week; release-windows.yml and the
   Linux build container still install `stable` Rust. Three helper copies wait on Jonathan before deletion:
   `slice/2d-week-state` (t3-cff31743, superseded by #188), t3-1a3042f1 (2 unreviewed changed files) and
-  t3-89c650a9 (one file, saved as review-school/sonnet-sheet-block.patch).
+  t3-89c650a9 (one file, saved as review-school/sonnet-sheet-block.patch). `scratch/wt-design-pics` stays on purpose: its only
+  change is the uncommitted one-off picture workflow (`.depot/workflows/pictures-oneoff.yml`) used for
+  before/after picture runs (`depot ci run --workflow` from a copy of the branch).
 - 2026-11-24 (after the AFK run): #165, #166, #172-#176 merged; CI moved to Depot (#153); the hours windows are
   checked by the engine with a plain refusal (branch feat/p4-hours-windows). Next: group 2's save core with group 3
   (undo); Jonathan's picks from the Gemini redesign mockups (`~/.flexweek-ui-harness/scratch/design-2.0-richer/`).
