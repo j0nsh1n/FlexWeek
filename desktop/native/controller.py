@@ -17,7 +17,6 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from backend import clock as wall_clock
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
-    blocks_by_weekday,
     day_in_week,
     hand_move,
     is_series,
@@ -25,7 +24,6 @@ from desktop.native.calendar import (
     monday_of,
     one_day_note,
     repeat_changes,
-    routine_on_week,
     stored_weeks_of,
     week_start_on,
 )
@@ -79,12 +77,7 @@ from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
     capacity_problem,
     clear_stale_pins,
-    clipboard_fingerprint,
     proposals_from_clipboard,
-    restore_point_label,
-    routine_rows,
-    routine_source_blocks,
-    routine_template,
     settle_placements,
     week_label,
 )
@@ -2223,7 +2216,9 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if token != self._routines_ticket or self.account is None:
                 return
-            self.routines = {item["id"]: item for item in data.get("routines") or []}
+            self.routines = json.loads(
+                flexweek_engine.session_routines_from_reply(json.dumps(data))
+            )
             self.week_changed.emit()
 
         self.client.request("GET", "/api/routines", None, ok, lambda _error: None)
@@ -2588,63 +2583,79 @@ class NativeSession(QObject):
         fetch_next()
 
     def save_routine(self, name: str, block_ids: list[str] | None = None) -> bool:
-        if self.account is None:
-            return False
-        # A routine keeps weekdays, so it copies the same way whichever day a week starts on.
-        sources = routine_source_blocks(blocks_by_weekday(self.week_start, self.blocks))
-        if block_ids is not None:
-            allowed = set(block_ids)
-            sources = [block for block in sources if block["id"] in allowed]
-        title = name.strip()
-        if not title or not sources:
-            self._say("Name the routine and select at least one fixed time.")
-            return False
-        templates = [routine_template(block, str(uuid4())) for block in sources]
-        fingerprint = clipboard_fingerprint(
-            [{"block": block, "source_day": 0, "scope": "block"} for block in sources]
+        account_id = None if self.account is None else self.account["id"]
+        decision = json.loads(
+            flexweek_engine.session_prepare_save_routine(
+                json.dumps(
+                    {
+                        "account_id": account_id,
+                        "week_start": self.week_start,
+                        "blocks": self.blocks,
+                        "name": name,
+                        "block_ids": block_ids,
+                    }
+                )
+            )
         )
-        key = f"create-routine|{self.account['id']}|{title}|{fingerprint}"
-        routine_id = "r-" + self._operation(key)
+        if decision["kind"] == "absent":
+            return False
+        if decision["kind"] == "say":
+            self._say(decision["say"])
+            return False
+        operation_id = self._operation(decision["key"])
+        request = json.loads(
+            flexweek_engine.session_save_routine_request(
+                operation_id, decision["title"], json.dumps(decision["templates"])
+            )
+        )
         ticket = self._begin()
-        self._say("Saving routine…")
-        body = {"id": routine_id, "name": title, "blocks": templates, "revision": 0}
+        self._say(request["progress"])
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            saved = data.get("routine") or data
-            self.routines[saved["id"]] = saved
-            self._draft_command("forget_attempt", key=key)
-            self._say("Saved " + saved["name"] + ".")
+            saved = json.loads(flexweek_engine.session_save_routine_reply(json.dumps(data)))
+            self.routines[saved["id"]] = saved["routine"]
+            self._draft_command("forget_attempt", key=decision["key"])
+            self._say(saved["say"])
             self.week_changed.emit()
 
         self.client.request(
-            "PUT",
-            f"/api/routines/{quote(routine_id, safe='')}",
-            body,
+            request["method"],
+            request["path"],
+            request["body"],
             ok,
             lambda error: self._fail(ticket, error),
         )
         return True
 
     def delete_routine(self, routine_id: str) -> None:
-        routine = self.routines.get(routine_id)
-        if self.account is None or routine is None:
+        account_id = None if self.account is None else self.account["id"]
+        decision = json.loads(
+            flexweek_engine.session_prepare_delete_routine(
+                json.dumps(
+                    {
+                        "account_id": account_id,
+                        "routines": self.routines,
+                        "routine_id": routine_id,
+                    }
+                )
+            )
+        )
+        if decision["kind"] == "absent":
             return
-        key = f"delete-routine|{self.account['id']}|{routine_id}|{routine['revision']}"
-        operation_id = self._operation(key)
+        operation_id = self._operation(decision["key"])
         ticket = self._begin()
-        path = (
-            f"/api/routines/{quote(routine_id, safe='')}?revision={int(routine['revision'])}"
-            f"&operation_id={quote(operation_id, safe='')}"
+        path = flexweek_engine.session_delete_routine_path(
+            routine_id, json.dumps(decision["revision"]), operation_id
         )
 
         def ok(_data: dict) -> None:
             if not self._idle(ticket):
                 return
             self.routines.pop(routine_id, None)
-            self._draft_command("forget_attempt", key=key)
-            self._say("Deleted " + routine["name"] + ".")
+            self._draft_command("forget_attempt", key=decision["key"])
+            self._say(decision["say"])
             self.week_changed.emit()
 
         self.client.request("DELETE", path, None, ok, lambda error: self._fail(ticket, error))
@@ -2665,11 +2676,22 @@ class NativeSession(QObject):
         self.client.request("GET", f"/api/week?week_start={week_start}", None, ok, err)
 
     def apply_routine_rows(self, routine_id: str, week_start: str, days: list[int]) -> list[dict] | None:
-        routine = self.routines.get(routine_id)
-        if routine is None or not days:
-            self._say("Choose at least one weekday to copy.")
+        decision = json.loads(
+            flexweek_engine.session_apply_routine_rows(
+                json.dumps(
+                    {
+                        "routines": self.routines,
+                        "routine_id": routine_id,
+                        "week_start": week_start,
+                        "days": days,
+                    }
+                )
+            )
+        )
+        if decision["kind"] == "say":
+            self._say(decision["say"])
             return None
-        return routine_rows(routine_on_week(week_start, routine), week_start, days)
+        return decision["rows"]
 
     def apply_routine(
         self,
@@ -2679,23 +2701,33 @@ class NativeSession(QObject):
         rows: list[dict] | None = None,
         existing: list[dict] | None = None,
     ) -> bool:
-        routine = self.routines.get(routine_id)
-        if self.account is None or routine is None:
-            return False
-        proposals = rows if rows is not None else self.apply_routine_rows(routine_id, week_start, days)
-        if not proposals:
-            self._say("There's nothing available to add.")
-            return False
-        key = (
-            f"routine|{self.account['id']}|{routine_id}|{routine['revision']}|"
-            f"{week_start}|{','.join(str(day) for day in days)}"
+        account_id = None if self.account is None else self.account["id"]
+        decision = json.loads(
+            flexweek_engine.session_prepare_apply_routine(
+                json.dumps(
+                    {
+                        "account_id": account_id,
+                        "routines": self.routines,
+                        "routine_id": routine_id,
+                        "week_start": week_start,
+                        "days": days,
+                        "rows": rows,
+                    }
+                )
+            )
         )
+        if decision["kind"] == "absent":
+            return False
+        if decision["kind"] == "say":
+            for words in decision["say"]:
+                self._say(words)
+            return False
         return self.confirm_preview(
-            proposals,
-            label="the " + routine["name"] + " routine",
-            snapshot_label=restore_point_label("Before applying " + routine["name"] + " to " + week_start),
-            operation_id=self._operation(key),
-            attempt_key=key,
+            decision["proposals"],
+            label=decision["label"],
+            snapshot_label=decision["snapshot_label"],
+            operation_id=self._operation(decision["key"]),
+            attempt_key=decision["key"],
             existing=existing,
             destination=week_start,
         )
