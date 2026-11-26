@@ -1251,3 +1251,153 @@ fn allow_splitting_refuses_minute_counts_a_homework_cannot_hold() {
     assert!(split(json!(60), json!(71401)).is_err());
     assert!(split(json!(1440), json!(71400)).is_ok());
 }
+
+#[test]
+fn accept_late_allows_unplaced_entry_with_empty_start_from_imported_block() {
+    // An imported flexible block without an assignment can carry start: "" (unset). When Running late
+    // leaves it unplaced, the solver copies start: "" into trace.unplaced.
+    let imported = json!({
+        "id": "imp-1",
+        "kind": "flexible",
+        "title": "Imported task",
+        "days": [3],
+        "start": "",
+        "duration_min": 60,
+    });
+    let late_block = json!({
+        "id": "b-late-1",
+        "kind": "locked",
+        "title": "Running late",
+        "days": [3],
+        "start": "23:00",
+        "duration_min": 60,
+    });
+    let trace = json!({
+        "placed": [],
+        "unplaced": [{
+            "id": "imp-1",
+            "kind": "flexible",
+            "title": "Imported task",
+            "days": [3],
+            "start": "",
+            "duration_min": 60,
+        }],
+        "moves": [],
+    });
+    let accepted = accept_late(LateAcceptInput {
+        preview: Some(&json!({
+            "week_start": WEEK,
+            "stale": false,
+            "operation_id": "op-imp",
+            "block": late_block,
+            "trace": trace,
+        })),
+        week_start: WEEK,
+        blocks: std::slice::from_ref(&imported),
+        assignments: &json!({}),
+    })
+    .unwrap();
+    assert!(matches!(accepted, LateAcceptDecision::Accept { .. }));
+}
+
+#[test]
+fn accept_late_enforces_duration_limit_five_char_clock_day_span_and_raw_days() {
+    let essay = homework_session("essay-1", "essay", "Essay", vec![3], Some("18:45"), 60);
+    let good_trace = json!({"placed": [], "unplaced": [], "moves": []});
+    let accept = |block: Value, trace: Value| {
+        accept_late(LateAcceptInput {
+            preview: Some(&json!({
+                "week_start": WEEK,
+                "stale": false,
+                "operation_id": "op",
+                "block": block,
+                "trace": trace,
+            })),
+            week_start: WEEK,
+            blocks: std::slice::from_ref(&essay),
+            assignments: &json!({}),
+        })
+    };
+    let good_late = json!({
+        "id": "b-late-1",
+        "kind": "locked",
+        "title": "Running late",
+        "days": [3],
+        "start": "19:00",
+        "duration_min": 30,
+    });
+
+    // Trace durations past the 7140-minute save limit (including i64::MAX) are refused on both lists.
+    for key in ["placed", "unplaced"] {
+        for too_long in [7141_i64, i64::MAX] {
+            let trace = json!({
+                key: [{"id": "essay-1", "days": [3], "start": "19:15", "duration_min": too_long}],
+                "moves": [],
+            });
+            assert!(
+                accept(good_late.clone(), trace).is_err(),
+                "{key} duration_min={too_long} should fail"
+            );
+        }
+        let max_ok = json!({
+            key: [{"id": "essay-1", "days": [3], "start": "19:15", "duration_min": 7140}],
+            "moves": [],
+        });
+        assert!(
+            accept(good_late.clone(), max_ok).is_ok(),
+            "{key} duration_min=7140 should pass"
+        );
+    }
+
+    // Late block: 4-char clock ("7:00"), day-span overflow (23:45 + 30m), and string day ("3") are refused.
+    assert!(
+        accept(
+            json!({"id": "b-late-1", "kind": "locked", "title": "Running late", "days": [3], "start": "7:00", "duration_min": 30}),
+            good_trace.clone()
+        )
+        .is_err()
+    );
+    assert!(
+        accept(
+            json!({"id": "b-late-1", "kind": "locked", "title": "Running late", "days": [3], "start": "23:45", "duration_min": 30}),
+            good_trace.clone()
+        )
+        .is_err()
+    );
+    assert!(
+        accept(
+            json!({"id": "b-late-1", "kind": "locked", "title": "Running late", "days": [3], "start": "23:30", "duration_min": 30}),
+            good_trace.clone()
+        )
+        .is_ok()
+    );
+    assert!(
+        accept(
+            json!({"id": "b-late-1", "kind": "locked", "title": "Running late", "days": ["3"], "start": "19:00", "duration_min": 30}),
+            good_trace
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn recover_request_returns_save_only_for_a_removed_day() {
+    let school = json!({
+        "id": "school",
+        "kind": "locked",
+        "title": "School",
+        "days": [0, 1, 2],
+        "start": "08:00",
+        "duration_min": 360,
+        "removed_days": [1],
+    });
+    let prep = recover_request(RecoverInput {
+        week_start: WEEK,
+        blocks: &[school],
+        trace: None,
+        block_id: "school",
+        day: 1,
+    })
+    .unwrap();
+    assert_eq!(prep, RecoverPreparation::SaveOnly);
+}

@@ -19,7 +19,7 @@ use flexweek_engine::desk::reuse::{
 use flexweek_engine::desk::weekmodel::{due_label_text, length_label};
 use flexweek_engine::plan::unplanned_minutes;
 use flexweek_engine::stored::truthy;
-use flexweek_engine::time::{hhmm_to_minutes, week_start_on};
+use flexweek_engine::time::{hhmm_to_minutes, span_fits_day, week_start_on};
 use flexweek_service::blocks::check_block;
 use serde_json::{Map, Value, json};
 
@@ -31,6 +31,7 @@ pub const LATE_CAPACITY_REFUSAL: &str =
     "This week already has 100 blocks. Remove one before recording a late start.";
 pub const LATE_TOUCH_LABEL: &str = "running late";
 pub const SPREAD_ALL_PLANNED: &str = "There's no time left to plan for this homework.";
+const MAX_BLOCK_DURATION_MIN: i64 = 7140;
 
 /// Where a recovery or running-late solve gets its `previous_placed` blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -656,7 +657,8 @@ pub fn accept_late(input: LateAcceptInput<'_>) -> Result<LateAcceptDecision, Str
         .ok_or_else(|| "late preview is missing operation_id".to_string())?
         .to_string();
     // Validate only: the accepted edit carries the preview block as held, not a rewritten copy.
-    check_late_block(&check_block(block).map_err(|refused| refused.0)?)?;
+    let checked = check_block(block).map_err(|refused| refused.0)?;
+    check_late_block(block, &checked)?;
     check_trace_lists(trace)?;
     let mut with_late = Vec::with_capacity(input.blocks.len() + 1);
     with_late.extend(input.blocks.iter().cloned());
@@ -868,24 +870,37 @@ pub fn spread_selection(input: SpreadSelectionInput<'_>) -> Result<SplitSelectio
     })
 }
 
-/// A Running late block is a locked block on real days (0 to 6) with a real HH:MM start.
-fn check_late_block(block: &Value) -> Result<(), String> {
-    if block.get("kind").and_then(Value::as_str) != Some("locked") {
+/// A Running late block is a locked block on whole-number days (0 to 6) with a five-character
+/// HH:MM start whose span fits inside 00:00..=24:00, matching the save validator.
+fn check_late_block(raw: &Value, checked: &Value) -> Result<(), String> {
+    if checked.get("kind").and_then(Value::as_str) != Some("locked") {
         return Err("late block must be a locked block".to_string());
     }
-    let days = int_list(block.get("days"), "days")?;
+    let days = int_list(raw.get("days"), "days")?;
     if days.is_empty() || days.iter().any(|day| !(0..=6).contains(day)) {
         return Err("late block days must be a list of days 0 to 6".to_string());
     }
-    let Some(start) = block.get("start").and_then(Value::as_str) else {
+    let Some(start) = raw.get("start").and_then(Value::as_str) else {
         return Err("late block start must be an HH:MM time".to_string());
     };
-    hhmm_to_minutes(start).map_err(|err| format!("late block start: {}", err.message))?;
+    if start.len() != 5 || start.as_bytes()[2] != b':' {
+        return Err("late block start must be five-character HH:MM".to_string());
+    }
+    let start_min =
+        hhmm_to_minutes(start).map_err(|err| format!("late block start: {}", err.message))?;
+    let duration_min = checked
+        .get("duration_min")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| "late block duration_min must be a whole number".to_string())?;
+    if !span_fits_day(start_min, duration_min) {
+        return Err("late block must fit between 00:00 and 24:00".to_string());
+    }
     Ok(())
 }
 
 /// A held trace's `placed` and `unplaced` must be lists of objects with a text `id`; a placement's
-/// `start` is null or a real HH:MM time, its `days` are 0 to 6 and its `duration_min` is positive.
+/// `start` is null, empty (unset), or a real HH:MM time, its `days` are 0 to 6 and its
+/// `duration_min` is within the save limit (1..=7140).
 fn check_trace_lists(trace: &Value) -> Result<(), String> {
     for key in ["placed", "unplaced"] {
         let items = match trace.get(key) {
@@ -902,6 +917,7 @@ fn check_trace_lists(trace: &Value) -> Result<(), String> {
             }
             match fields.get("start") {
                 None | Some(Value::Null) => {}
+                Some(Value::String(start)) if start.is_empty() => {}
                 Some(Value::String(start)) => {
                     hhmm_to_minutes(start)
                         .map_err(|err| format!("trace.{key} start: {}", err.message))?;
@@ -913,8 +929,10 @@ fn check_trace_lists(trace: &Value) -> Result<(), String> {
                     None => {
                         return Err(format!("trace.{key} duration_min must be a whole number"));
                     }
-                    Some(minutes) if minutes < 1 => {
-                        return Err(format!("trace.{key} duration_min must be positive"));
+                    Some(minutes) if !(1..=MAX_BLOCK_DURATION_MIN).contains(&minutes) => {
+                        return Err(format!(
+                            "trace.{key} duration_min must be 1..={MAX_BLOCK_DURATION_MIN}"
+                        ));
                     }
                     Some(_) => {}
                 }
