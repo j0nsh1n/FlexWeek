@@ -867,5 +867,8 @@ fn a_removed_day_cannot_be_copied() {
     all_gone["removed_days"] = json!([4]);
     let blocks = json!([all_gone]);
     let copied = clipboard_block(&blocks, Some("weekly-guitar"), None, "auto", "g1").unwrap();
-    assert!(copied.clipboard.is_none(), "a block with every day removed is not there to copy");
+    assert!(
+        copied.clipboard.is_none(),
+        "a block with every day removed is not there to copy"
+    );
 }

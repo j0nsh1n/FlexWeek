@@ -831,7 +831,10 @@ fn test_copying_a_series_leaves_out_its_removed_days_and_a_fully_removed_block()
         .iter()
         .map(|row| (&row["block"]["title"], &row["day"]))
         .collect();
-    assert_eq!(landed, [(&json!("School"), &json!(0)), (&json!("School"), &json!(2))]);
+    assert_eq!(
+        landed,
+        [(&json!("School"), &json!(0)), (&json!("School"), &json!(2))]
+    );
 }
 
 #[test]
