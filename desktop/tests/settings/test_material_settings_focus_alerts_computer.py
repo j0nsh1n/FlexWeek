@@ -856,7 +856,6 @@ def test_signing_out_of_this_computer_opens_the_week_without_the_old_drafts(
     panel.setSpotify("not-a-link")
     saved_clock = (window.session.preferences or {}).get("clock_24h") is True
     panel._sync_problem = "Sync failed: the old phone"
-    panel._remove_ask = {"id": "old", "name": "Old phone"}
     panel._unsaved = {"clock_24h": not saved_clock}
     panel.setReminderLead(999)
     _pump(qapp)
@@ -867,10 +866,13 @@ def test_signing_out_of_this_computer_opens_the_week_without_the_old_drafts(
     assert before["spotifyError"] == "Use a link that starts with https://open.spotify.com."
     assert before["notice"] == "Couldn't save that change. Try again."
     assert before["syncProblem"] == "Sync failed: the old phone"
-    assert before["askRemove"] is True
     assert before["clock24"] is not saved_clock
 
     _click(qapp, window, _named(root, "signOut")[0])
+    # Left for last: the remove-phone prompt covers This computer and would take the click above.
+    panel._remove_ask = {"id": "old", "name": "Old phone"}
+    panel._publish()
+    assert panel.property("state")["askRemove"] is True
     _bridge(window).sheets.answer("yes")
     wait_until(qapp, lambda: window.session.account is None and not window.session.busy)
     _pump(qapp)
