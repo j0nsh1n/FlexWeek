@@ -5,11 +5,17 @@
 //! values come from those rules and the desktop tests they keep green.
 
 use flexweek_app::session::copies::{
-    CopyDay, DateProblemInput, PasteReady, PasteSelection, PreviewGroups, Relocation,
-    RelocationInput, clipboard_block, copy_day_items, copy_empty_words, date_problem,
-    fixed_copy_rows, paste_destination, paste_ready, preview_groups, relocate,
+    CommitGroupsBatch, CommitGroupsBatchInput, ConfirmPreviewInput, ConfirmPreviewPlan, CopyDay,
+    CopyDayPlan, CopySelectedPlan, DateProblemInput, DateSpan, DuplicatePrep, MoveToDateBatch,
+    MoveToDateBatchInput, MoveToDateInput, MoveToDatePlan, PasteProposalsPrep, PasteReady,
+    PasteSelection, PreviewGroups, PreviousWeekCopy, Relocation, RelocationInput, block_on_week,
+    build_move_to_date_batch, clipboard_block, commit_groups_batch, commit_groups_order,
+    confirm_preview_plan, copy_day_items, copy_day_plan, copy_empty_words, copy_selected_plan,
+    date_problem, duplicate_selected_prepare, fixed_copy_rows, move_to_date_needed,
+    paste_destination, paste_proposals_build, paste_proposals_prepare, paste_ready,
+    prepare_move_to_date, preview_groups, previous_week_for_copy, relocate, resolve_date_span,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-09-21";
 const TODAY: &str = "2026-09-23";
@@ -871,4 +877,452 @@ fn a_removed_day_cannot_be_copied() {
         copied.clipboard.is_none(),
         "a block with every day removed is not there to copy"
     );
+}
+
+#[test]
+fn previous_week_for_copy_subtracts_seven_days_and_handles_invalid_or_signed_out() {
+    assert_eq!(
+        previous_week_for_copy(false, WEEK, 0),
+        PreviousWeekCopy::Absent
+    );
+    assert_eq!(
+        previous_week_for_copy(true, WEEK, 0),
+        PreviousWeekCopy::Ready {
+            week_start: "2026-09-14".to_string(),
+            path: "/api/week?week_start=2026-09-14".to_string(),
+        }
+    );
+    // Wednesday-starting week maps seven days earlier to the previous Wednesday.
+    assert_eq!(
+        previous_week_for_copy(true, "2026-09-23", 2),
+        PreviousWeekCopy::Ready {
+            week_start: "2026-09-16".to_string(),
+            path: "/api/week?week_start=2026-09-16".to_string(),
+        }
+    );
+    assert_eq!(
+        previous_week_for_copy(true, "not-a-date", 0),
+        PreviousWeekCopy::Say("There's nothing to copy from last week yet.")
+    );
+}
+
+#[test]
+fn block_on_week_and_resolve_date_span_handle_present_missing_and_invalid() {
+    let state = json!({"blocks": [locked("soccer", vec![0], "16:00")], "revision": 2});
+    assert_eq!(
+        block_on_week(Some(&state), "soccer").unwrap().unwrap()["id"],
+        json!("soccer")
+    );
+    assert_eq!(block_on_week(Some(&state), "missing").unwrap(), None);
+    assert_eq!(block_on_week(None, "soccer").unwrap(), None);
+
+    assert_eq!(
+        resolve_date_span("2026-09-24", "2026-09-29", 0),
+        Some(DateSpan {
+            from_week: WEEK.to_string(),
+            to_week: "2026-09-28".to_string(),
+            from_day: 3,
+            to_day: 1,
+        })
+    );
+    assert_eq!(resolve_date_span("bad", "2026-09-29", 0), None);
+}
+
+#[test]
+fn prepare_move_to_date_guards_state_short_circuits_same_date_and_builds_key() {
+    let base =
+        |account_id: Option<i64>, from_iso: &'static str, to_iso: &'static str| MoveToDateInput {
+            account_id,
+            conflict: false,
+            busy: false,
+            pending_save: false,
+            block_id: "soccer",
+            from_iso,
+            to_iso,
+            first_weekday: 0,
+        };
+    assert_eq!(
+        prepare_move_to_date(&base(None, "2026-09-21", "2026-09-23")),
+        MoveToDatePlan::Stop { result: false }
+    );
+    let mut busy = base(Some(7), "2026-09-21", "2026-09-23");
+    busy.busy = true;
+    assert_eq!(
+        prepare_move_to_date(&busy),
+        MoveToDatePlan::Stop { result: false }
+    );
+    assert_eq!(
+        prepare_move_to_date(&base(Some(7), "2026-09-21", "2026-09-21")),
+        MoveToDatePlan::Stop { result: true }
+    );
+    assert_eq!(
+        prepare_move_to_date(&base(Some(7), "2026-09-21", "2026-09-29")),
+        MoveToDatePlan::Ready {
+            from_week: WEEK.to_string(),
+            to_week: "2026-09-28".to_string(),
+            key: "move-to-date|7|soccer|2026-09-21|2026-09-29".to_string(),
+        }
+    );
+    assert_eq!(
+        move_to_date_needed(WEEK, WEEK, false, false),
+        vec![WEEK.to_string()]
+    );
+    assert_eq!(
+        move_to_date_needed(WEEK, "2026-09-28", true, false),
+        vec!["2026-09-28".to_string()]
+    );
+    assert!(move_to_date_needed(WEEK, "2026-09-28", true, true).is_empty());
+}
+
+#[test]
+fn build_move_to_date_batch_builds_writes_step_weeks_and_stay_flag() {
+    let source = json!({"blocks": [locked("soccer", vec![3], "16:00")], "revision": 4});
+    let dest = json!({"blocks": [locked("piano", vec![2], "18:00")], "revision": 7});
+    let mut fetched = Map::new();
+    fetched.insert("2026-09-28".to_string(), dest.clone());
+    let input = MoveToDateBatchInput {
+        block_id: "soccer",
+        from_iso: "2026-09-24",
+        to_iso: "2026-09-29",
+        from_week: WEEK,
+        to_week: "2026-09-28",
+        source_local: Some(&source),
+        dest_local: None,
+        fetched: &fetched,
+        assignments: &json!({}),
+        today_iso: TODAY,
+        operation_id: "op-move",
+        attempt_key: "move-to-date|1|soccer|2026-09-24|2026-09-29",
+    };
+    let batch = build_move_to_date_batch(&input, "made-1").unwrap();
+    match batch {
+        MoveToDateBatch::Submit {
+            pending_step,
+            history_label,
+            move_attempt,
+            pending_save,
+        } => {
+            assert_eq!(history_label, "moving Title to another date");
+            assert_eq!(move_attempt, "move-to-date|1|soccer|2026-09-24|2026-09-29");
+            assert_eq!(pending_step["label"], json!("moving Title to another date"));
+            assert_eq!(pending_step["stale"], json!(false));
+            assert_eq!(pending_step["weeks"].as_array().map(Vec::len), Some(2));
+            assert_eq!(pending_save["operation_id"], json!("op-move"));
+            assert_eq!(pending_save["stay"], json!(true));
+            assert_eq!(pending_save["weeks"].as_array().map(Vec::len), Some(2));
+            assert_eq!(pending_save["weeks"][0]["week_start"], json!(WEEK));
+            assert_eq!(pending_save["weeks"][0]["revision"], json!(4));
+            assert_eq!(pending_save["weeks"][1]["week_start"], json!("2026-09-28"));
+            assert_eq!(pending_save["weeks"][1]["revision"], json!(7));
+        }
+        MoveToDateBatch::Say(words) => panic!("expected batch submit, got: {words}"),
+    }
+}
+
+#[test]
+fn copy_selected_and_copy_day_enforce_guards_and_words() {
+    let blocks = json!([locked("piano", vec![2], "18:00")]);
+    assert_eq!(
+        copy_selected_plan(true, &blocks, None, None, "auto", "g1").unwrap(),
+        CopySelectedPlan::Say("Select a block before copying it.".to_string())
+    );
+    assert_eq!(
+        copy_selected_plan(false, &blocks, Some("piano"), Some(2), "auto", "g1").unwrap(),
+        CopySelectedPlan::Absent
+    );
+    match copy_selected_plan(true, &blocks, Some("piano"), Some(2), "auto", "g1").unwrap() {
+        CopySelectedPlan::Copied { clipboard, say } => {
+            assert_eq!(clipboard["label"], json!("Title"));
+            assert_eq!(say, "Title copied. Choose a destination and paste.");
+        }
+        other => panic!("expected copied, got {other:?}"),
+    }
+
+    let outside = PasteSelection {
+        today_iso: "2026-10-05",
+        ..no_selection()
+    };
+    let mut ids = vec!["a".to_string()].into_iter();
+    assert_eq!(
+        copy_day_plan(true, &blocks, &json!({}), None, &outside, WEEK, &mut ids).unwrap(),
+        CopyDayPlan::Say(
+            "Select a block or open Day view before copying a day from this week.".to_string()
+        )
+    );
+    let mut ids = vec!["a".to_string()].into_iter();
+    assert_eq!(
+        copy_day_plan(
+            false,
+            &blocks,
+            &json!({}),
+            Some(2),
+            &no_selection(),
+            WEEK,
+            &mut ids
+        )
+        .unwrap(),
+        CopyDayPlan::Absent
+    );
+}
+
+#[test]
+fn paste_proposals_handles_signed_out_empty_clipboard_and_available_minutes() {
+    let blocks = json!([locked("piano", vec![2], "18:00")]);
+    let trace = json!({});
+    assert_eq!(
+        paste_proposals_prepare(
+            false,
+            None,
+            Some(0),
+            Some("16:00"),
+            &blocks,
+            &trace,
+            &no_selection(),
+            WEEK,
+            false,
+        )
+        .unwrap(),
+        PasteProposalsPrep::Say("Copy a block or day before pasting.".to_string())
+    );
+    let copied = clipboard_block(&blocks, Some("piano"), Some(2), "auto", "g1")
+        .unwrap()
+        .clipboard
+        .unwrap();
+    assert_eq!(
+        paste_proposals_prepare(
+            false,
+            Some(&copied),
+            Some(0),
+            Some("16:00"),
+            &blocks,
+            &trace,
+            &no_selection(),
+            WEEK,
+            false,
+        )
+        .unwrap(),
+        PasteProposalsPrep::Absent
+    );
+    assert_eq!(
+        paste_proposals_prepare(
+            true,
+            Some(&copied),
+            Some(1),
+            None,
+            &blocks,
+            &trace,
+            &no_selection(),
+            WEEK,
+            false,
+        )
+        .unwrap(),
+        PasteProposalsPrep::Ready {
+            day: 1,
+            start: None,
+            needs_minutes: false,
+        }
+    );
+
+    let hw_blocks = json!([{
+        "id": "s1", "title": "Essay", "kind": "flexible", "duration_min": 60,
+        "days": [0], "assignment_id": "essay", "category": "assignments"
+    }]);
+    let hw_clip = clipboard_block(&hw_blocks, Some("s1"), Some(0), "auto", "g1")
+        .unwrap()
+        .clipboard
+        .unwrap();
+    let assignments = json!({
+        "essay": {"id": "essay", "title": "Essay", "due": "2026-09-27T23:59", "estimate_min": 90}
+    });
+    let minutes = json!({"essay": {"uncovered_min": 30}});
+    let rows = paste_proposals_build(&hw_clip, WEEK, 3, None, &assignments, &minutes).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["block"]["duration_min"], json!(30));
+    assert_eq!(rows[0]["block"]["assignment_id"], json!("essay"));
+}
+
+#[test]
+fn duplicate_never_says_it_copied() {
+    let blocks = json!([locked("piano", vec![2], "18:00")]);
+    assert_eq!(
+        duplicate_selected_prepare(true, &blocks, None, None, "auto", "g1", false).unwrap(),
+        DuplicatePrep::Say("Select a block before duplicating it.".to_string())
+    );
+    match duplicate_selected_prepare(true, &blocks, Some("piano"), Some(2), "auto", "g1", false)
+        .unwrap()
+    {
+        DuplicatePrep::Ready {
+            clipboard,
+            target_day,
+            announce,
+            needs_minutes,
+        } => {
+            assert_eq!(clipboard["label"], json!("Title"));
+            assert_eq!(target_day, 2);
+            assert_eq!(
+                announce, None,
+                "Duplicate leaves nothing copied, so it says nothing"
+            );
+            assert!(!needs_minutes);
+        }
+        other => panic!("expected duplicate ready, got {other:?}"),
+    }
+    // Missing occurrence day defaults to day 0, matching `day if day is not None else 0`.
+    match duplicate_selected_prepare(true, &blocks, Some("piano"), None, "auto", "g1", true)
+        .unwrap()
+    {
+        DuplicatePrep::Ready {
+            target_day,
+            announce,
+            needs_minutes,
+            ..
+        } => {
+            assert_eq!(target_day, 0);
+            assert_eq!(announce, None);
+            assert!(needs_minutes);
+        }
+        other => panic!("expected duplicate ready, got {other:?}"),
+    }
+}
+
+#[test]
+fn confirm_preview_refuses_without_reserving_attempt_and_checks_single_week_capacity() {
+    let rows = json!([preview_row(2, false, "")]);
+    let attempts = Map::new();
+    let input = ConfirmPreviewInput {
+        signed_in: true,
+        conflict: false,
+        rows: &rows,
+        week_start: WEEK,
+        blocks: &json!([]),
+        today_iso: TODAY,
+        operation_id: None,
+        attempt_key: Some("paste-1"),
+        attempts: &attempts,
+        fresh_operation_id: "fresh-1",
+    };
+    assert_eq!(
+        confirm_preview_plan(&input).unwrap(),
+        ConfirmPreviewPlan::Say {
+            say: "Select at least one item before saving.".to_string(),
+            record_attempt: false,
+            op_id: "fresh-1".to_string(),
+        }
+    );
+
+    // 100 blocks already present -> single-week capacity refusal.
+    let mut full = Vec::new();
+    for index in 0..100 {
+        full.push(locked(&format!("pad-{index}"), vec![6], "06:00"));
+    }
+    let full_blocks = Value::Array(full);
+    let checked = json!([preview_row(2, true, "")]);
+    let input = ConfirmPreviewInput {
+        signed_in: true,
+        conflict: false,
+        rows: &checked,
+        week_start: WEEK,
+        blocks: &full_blocks,
+        today_iso: TODAY,
+        operation_id: None,
+        attempt_key: Some("paste-1"),
+        attempts: &attempts,
+        fresh_operation_id: "fresh-2",
+    };
+    match confirm_preview_plan(&input).unwrap() {
+        ConfirmPreviewPlan::Say {
+            say,
+            record_attempt,
+            ..
+        } => {
+            assert!(say.contains("100 blocks"), "{say}");
+            assert!(record_attempt);
+        }
+        other => panic!("expected capacity refusal, got {other:?}"),
+    }
+}
+
+#[test]
+fn commit_groups_preserves_reversed_get_order_and_builds_batch() {
+    let mut by_week = Map::new();
+    by_week.insert(WEEK.to_string(), json!([locked("a", vec![0], "10:00")]));
+    by_week.insert(
+        "2026-09-28".to_string(),
+        json!([locked("b", vec![1], "11:00")]),
+    );
+    by_week.insert(
+        "2026-10-05".to_string(),
+        json!([locked("c", vec![2], "12:00")]),
+    );
+    // Python's `needed.pop()` fetches remote weeks from last to first.
+    assert_eq!(
+        commit_groups_order(&by_week, WEEK),
+        vec!["2026-10-05".to_string(), "2026-09-28".to_string()]
+    );
+
+    let mut fetched = Map::new();
+    fetched.insert(
+        "2026-09-28".to_string(),
+        json!({"blocks": [], "revision": 3}),
+    );
+    fetched.insert(
+        "2026-10-05".to_string(),
+        json!({"blocks": [], "revision": 5}),
+    );
+    let input = CommitGroupsBatchInput {
+        by_week: &by_week,
+        week_start: WEEK,
+        current_blocks: &[locked("existing", vec![4], "09:00")],
+        current_revision: &json!(2),
+        fetched: &fetched,
+        today_iso: TODAY,
+        label: "the routine",
+        snapshot_label: Some("Before applying"),
+        operation_id: "op-9",
+        said: Some("Applied."),
+    };
+    match commit_groups_batch(&input).unwrap() {
+        CommitGroupsBatch::Submit {
+            pending_save,
+            blocks,
+            history_label,
+            capture_step,
+            save_status,
+        } => {
+            assert_eq!(pending_save["operation_id"], json!("op-9"));
+            assert_eq!(pending_save["snapshot_label"], json!("Before applying"));
+            assert_eq!(pending_save["weeks"].as_array().map(Vec::len), Some(3));
+            assert_eq!(blocks.as_ref().map(Vec::len), Some(2));
+            assert_eq!(history_label.as_deref(), Some("the routine"));
+            assert!(capture_step);
+            assert_eq!(save_status.as_deref(), Some("Applied."));
+        }
+        CommitGroupsBatch::Say(words) => panic!("expected submit, got: {words}"),
+    }
+
+    // Remote week past 100 blocks is refused with capacity words.
+    let mut full = Vec::new();
+    for index in 0..100 {
+        full.push(locked(&format!("pad-{index}"), vec![6], "06:00"));
+    }
+    fetched.insert(
+        "2026-09-28".to_string(),
+        json!({"blocks": full, "revision": 3}),
+    );
+    let input = CommitGroupsBatchInput {
+        by_week: &by_week,
+        week_start: WEEK,
+        current_blocks: &[],
+        current_revision: &json!(2),
+        fetched: &fetched,
+        today_iso: TODAY,
+        label: "the routine",
+        snapshot_label: None,
+        operation_id: "op-10",
+        said: None,
+    };
+    match commit_groups_batch(&input).unwrap() {
+        CommitGroupsBatch::Say(words) => assert!(words.contains("100 blocks"), "{words}"),
+        CommitGroupsBatch::Submit { .. } => panic!("full remote week must be refused"),
+    }
 }
