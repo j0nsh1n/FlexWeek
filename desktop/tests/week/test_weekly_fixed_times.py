@@ -14,6 +14,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from desktop.native.calendar import date_for_day, day_short
+from desktop.native.weekmodel import build_week
 from desktop.tests.material_support import pump
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     open_light,
@@ -25,6 +26,8 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
 from desktop.tests.waiting import wait_until
 
 FRIDAY = 4
+MONDAY = 0
+WEEKDAYS = [0, 1, 2, 3, 4]
 SAVED = "Changed Guitar from this week on. Undo also takes back anything changed after it."
 
 
@@ -48,6 +51,12 @@ def _guitar(shell) -> list[dict]:
 
 def _starts(shell) -> list[tuple[str, list[int]]]:
     return [(b["start"], sorted(b["days"])) for b in _guitar(shell)]
+
+
+def _shown(shell, block_id: str) -> list[int]:
+    """Days the open week draws for this block. A day removed for this week only is not among them."""
+    model = build_week(shell.session.week_start, shell.session.blocks, shell.session.assignments)
+    return sorted(item.day for item in model.occurrences if item.block_id == block_id)
 
 
 def _settled(qapp, shell) -> None:
@@ -498,3 +507,52 @@ def test_the_201st_repeat_is_refused_with_the_stores_sentence_and_the_sheet_stay
     sheets.save()
     _settled(qapp, week)
     assert _starts(week) == [("17:00", [FRIDAY])]
+
+
+def test_ticking_a_removed_day_back_on_and_saving_this_week_and_later_shows_it_here_too(
+    qapp, week, sheets
+) -> None:
+    """Delete Mon–Fri of a weekly fixed time for this week, tick Monday back on, and save "This week
+    and later". Monday is drawn this week and next week; Tue–Fri stay off this week only. One Undo
+    puts this week back to all five removed.
+
+    Setup's School block does not ask this on edit: it saves this week only, which already restores
+    a ticked day. Monday is day 0 of the week of 2 Nov 2026 (the clock is Thursday 5 Nov)."""
+    repeat = _add_weekly(qapp, week, sheets, days=tuple(WEEKDAYS))
+    sheets.askDeleteBlock(repeat["id"], -1)
+    sheets.answer("week")
+    _settled(qapp, week)
+    assert _shown(week, repeat["id"]) == []
+    assert all(sorted(b["removed_days"]) == sorted(b["days"]) == WEEKDAYS for b in _guitar(week))
+
+    _go(qapp, week, 1)
+    assert _shown(week, repeat["id"]) == WEEKDAYS
+    _go(qapp, week, 0)
+
+    _edit(sheets, repeat["id"])
+    assert sheets.form["showRepeat"] is True
+    assert [day["value"] for day in sheets.form["days"] if day["on"]] == []
+    sheets.toggleDay(MONDAY)
+    assert [day["value"] for day in sheets.form["days"] if day["on"]] == [MONDAY]
+    sheets.next()
+    assert sheets.ask["id"] == "block-save"
+    sheets.answer("later")
+    _settled(qapp, week)
+    wait_until(qapp, lambda: sheets.noticeUndo)
+    assert sheets.notice == SAVED
+    assert _shown(week, repeat["id"]) == [MONDAY]
+    kept = _guitar(week)[0]
+    assert sorted(kept["days"]) == WEEKDAYS
+    assert sorted(kept["removed_days"]) == [1, 2, 3, 4]
+    standing = next(row for row in week.session.repeats if row["id"] == repeat["id"])
+    assert sorted(standing["days"]) == WEEKDAYS
+
+    _go(qapp, week, 1)
+    assert _shown(week, repeat["id"]) == WEEKDAYS
+    _go(qapp, week, 0)
+
+    sheets.undoNotice()
+    wait_until(qapp, lambda: _shown(week, repeat["id"]) == [])
+    assert all(sorted(b["removed_days"]) == sorted(b["days"]) == WEEKDAYS for b in _guitar(week))
+    _go(qapp, week, 1)
+    assert _shown(week, repeat["id"]) == WEEKDAYS
