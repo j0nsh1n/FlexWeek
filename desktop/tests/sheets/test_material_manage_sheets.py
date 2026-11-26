@@ -231,6 +231,7 @@ def test_manage_account_sign_out_asks_the_same_question_and_signing_out_leaves_o
     assert str(button.property("kind")) not in ("danger", "danger-outlined")
     assert button.mapToItem(content, 0, 0).y() < delete.mapToItem(content, 0, 0).y()
 
+    _type(shell, "currentPassword", "typed-before-cancel")
     _click(shell, "accountSignOut")
     ask = dict(sheets.property("ask"))
     assert ask["id"] == "sign-out"
@@ -241,11 +242,13 @@ def test_manage_account_sign_out_asks_the_same_question_and_signing_out_leaves_o
     assert out == []
     assert shell.session.account is not None
     assert _asking(sheets) == "" and _kind(sheets) == "account"
+    assert str(_one(shell, "currentPassword").property("text")) == "typed-before-cancel"
 
     _click(shell, "accountSignOut")
     sheets.answer("yes")
     assert out == [1]
     assert dict(sheets.property("ask")) == {}
+    assert _kind(sheets) == "", "Manage account stayed open under the sign-in screen"
 
 
 def test_manage_account_sign_out_is_disabled_while_the_session_is_busy(

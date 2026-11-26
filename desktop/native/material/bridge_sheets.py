@@ -824,6 +824,10 @@ class SheetsBridge(QObject):
             signing_out, self._sign_out_done = self._sign_out_done, None
             self._publish()
             if choice == "yes" and signing_out is not None:
+                if self._kind == "account":
+                    # Asked over Manage account: it closes first, as Delete account does, so it is not
+                    # left open (with typed passwords) under the sign-in screen.
+                    self._close()
                 signing_out()
             return
         if asked == "discard":
