@@ -15,9 +15,7 @@ import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
-from backend.assignments import unplanned_minutes
 from backend.models import parse_due
-from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     blocks_by_weekday,
@@ -98,11 +96,7 @@ from desktop.native.reuse import (
     copied_homework_block,
     done_minutes,
     fair_share,
-    is_planned,
-    late_from_start,
-    late_id,
     left_over_items,
-    merge_preview_rows,
     missed_session_ids,
     move_earlier_homework,
     open_rest_sessions,
@@ -113,8 +107,6 @@ from desktop.native.reuse import (
     routine_rows,
     routine_source_blocks,
     routine_template,
-    running_late_block,
-    running_late_refusal,
     settle_placements,
     solve_request,
     time_still_needed,
@@ -126,7 +118,6 @@ from desktop.native.reuse import (
 from desktop.native.weekmodel import (
     WeekModel,
     build_week,
-    due_label,
     hhmm_text,
     homework_time_sentence,
     length_label,
@@ -177,7 +168,7 @@ def plan_sentence(placed: int, waiting: int, left: object = ()) -> str:
 
 def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str:
     """Spread preview: names the homework and how much is ready before it is due."""
-    return f"{title}: {length_label(minutes)} ready to add before {due_label(due, today)}."
+    return str(flexweek_engine.session_spread_ready_sentence(title, minutes, due, today))
 
 
 HOURS_REFUSED = "Check the days and times in Study hours and Protected time."
@@ -209,9 +200,7 @@ ROUTINE_STATUS = frozenset(
 
 
 def _late_summary(moved: int) -> str:
-    if not moved:
-        return "Nothing needs to move."
-    return f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}"
+    return str(flexweek_engine.session_late_summary(moved))
 
 
 def _draft_field(name: str, *, writable: bool = False) -> property:
@@ -1456,23 +1445,20 @@ class NativeSession(QObject):
         self._plan_after_save |= waiting
 
     def allow_splitting(self, assignment_id: str) -> bool:
-        assignment = self.assignments.get(assignment_id)
-        if assignment is None or assignment.get("completed"):
-            return False
-        updated = deepcopy(assignment)
-        updated["spread"] = "spread"
-        remaining = unplanned_minutes(
-            int(updated.get("estimate_min") or 0),
-            int(updated.get("focus_minutes") or 0),
-            self.done_minutes_for(assignment_id),
-            0,
+        plan = json.loads(
+            flexweek_engine.session_prepare_allow_splitting(
+                json.dumps(self.assignments.get(assignment_id)),
+                self.done_minutes_for(assignment_id),
+                self.week_start,
+                self.today_iso(),
+                self.selected_day,
+            )
         )
-        session_min = max(15, min(60, remaining - remaining % 15))
-        due = str(updated.get("due") or self.week_start)[:10]
-        from_date = min(max(self.today_iso(), self.selected_day or self.week_start), due)
-        self.add_homework(updated, spread=True)
+        if plan is None:
+            return False
+        self.add_homework(plan["assignment"], spread=True)
         self._allow_split_pending = assignment_id
-        self.spread_after_save(assignment_id, session_min, from_date)
+        self.spread_after_save(assignment_id, plan["session_min"], plan["from_date"])
         self.save()
         return True
 
@@ -2955,36 +2941,40 @@ class NativeSession(QObject):
         self.save()
 
     def recover_missed(self, block_id: str, day: int) -> None:
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None or block.get("kind") != "locked" or day not in (block.get("days") or []):
+        prep = json.loads(
+            flexweek_engine.session_recover_request(
+                self.week_start,
+                json.dumps(self.blocks),
+                None if self.trace is None else json.dumps(self.trace),
+                block_id,
+                day,
+            )
+        )
+        if prep["kind"] == "ignore":
             return
-        if day in (block.get("missed_days") or []) or day in (block.get("removed_days") or []):
+        if prep["kind"] == "save_only":
             self.save()
             return
         ticket = self._begin()
-        self._say("Replanning after the miss…")
+        self._say(prep["status"])
 
-        def run(previous: list[dict]) -> None:
-            payload = {
-                "week_start": self.week_start,
-                "blocks": self._dump_blocks(),
-                "recover": {
-                    "missed_block_id": block_id,
-                    "missed_day": day,
-                    "previous_placed": previous,
-                },
-            }
-
+        def send_recover(payload: dict) -> None:
             def ok(trace: dict) -> None:
                 if not self._idle(ticket):
                     return
-                blocks = deepcopy(self.blocks)
-                target = next((item for item in blocks if item["id"] == block_id), None)
-                if target is None:
+                applied = json.loads(
+                    flexweek_engine.session_recover_answer(
+                        self.week_start,
+                        json.dumps(self.blocks),
+                        json.dumps(self.assignments),
+                        block_id,
+                        day,
+                        json.dumps(trace),
+                    )
+                )
+                if applied is None:
                     return
-                target["missed_days"] = sorted(set(target.get("missed_days") or []) | {day})
-                applied = apply_plan(blocks, trace, assignments=self.assignments, week_start=self.week_start)
-                self._touch("the replan", blocks=applied)
+                self._touch(applied["label"], blocks=applied["blocks"])
                 self._draft_command("apply_plan", trace=trace)
                 self.save()
 
@@ -2996,71 +2986,72 @@ class NativeSession(QObject):
                 lambda error: self._fail(ticket, error),
             )
 
-        if self.trace and self.trace.get("placed"):
-            run(self._dump_blocks(self.trace["placed"]))
-            return
-        if any(is_planned(block) for block in self.blocks):
-            run(self._dump_blocks(self.scheduled_blocks()))
+        if prep["kind"] == "ready":
+            send_recover(prep["payload"])
             return
 
         def base_ok(trace: dict) -> None:
             if not self._alive(ticket):
                 return
-            run(self._dump_blocks(trace.get("placed") or []))
+            payload = json.loads(
+                flexweek_engine.session_recover_payload_from_base(
+                    self.week_start,
+                    json.dumps(self.blocks),
+                    block_id,
+                    day,
+                    json.dumps(trace),
+                )
+            )
+            send_recover(payload)
 
         self.client.request(
             "POST",
             "/api/solve",
-            {"week_start": self.week_start, "blocks": self._dump_blocks()},
+            prep["base_payload"],
             base_ok,
             lambda error: self._fail(ticket, error),
         )
 
     def preview_running_late(self, minutes: int, now: datetime | None = None) -> None:
         moment = now or wall_clock.now()
-        refusal = running_late_refusal(
-            week_start=self.week_start,
-            now=moment,
-            dirty=self.dirty,
-            conflict=self.conflict,
-            block_count=len(self.blocks),
+        prep = json.loads(
+            flexweek_engine.session_prepare_late(
+                self.week_start,
+                moment.date().isoformat(),
+                moment.hour,
+                moment.minute,
+                minutes,
+                self.dirty,
+                self.conflict,
+                json.dumps(self.blocks),
+                None if self.trace is None else json.dumps(self.trace),
+            )
         )
-        if refusal:
-            self._say(refusal)
+        if prep["kind"] == "refused":
+            self._say(prep["message"])
             return
-        if minutes not in (15, 30, 60):
-            self._say("Choose 15, 30 or 60 minutes.")
-            return
-        from_start = late_from_start(moment.hour * 60 + moment.minute)
-        day = day_in_week(moment.date().isoformat(), self.week_start)
+        day = prep["day"]
+        from_start = prep["from_start"]
         ticket = self._begin()
-        self._say("Replanning…")
+        self._say(prep["status"])
 
-        def run(previous: list[dict]) -> None:
-            payload = {
-                "week_start": self.week_start,
-                "blocks": self._dump_blocks(self._late_blocks()),
-                "running_late": {
-                    "day": day,
-                    "minutes": minutes,
-                    "from_start": from_start,
-                    "now_floor": [day, hhmm_to_minutes(from_start)],
-                    "previous_placed": previous,
-                },
-            }
-
+        def send_late(payload: dict) -> None:
             def ok(trace: dict) -> None:
                 if not self._idle(ticket):
                     return
                 operation_id = str(uuid4())
-                self.late_preview = {
-                    "trace": trace,
-                    "operation_id": operation_id,
-                    "week_start": self.week_start,
-                    "block": running_late_block(day, from_start, minutes, late_id(operation_id)),
-                    "stale": False,
-                }
-                self._say(_late_summary(len(trace.get("moves") or [])))
+                answered = json.loads(
+                    flexweek_engine.session_late_answer(
+                        self.week_start,
+                        day,
+                        from_start,
+                        minutes,
+                        operation_id,
+                        json.dumps(trace),
+                    )
+                )
+                self.late_preview = answered["preview"]
+                self._say(answered["summary"])
                 self.week_changed.emit()
 
             self.client.request(
@@ -3071,22 +3062,29 @@ class NativeSession(QObject):
                 lambda error: self._fail(ticket, error),
             )
 
-        if self.trace and self.trace.get("placed"):
-            run(self._dump_blocks(self.trace["placed"]))
-            return
-        if any(is_planned(block) for block in self.blocks):
-            run(self._dump_blocks(self.scheduled_blocks()))
+        if prep["kind"] == "ready":
+            send_late(prep["payload"])
             return
 
         def base_ok(trace: dict) -> None:
             if not self._alive(ticket):
                 return
-            run(self._dump_blocks(trace.get("placed") or []))
+            payload = json.loads(
+                flexweek_engine.session_late_payload_from_base(
+                    self.week_start,
+                    json.dumps(self.blocks),
+                    day,
+                    from_start,
+                    minutes,
+                    json.dumps(trace),
+                )
+            )
+            send_late(payload)
 
         self.client.request(
             "POST",
             "/api/solve",
-            {"week_start": self.week_start, "blocks": self._dump_blocks(self._late_blocks())},
+            prep["base_payload"],
             base_ok,
             lambda error: self._fail(ticket, error),
         )
@@ -3094,28 +3092,26 @@ class NativeSession(QObject):
     def _late_blocks(self) -> list[dict]:
         """The week as Running late replans it. Homework still waiting for a time stays out, so a late
         start never places it: Plan places that homework."""
-        return [
-            block
-            for block in self.blocks
-            if not (block.get("kind") == "flexible" and block.get("assignment_id") and not block.get("start"))
-        ]
+        blocks: list[dict] = json.loads(flexweek_engine.session_late_blocks(json.dumps(self.blocks)))
+        return blocks
 
     def accept_running_late(self) -> bool:
-        preview = self.late_preview
-        if preview is None or preview.get("stale") or preview.get("week_start") != self.week_start:
-            return False
-        if len(self.blocks) >= MAX_WEEK_BLOCKS:
-            self._say("This week already has 100 blocks. Remove one before recording a late start.")
-            return False
-        blocks = apply_plan(
-            [*self.blocks, preview["block"]],
-            preview["trace"],
-            assignments=self.assignments,
-            week_start=self.week_start,
+        decision = json.loads(
+            flexweek_engine.session_accept_late(
+                None if self.late_preview is None else json.dumps(self.late_preview),
+                self.week_start,
+                json.dumps(self.blocks),
+                json.dumps(self.assignments),
+            )
         )
-        self._touch("running late", blocks=blocks)
-        self._draft_command("apply_plan", trace=preview["trace"])
-        self.save(operation_id=preview["operation_id"])
+        if decision["kind"] == "ignore":
+            return False
+        if decision["kind"] == "refused":
+            self._say(decision["message"])
+            return False
+        self._touch(decision["label"], blocks=decision["blocks"])
+        self._draft_command("apply_plan", trace=decision["trace"])
+        self.save(operation_id=decision["operation_id"])
         self.late_preview = None
         return True
 
@@ -3136,51 +3132,25 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            sessions = data.get("sessions") or []
-            remaining = int(data.get("remaining_min") or 0)
-            if not sessions:
-                if remaining:
-                    self._say(f"{length_label(remaining)} remains. FlexWeek plans in 15-minute steps.")
-                else:
-                    self._say("There's no time left to plan for this homework.")
+            answered = json.loads(
+                flexweek_engine.session_spread_answer(
+                    assignment_id,
+                    json.dumps(item),
+                    json.dumps(data),
+                    from_date,
+                    session_min,
+                    self.today_iso(),
+                    str(uuid4()),
+                )
+            )
+            if answered["kind"] == "empty":
+                self._say(answered["message"])
                 self.spread_preview = None
                 # Allow splitting made nothing, so a later Spread of this homework is an ordinary one.
                 self._allow_split_pending = None
                 return
-            rows = []
-            total = 0
-            for index, session in enumerate(sessions):
-                duration = int(session["duration_min"])
-                total += duration
-                group_id = f"spread-{uuid4()}-{index:x}"
-                block = copied_homework_block(item, session["days"][0], duration, group_id)
-                rows.append(
-                    {
-                        "week_start": session["week_start"],
-                        "day": session["days"][0],
-                        "fixed": False,
-                        "block": block,
-                        "group_id": group_id,
-                        "checked": True,
-                        "invalid": "",
-                    }
-                )
-            # Time, not a count of sessions, and the deadline as a student says it: this read
-            # "3 sessions · 180 minutes ready to add before 2026-09-27T23:59."
-            summary = spread_ready_sentence(item["title"], total, item["due"], self.today_iso())
-            if remaining:
-                summary += (
-                    f" {length_label(remaining)} is still included in the homework's total time, "
-                    "but it's less than the 15 minutes Plan can add."
-                )
-            self.spread_preview = {
-                "assignment_id": assignment_id,
-                "rows": rows,
-                "summary": summary,
-                "from_date": from_date,
-                "session_min": session_min,
-            }
-            self._say(summary)
+            self.spread_preview = answered["preview"]
+            self._say(answered["summary"])
             self.week_changed.emit()
             if then is not None:
                 then()
@@ -3203,33 +3173,32 @@ class NativeSession(QObject):
         preview = self.spread_preview
         if preview is None or self.account is None:
             return False
-        item = self.assignments.get(preview["assignment_id"])
-        title = item["title"] if item else "homework"
-        key = (
-            f"spread|{self.account['id']}|{preview['assignment_id']}|"
-            f"{preview['from_date']}|{preview['session_min']}"
+        key = flexweek_engine.session_spread_operation_key(
+            int(self.account["id"]),
+            preview["assignment_id"],
+            preview["from_date"],
+            int(preview["session_min"]),
         )
         operation_id = self._operation(key)
-        groups = merge_preview_rows(preview["rows"], operation_id)
-
-        def in_open_week(group: dict) -> bool:
-            # A group is keyed by its stored Monday; the week on screen is the one holding its date.
-            day = date_for_day(group["week_start"], group["block"]["days"][0])
-            return self.shown_week_of(day) == self.week_start
-
-        made = {
-            group["block"]["id"]
-            for group in groups
-            if in_open_week(group) and group["block"].get("assignment_id") == preview["assignment_id"]
-        }
-        plan_ids = made if self._allow_split_pending == preview["assignment_id"] else set()
+        selection = json.loads(
+            flexweek_engine.session_spread_selection(
+                json.dumps(preview),
+                json.dumps(self.assignments),
+                self.week_start,
+                self.first_weekday,
+                operation_id,
+                self._allow_split_pending,
+            )
+        )
+        made = set(selection["made_ids"])
+        plan_ids = set(selection["plan_ids"])
         self._plan_after_save |= plan_ids
         # A Spread by hand of the same homework and length makes the same ids as discarded Allow splitting
         # sessions (one operation per attempt); its sessions are not promised a place.
         self._split_whole = (self._split_whole - made) | plan_ids
         ok = self.confirm_preview(
             preview["rows"],
-            label="spreading " + title,
+            label=selection["label"],
             operation_id=operation_id,
             attempt_key=key,
         )
