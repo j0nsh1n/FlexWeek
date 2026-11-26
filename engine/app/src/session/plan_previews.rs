@@ -30,7 +30,7 @@ pub const LATE_INVALID_MINUTES: &str = "Choose 15, 30 or 60 minutes.";
 pub const LATE_CAPACITY_REFUSAL: &str =
     "This week already has 100 blocks. Remove one before recording a late start.";
 pub const LATE_TOUCH_LABEL: &str = "running late";
-pub const SPREAD_ALL_PLANNED: &str = "All of this homework is already focused or planned.";
+pub const SPREAD_ALL_PLANNED: &str = "There's no time left to plan for this homework.";
 
 /// Where a recovery or running-late solve gets its `previous_placed` blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -247,7 +247,8 @@ pub fn recover_request(input: RecoverInput<'_>) -> Result<RecoverPreparation, St
         return Ok(RecoverPreparation::Ignore);
     }
     let missed = int_list(block.get("missed_days"), "missed_days")?;
-    if missed.contains(&input.day) {
+    let removed = int_list(block.get("removed_days"), "removed_days")?;
+    if missed.contains(&input.day) || removed.contains(&input.day) {
         return Ok(RecoverPreparation::SaveOnly);
     }
     let dumped_blocks = dump_blocks(input.blocks)?;
@@ -726,7 +727,7 @@ pub fn spread_answer(input: SpreadAnswerInput<'_>) -> Result<SpreadPreview, Stri
     if sessions.is_empty() {
         let message = if remaining != 0 {
             format!(
-                "{} remains, but it doesn't fit the 15-minute planning grid.",
+                "{} remains. FlexWeek plans in 15-minute steps.",
                 length_label(remaining)
             )
         } else {
@@ -764,7 +765,7 @@ pub fn spread_answer(input: SpreadAnswerInput<'_>) -> Result<SpreadPreview, Stri
     let mut summary = spread_ready_sentence(title, total, due, input.today_iso)?;
     if remaining != 0 {
         summary.push_str(&format!(
-            " {} can't fit the 15-minute grid and has not been dropped from the homework total.",
+            " {} is still included in the homework's total time, but it's less than the 15 minutes Plan can add.",
             length_label(remaining)
         ));
     }

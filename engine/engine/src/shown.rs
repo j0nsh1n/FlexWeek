@@ -22,7 +22,7 @@ use crate::error::{EngineError, EngineResult};
 use crate::time::{is_calendar_date, monday_of};
 
 /// Day fields read against the week's first day; everything else is the block's content.
-const DAY_FIELDS: [&str; 3] = ["days", "missed_days", "completed_day"];
+const DAY_FIELDS: [&str; 4] = ["days", "missed_days", "removed_days", "completed_day"];
 const MAX_ID: usize = 80;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -135,11 +135,8 @@ pub fn rules_on_shown_week(week_start: &str, rules: &Value) -> EngineResult<Valu
 fn turned(block: &Value, by: i64) -> Value {
     let turn = |day: i64| (day + by).rem_euclid(7);
     let days = day_list(block, "days").into_iter().map(turn).collect();
-    let missed = day_list(block, "missed_days")
-        .into_iter()
-        .map(turn)
-        .collect();
-    with_days(block, days, missed, completed_day(block).map(turn))
+    let marks = DayMarks::read(block, |day| Some(turn(day)));
+    with_days(block, days, marks, completed_day(block).map(turn))
 }
 
 /// How far a week on screen from `week_start` is turned from a Monday week: its day 0's weekday.
@@ -328,15 +325,50 @@ fn sorted(mut days: Vec<i64>) -> Vec<i64> {
     days
 }
 
-/// `block` with its day fields set: `days` always, `missed_days` only when any is left, and
-/// `completed_day` when it has one.
-fn with_days(block: &Value, days: Vec<i64>, missed: Vec<i64>, completed_day: Option<i64>) -> Value {
+#[derive(Default)]
+struct DayMarks {
+    missed: Vec<i64>,
+    removed: Vec<i64>,
+}
+
+impl DayMarks {
+    fn read(block: &Value, map_day: impl Fn(i64) -> Option<i64>) -> Self {
+        let days = |key| {
+            day_list(block, key)
+                .into_iter()
+                .filter_map(&map_day)
+                .collect()
+        };
+        Self {
+            missed: days("missed_days"),
+            removed: days("removed_days"),
+        }
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.missed.extend(other.missed);
+        self.removed.extend(other.removed);
+    }
+}
+
+fn with_days(
+    block: &Value,
+    days: Vec<i64>,
+    mut marks: DayMarks,
+    completed_day: Option<i64>,
+) -> Value {
     let mut fields = block.as_object().cloned().unwrap_or_default();
     fields.insert("days".into(), Value::from(sorted(days)));
-    if missed.is_empty() {
-        fields.shift_remove("missed_days");
-    } else {
-        fields.insert("missed_days".into(), Value::from(sorted(missed)));
+    marks.removed.retain(|day| !marks.missed.contains(day));
+    for (key, days) in [
+        ("missed_days", marks.missed),
+        ("removed_days", marks.removed),
+    ] {
+        if days.is_empty() {
+            fields.shift_remove(key);
+        } else {
+            fields.insert(key.into(), Value::from(sorted(days)));
+        }
     }
     match completed_day {
         Some(day) => {
@@ -362,12 +394,9 @@ fn shown_copy(block: &Value, part: Part, offset: i64) -> Option<Value> {
     if days.is_empty() {
         return None;
     }
-    let missed = day_list(block, "missed_days")
-        .into_iter()
-        .filter_map(|day| to_shown(part, day, offset))
-        .collect();
+    let marks = DayMarks::read(block, |day| to_shown(part, day, offset));
     let done = completed_day(block).and_then(|day| to_shown(part, day, offset));
-    Some(with_days(block, days, missed, done))
+    Some(with_days(block, days, marks, done))
 }
 
 /// The block a piece belongs to. A stored week holds one block per id, so when a change on screen
@@ -448,13 +477,10 @@ fn lay_out(shown_start: &str, offset: i64, first: &[Value], second: &[Value]) ->
             if let Some(group) = same {
                 let held = &group.shown;
                 let days = [day_list(held, "days"), day_list(&copy, "days")].concat();
-                let missed = [
-                    day_list(held, "missed_days"),
-                    day_list(&copy, "missed_days"),
-                ]
-                .concat();
+                let mut marks = DayMarks::read(held, Some);
+                marks.extend(DayMarks::read(&copy, Some));
                 let done = completed_day(held).or(completed_day(&copy));
-                group.shown = with_days(held, days, missed, done);
+                group.shown = with_days(held, days, marks, done);
                 group.members.push((part, index));
                 continue;
             }
@@ -617,12 +643,19 @@ fn landing_done(block: &Value, part: Part, offset: i64) -> Option<i64> {
     (landed == part).then_some(stored)
 }
 
+fn landing_marks(block: &Value, part: Part, offset: i64) -> DayMarks {
+    DayMarks::read(block, |day| {
+        let (landed, stored) = to_stored(day, offset);
+        ((0..7).contains(&day) && landed == part).then_some(stored)
+    })
+}
+
 /// A shown block as stored in `part` on `days`, with its missed and done days that land there.
 fn stored_copy(shown: &Value, id: &str, part: Part, offset: i64, days: Vec<i64>) -> Value {
     let mut copy = with_days(
         shown,
         days,
-        landing(shown, "missed_days", part, offset),
+        landing_marks(shown, part, offset),
         landing_done(shown, part, offset),
     );
     copy["id"] = Value::from(id);
@@ -636,7 +669,7 @@ struct Piece {
     family: String,
     body: Value,
     days: Vec<i64>,
-    missed: Vec<i64>,
+    marks: DayMarks,
     done: Option<i64>,
     owned: Option<String>,
     covers: Vec<String>,
@@ -668,15 +701,14 @@ fn placed_blocks(
         if hidden.is_empty() {
             continue;
         }
-        let hidden_missed = day_list(block, "missed_days")
-            .into_iter()
-            .filter(|day| to_shown(part, *day, offset).is_none())
-            .collect();
+        let hidden_marks = DayMarks::read(block, |day| {
+            to_shown(part, day, offset).is_none().then_some(day)
+        });
         pieces.push(Piece {
             family: family_id(id_of(block)).to_string(),
             body: block.clone(),
             days: hidden,
-            missed: hidden_missed,
+            marks: hidden_marks,
             done: completed_day(block).filter(|day| to_shown(part, *day, offset).is_none()),
             owned: Some(id_of(block).to_string()),
             covers: Vec::new(),
@@ -715,7 +747,7 @@ fn placed_blocks(
             family,
             body: row.clone(),
             days: landed,
-            missed: landing(row, "missed_days", part, offset),
+            marks: landing_marks(row, part, offset),
             done: landing_done(row, part, offset),
             owned: None,
             covers: covered
@@ -792,12 +824,12 @@ fn placed_blocks(
             .body
             .clone();
         let days = group.iter().flat_map(|piece| piece.days.clone()).collect();
-        let missed = group
-            .iter()
-            .flat_map(|piece| piece.missed.clone())
-            .collect();
         let done = group.iter().find_map(|piece| piece.done);
-        let mut block = with_days(&template, days, missed, done);
+        let mut marks = DayMarks::default();
+        for piece in group {
+            marks.extend(piece.marks);
+        }
+        let mut block = with_days(&template, days, marks, done);
         block["id"] = Value::from(name);
         out.push((order, block));
     }

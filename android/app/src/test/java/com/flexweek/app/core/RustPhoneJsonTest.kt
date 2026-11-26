@@ -27,7 +27,7 @@ class RustPhoneJsonTest {
         val raw = JSONObject().put("paired", true).put("state", "unreachable")
             .put("last_sync_ms", milliseconds).toString()
         val sync = JSONObject(RustPhoneJson.sync(raw, zone))
-        assertEquals("Your computer isn't reachable. Showing what synced at 11:30 AM.", sync.getString("line"))
+        assertEquals("Your computer isn't reachable. Showing the week last synced at 11:30 AM.", sync.getString("line"))
     }
 
     private fun agenda(): String {
@@ -124,10 +124,10 @@ class RustPhoneJsonTest {
 
 class PlanRefusalTest {
     @Test fun nothingToPlaceIsAnErrorWithTheEnginesMessageNotAnEmptySheet() {
-        val raw = """{"week_start":"2026-10-05","placed":[],"not_placed":[],"moves":[],"explanations":[],"applied_preview":"","message":"This week is over, so nothing was planned. Plan this week or a later one."}"""
+        val raw = """{"week_start":"2026-10-05","placed":[],"not_placed":[],"moves":[],"explanations":[],"applied_preview":"","message":"That week is over. Open this week or a later one, then plan again."}"""
         val answer = JSONObject(RustPhoneJson.plan(raw))
         assertFalse(answer.getBoolean("ok"))
-        assertEquals("This week is over, so nothing was planned. Plan this week or a later one.", answer.getString("error"))
+        assertEquals("That week is over. Open this week or a later one, then plan again.", answer.getString("error"))
     }
 
     @Test fun nothingToPlaceWithNoMessageStillSaysSo() {
@@ -136,7 +136,7 @@ class PlanRefusalTest {
     }
 
     @Test fun theEnginesRefusalReadsWithoutTheExceptionPrefix() {
-        val error = com.flexweek.app.bindings.FfiException.Failure("preview was not found")
-        assertEquals("preview was not found", RustPhoneJson.ffiText(error))
+        val error = com.flexweek.app.bindings.FfiException.Failure("That plan preview is gone. Plan again.")
+        assertEquals("That plan preview is gone. Plan again.", RustPhoneJson.ffiText(error))
     }
 }

@@ -457,7 +457,7 @@ fn prepare_late_enforces_refusals_and_excludes_waiting_homework() {
         })
         .unwrap(),
         LatePreparation::Refused(
-            "Saving your last change… Running late will work in a moment.".into()
+            "Saving your last change… Try Running late again in a moment.".into()
         )
     );
 
@@ -723,7 +723,7 @@ fn spread_answer_still_words_a_leftover_beyond_one_homework() {
         panic!("expected Empty");
     };
     assert!(
-        message.ends_with(" remains, but it doesn't fit the 15-minute planning grid."),
+        message.ends_with(" remains. FlexWeek plans in 15-minute steps."),
         "{message}"
     );
 }
@@ -745,7 +745,7 @@ fn spread_answer_keeps_assignment_identity_and_reports_leftovers() {
         })
         .unwrap(),
         SpreadPreview::Empty {
-            message: "All of this homework is already focused or planned.".into()
+            message: "There's no time left to plan for this homework.".into()
         }
     );
 
@@ -762,7 +762,7 @@ fn spread_answer_keeps_assignment_identity_and_reports_leftovers() {
         })
         .unwrap(),
         SpreadPreview::Empty {
-            message: "10 min remains, but it doesn't fit the 15-minute planning grid.".into()
+            message: "10 min remains. FlexWeek plans in 15-minute steps.".into()
         }
     );
 
@@ -826,7 +826,7 @@ fn spread_answer_keeps_assignment_identity_and_reports_leftovers() {
         SpreadPreview::Ready { summary, .. } => {
             assert_eq!(
                 summary,
-                "Project: 1 h ready to add before Sun 27 Sep. 10 min can't fit the 15-minute grid and has not been dropped from the homework total."
+                "Project: 1 h ready to add before Sun 27 Sep. 10 min is still included in the homework's total time, but it's less than the 15 minutes Plan can add."
             );
         }
         other => panic!("expected Ready, got {other:?}"),

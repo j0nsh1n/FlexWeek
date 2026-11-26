@@ -5,6 +5,6 @@ import org.junit.Test
 
 class PairingPathTest {
     @Test fun desktopInstructionsNameTheCurrentPairingPath() {
-        assertEquals("Settings > This computer > Devices > Pair a phone", DESKTOP_PAIR_PATH)
+        assertEquals("Settings > Phone & sync > Pair a phone", DESKTOP_PAIR_PATH)
     }
 }

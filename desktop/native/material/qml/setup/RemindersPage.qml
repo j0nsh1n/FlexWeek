@@ -29,8 +29,8 @@ Column {
             ChoiceCard {
                 required property var modelData
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                Layout.alignment: Qt.AlignTop
                 objectName: "setupReminder-" + modelData.value
                 theme: page.theme
                 density: page.density
@@ -216,8 +216,8 @@ Column {
             ChoiceCard {
                 required property var modelData
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                Layout.alignment: Qt.AlignTop
                 objectName: "setupMode-" + modelData.value
                 theme: page.theme
                 density: page.density
@@ -244,8 +244,8 @@ Column {
             ChoiceCard {
                 required property var modelData
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                Layout.alignment: Qt.AlignTop
                 objectName: "setupRowSize-" + modelData.value
                 theme: page.theme
                 density: page.density

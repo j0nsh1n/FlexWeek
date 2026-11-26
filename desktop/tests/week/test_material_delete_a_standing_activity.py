@@ -49,18 +49,18 @@ def _settled(qapp, shell) -> None:
     pump(qapp, 10)
 
 
-def test_this_week_only_keeps_soccer_here_missed_on_every_day_and_undo_brings_it_back(
+def test_this_week_only_hides_soccer_and_undo_brings_it_back(
     qapp, soccer_week, sheets
 ) -> None:
     sheets.askDeleteBlock("activity-1", -1)
     assert sheets.ask["id"] == "delete-block"
     sheets.answer("week")
     _settled(qapp, soccer_week)
-    assert _soccer(soccer_week)["missed_days"] == [1, 3]
+    assert _soccer(soccer_week)["removed_days"] == [1, 3]
     assert sheets.notice == "Deleted Soccer from this week." and sheets.noticeUndo is True
     sheets.undoNotice()
     _settled(qapp, soccer_week)
-    assert not _soccer(soccer_week).get("missed_days")
+    assert not _soccer(soccer_week).get("removed_days")
 
 
 def test_this_week_and_later_takes_soccer_out_and_undo_puts_it_back_with_the_week_after(
@@ -118,12 +118,12 @@ def test_delete_from_one_day_asks_once_names_the_day_and_offers_three_ways(qapp,
     ]
     sheets.answer("week")
     _settled(qapp, soccer_week)
-    assert _soccer(soccer_week)["missed_days"] == [1, 3]
+    assert _soccer(soccer_week)["removed_days"] == [1, 3]
     assert sheets.notice == "Deleted Soccer from this week." and sheets.noticeUndo is True
     assert sheets.ask == {}, "the week choice did not open a second question"
     sheets.undoNotice()
     _settled(qapp, soccer_week)
-    assert not _soccer(soccer_week).get("missed_days")
+    assert not _soccer(soccer_week).get("removed_days")
 
 
 def test_new_school_hours_say_every_week_and_offer_no_undo(qapp, shell, sheets) -> None:

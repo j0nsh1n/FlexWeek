@@ -50,8 +50,10 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 8
-        color: palette.surfaceContainerLow
+        radius: palette.cornerFor(16)
+        color: palette.cardSurface
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: root.highContrast ? palette.outline : palette.outlineVariant
         clip: false
         Column {
             id: column

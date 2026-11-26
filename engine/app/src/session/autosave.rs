@@ -12,7 +12,7 @@ pub const AFTER_MS: i64 = 1_500;
 /// How long a failed save waits before it is tried again.
 pub const RETRY_MS: i64 = 6_000;
 
-/// What the window holds that the rule reads (its parts of the session have not moved yet).
+/// The open draft and whether the window is signed in.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Week {
     pub signed_in: bool,
@@ -20,6 +20,12 @@ pub struct Week {
     pub dirty: bool,
     /// A save that failed is waiting to be tried again.
     pub pending: bool,
+}
+
+impl Week {
+    pub(super) fn can_save(self, busy: bool) -> bool {
+        self.signed_in && !busy && !self.conflict
+    }
 }
 
 #[derive(Debug, Default)]
@@ -34,7 +40,7 @@ impl Autosave {
     /// Whether to save now, at `now` on the steady clock; a save counts as tried from now. `busy`: a request
     /// is in flight.
     pub fn due(&mut self, week: Week, busy: bool, now: i64) -> bool {
-        if !week.signed_in || busy || week.conflict {
+        if !week.can_save(busy) {
             return false;
         }
         let due = if week.pending {

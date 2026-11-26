@@ -56,7 +56,7 @@ def test_a_real_solve_explains_itself_once(qapp: QApplication, window: NativeWin
     wait_until(qapp, lambda: session.trace is not None and not session.busy and _snack(window) != "")
     _pump(qapp)
     assert session.trace.get("unplaced"), "the fixture should give the solver something it cannot place"
-    assert _snack(window) == "Nothing placed. 1 with no time yet."
+    assert _snack(window) == "No homework was placed. 1 still needs a time."
     assert "Science fair poster" in _repeater_texts(root, "homeworkRows", "homeworkTitle")
     assert _qml(root, "homeworkCount").property("text") == "1"
 
@@ -80,7 +80,7 @@ def test_the_drawer_counts_what_the_notice_counts(qapp: QApplication, window: Na
     placed, waiting = session.plan_counts
     assert waiting == 1
     # The essay was given 18:45 when it was added, so this Plan places nothing new.
-    assert _snack(window) == plan_sentence(placed, waiting) == "Nothing placed. 1 with no time yet."
+    assert _snack(window) == plan_sentence(placed, waiting) == "No homework was placed. 1 still needs a time."
     assert _qml(root, "homeworkCount").property("text") == str(waiting)
 
 
@@ -149,11 +149,19 @@ def _cut_the_essay_to(qapp: QApplication, window: NativeWindow, minutes: int) ->
     ("minutes", "said", "left"),
     [
         # 60 - 5 = 55: Plan places 45 (three quarter hours) and 10 minutes have no session.
-        (5, "Placed 1 of 1. History essay still has 10 min with no time.", [("History essay", 10)]),
+        (
+            5,
+            "Placed 1 of 1. History essay still has 10 min with no time.",
+            [("History essay", 10)],
+        ),
         # 60 - 15 = 45: Plan places all 45. Nothing is missing, so nothing is said to be.
         (15, "Placed 1 of 1", []),
         # 60 - 20 = 40: places 30, 10 left.
-        (20, "Placed 1 of 1. History essay still has 10 min with no time.", [("History essay", 10)]),
+        (
+            20,
+            "Placed 1 of 1. History essay still has 10 min with no time.",
+            [("History essay", 10)],
+        ),
     ],
 )
 def test_the_plan_notice_names_the_minutes_it_could_not_place(

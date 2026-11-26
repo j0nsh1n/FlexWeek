@@ -45,19 +45,16 @@ pub const REASON_COPY: &[(&str, &str)] = &[
     ),
     (
         "ENERGY_MISMATCH",
-        "Planned outside its preferred time of day.",
+        "Planned outside the time of day you chose for it.",
     ),
     (
         "SLEEP_GUARD",
         "It doesn't fit in the day on the days left for it.",
     ),
-    (
-        "WORK_WINDOW_MISS",
-        "That doesn't fit in the times you set aside for work.",
-    ),
+    ("WORK_WINDOW_MISS", "That doesn't fit in your study hours."),
     (
         "NO_STUDY_TIME_TODAY",
-        "Due today and no study time is left today.",
+        "It's due today, and there's no study time left today.",
     ),
     (
         "RESHUFFLE_AFTER_MISS",
@@ -1404,6 +1401,9 @@ pub fn is_work_session(block: &Value) -> bool {
 }
 
 fn day_on_day(block: &Value, day_index: i64) -> bool {
+    if crate::standing::removed_on(block, &Value::from(day_index)) {
+        return false;
+    }
     let days: Vec<i64> = block
         .get("days")
         .and_then(Value::as_array)
@@ -1660,11 +1660,12 @@ fn dates_between(start: NaiveDate, end: NaiveDate) -> Vec<NaiveDate> {
 }
 
 fn month_on_day(block: &Value, day_index: i64) -> bool {
-    block
-        .get("days")
-        .and_then(Value::as_array)
-        .map(|a| a.iter().any(|v| v.as_i64() == Some(day_index)))
-        .unwrap_or(false)
+    !crate::standing::removed_on(block, &Value::from(day_index))
+        && block
+            .get("days")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().any(|v| v.as_i64() == Some(day_index)))
+            .unwrap_or(false)
 }
 
 fn placed_on_day(block: &Value, day_index: i64) -> bool {

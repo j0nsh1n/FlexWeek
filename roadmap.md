@@ -206,6 +206,12 @@ Full wording is in this file's git history (before 2026-11-06).
 - Waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large; a device check of the phone updater
   (1.2.0 to 1.3.0 is the chance for it).
 
+### Gripes from the 2.0.0 developer builds (Jonathan, 2026-11-25)
+- J26 Deleting School "This week only" left it on the Week screen, marked missed on every day. Fix: the deleted
+  days are kept as removed days, gone from Week, Day, My day, Month and the planner; days marked "I missed it" stay
+  missed (Jonathan picked "Gone, but missed days stay"). Branch `fix/school-week-delete`.
+- J27 Sign out is only in the menu; Manage account, which Settings says holds sign out, has none. Open.
+
 ## Later
 - Left for after 1.0.0: a camera scan of the pairing code, a restore copy of
   the phone-link key, the v2 phone screens (Add homework, Plan, Running late,

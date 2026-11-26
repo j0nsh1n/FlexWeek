@@ -21,7 +21,8 @@ use crate::records::{captured, recall, remember};
 use crate::week_saves::check_saved_week;
 use crate::{Refusal, ServiceError, ServiceResult, with_db};
 
-pub const IMPORT_STALE: &str = "This preview is out of date. Refresh it before importing.";
+pub const IMPORT_STALE: &str =
+    "This preview is out of date. Preview the file again before importing.";
 pub const TRANSFER_TOO_LARGE: &str = "This account is larger than the 256 KiB transfer limit.";
 const MAX_RESTORE_POINTS: i64 = 20;
 

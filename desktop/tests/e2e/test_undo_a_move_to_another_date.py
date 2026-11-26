@@ -77,7 +77,7 @@ def test_undo_of_a_move_is_refused_when_the_other_week_changed_elsewhere(
     alice.undo()
     settled(qapp, alice)
     assert alice.conflict is False
-    assert alice.message == "Undo did not go through. Your week was reloaded as it's saved."
+    assert alice.message == "Undo didn't save. Your week was reloaded as it's saved."
     source = read_week(qapp, alice, first)
     dest = read_week(qapp, alice, second)
     assert titles(source["blocks"]) == []

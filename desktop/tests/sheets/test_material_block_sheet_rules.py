@@ -295,3 +295,49 @@ def test_three_or_more_days_in_a_row_are_named_as_a_range(
     _add(qapp, shell, days=days)
     sheets.editBlock("soccer", days[0])
     assert [choice["label"] for choice in sheets.form["scopeChoices"]] == ["This day only", words]
+
+
+def test_removed_days_show_unticked_are_not_counted_and_can_be_ticked_back_on(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    standing = soccer(id="activity-1", days=[0, 1, 2, 3, 4], removed_days=[2, 3, 4])
+    shell.session.set_setup_blocks([soccer(id="activity-1", days=[0, 1, 2, 3, 4])])
+    shell.session.add_block(standing)
+    shell.session.save()
+    settle(qapp, shell)
+
+    sheets.editBlock("activity-1", 0)
+    assert sheets.form["showScope"] is True
+    assert [choice["label"] for choice in sheets.form["scopeChoices"]] == [
+        "This day only",
+        "Every Mon and Tue",
+    ]
+    sheets.setText("scope", "series")
+    assert [day["value"] for day in sheets.form["days"] if day["on"]] == [0, 1]
+
+    # Unticking every active day must be refused rather than silently saving only removed days.
+    sheets.toggleDay(0)
+    sheets.toggleDay(1)
+    sheets.save()
+    assert sheets.kind == "block"
+    assert sheets.form["daysProblem"] != ""
+
+    # Ticking Wednesday back on restores it while Thursday and Friday stay removed.
+    sheets.toggleDay(0)
+    sheets.toggleDay(1)
+    sheets.toggleDay(2)
+    sheets.save()
+    settle(qapp, shell)
+    saved = next(item for item in shell.session.blocks if item["id"] == "activity-1")
+    assert saved["days"] == [0, 1, 2, 3, 4]
+    assert saved["removed_days"] == [3, 4]
+
+    # A block with only one active day left is not shown as a series.
+    one_left = soccer(id="activity-1", days=[0, 1, 2, 3, 4], missed_days=[2], removed_days=[0, 1, 3, 4])
+    shell.session.add_block(one_left)
+    shell.session.save()
+    settle(qapp, shell)
+    sheets.editBlock("activity-1", 2)
+    assert sheets.form["showScope"] is False
+    assert sheets.form["seriesNote"] == ""
+    assert [day["value"] for day in sheets.form["days"] if day["on"]] == [2]

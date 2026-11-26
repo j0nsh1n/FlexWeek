@@ -1524,7 +1524,7 @@ fn an_account_holds_two_hundred_repeats_and_the_next_is_refused_with_a_sentence(
         Err(ApplyFailure::Refused { message, .. }) => assert_eq!(
             message,
             "FlexWeek keeps at most 200 weekly blocks (School, activities and weekly fixed times) in one \
-             account. Stop one before adding another."
+             account. Delete one before adding another."
         ),
         other => panic!("the 201st repeat was not refused: {other:?}"),
     }

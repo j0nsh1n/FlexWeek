@@ -194,7 +194,7 @@ def test_the_line_shows_only_the_minutes_that_still_have_no_time(qapp, window) -
 
 def test_plan_into_this_week_places_the_hour_this_week_already_holds_without_a_time(qapp, window) -> None:
     """The line lists minutes that have no time, a session waiting for one included, and pressing Plan
-    into this week gives that session its time instead of saying the homework is fully planned."""
+    into this week gives that session its time instead of saying there is no time left to plan."""
     left_in_week_one(qapp, window)
     session = window.session
     session.add_block(
@@ -215,7 +215,7 @@ def test_plan_into_this_week_places_the_hour_this_week_already_holds_without_a_t
     press(window, button)
     settled(qapp, window)
     assert [b for b in lab_sessions(window) if b.get("start")], lab_sessions(window)
-    assert "fully planned" not in session.message, session.message
+    assert "There's no time left to plan for this homework." not in session.message, session.message
 
 
 def hold_a_session(window: NativeWindow, start: str | None, *, pinned: bool = False) -> None:
@@ -256,7 +256,7 @@ def test_plan_into_this_week_moves_a_missed_session_the_line_lists(qapp, window)
     press_plan_into_this_week(qapp, window)
     moved = next(b for b in lab_sessions(window) if b["id"] == "lab-monday")
     assert (moved["days"][0], moved["start"]) > (0, "10:00"), moved
-    assert "already has a time" not in window.session.message
+    assert "There's no time left to plan for this homework." not in window.session.message
 
 
 def test_plan_into_this_week_leaves_a_pinned_missed_session_where_it_is(qapp, window) -> None:
@@ -276,7 +276,7 @@ def test_plan_into_this_week_leaves_a_pinned_missed_session_where_it_is(qapp, wi
 
 def test_the_panels_plan_button_places_a_session_that_is_waiting_for_a_time(qapp, window) -> None:
     """In the Overdue and left from last week panel, Plan into this week on one homework gives its
-    waiting session a time instead of saying the homework is fully planned."""
+    waiting session a time instead of saying there is no time left to plan."""
     left_in_week_one(qapp, window)
     hold_a_session(window, None)
     settled(qapp, window)
@@ -284,7 +284,7 @@ def test_the_panels_plan_button_places_a_session_that_is_waiting_for_a_time(qapp
     wait_until(qapp, lambda: not window.session.planning and not window.session.busy)
     settled(qapp, window)
     assert [b for b in lab_sessions(window) if b["id"] == "lab-monday" and b.get("start")]
-    assert "fully planned" not in window.session.message
+    assert "There's no time left to plan for this homework." not in window.session.message
 
 
 def add_done_hour(window: NativeWindow, block_id: str, day: int) -> None:

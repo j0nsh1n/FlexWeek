@@ -252,7 +252,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: M3Font.px(20)
-        text: "The real Material views, drawn from these values. Nothing else changes until Done."
+        text: "Preview your changes here. Nothing changes until you choose Done."
         color: palette.inkMuted
         font.family: M3Font.family
         font.pixelSize: M3Font.px(12)

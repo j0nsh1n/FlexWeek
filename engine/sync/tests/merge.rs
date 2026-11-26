@@ -1145,6 +1145,36 @@ fn a_block_moved_by_hand_reaches_the_other_device_pinned() {
 }
 
 #[test]
+fn a_removed_school_day_reaches_the_phone_without_becoming_an_occurrence() {
+    let mut desktop = db("desktop", true);
+    let mut phone = db("phone", true);
+    let school = json!({
+        "id": "school", "kind": "locked", "title": "School", "days": [0, 1],
+        "removed_days": [0], "start": "08:00", "duration_min": 60,
+    });
+    flexweek_store::save_week(&desktop, 1, HAND_WEEK, &json!([school]).to_string(), 0).unwrap();
+    desktop.execute_batch("COMMIT").unwrap();
+    scan(&mut desktop, 1, 1_000).unwrap();
+    let report = apply_batch(&mut phone, &batch(&desktop, 0, "phone"), 1_000).unwrap();
+    assert_eq!(report.quarantined, 0);
+    let (raw, _) = flexweek_store::read_week(&phone, 1, HAND_WEEK)
+        .unwrap()
+        .unwrap();
+    let blocks: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(blocks, json!([school]));
+    let model = flexweek_engine::desk::weekmodel::build_week(
+        &json!(HAND_WEEK),
+        &blocks,
+        &json!({}),
+        &json!({}),
+    )
+    .unwrap();
+    let occurrences = model["occurrences"].as_array().unwrap();
+    assert_eq!(occurrences.len(), 1);
+    assert_eq!(occurrences[0]["day"], 1);
+}
+
+#[test]
 fn a_hand_move_saved_on_an_old_revision_is_refused() {
     let phone = db("phone", true);
     flexweek_store::save_week(

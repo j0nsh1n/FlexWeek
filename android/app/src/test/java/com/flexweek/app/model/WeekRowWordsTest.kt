@@ -5,7 +5,7 @@ import org.junit.Test
 
 // The right-hand words of picture 5 B (Mon 19 to Sun 25 Oct).
 class WeekRowWordsTest {
-    @Test fun aHeavyDaySaysItsTotalAndHeavy() = assertEquals("4 h 30 · heavy", WeekRowWords.right(270, true, 870))
+    @Test fun aHeavyDaySaysItsTotalAndHeavy() = assertEquals("4 h 30 min · busy day", WeekRowWords.right(270, true, 870))
 
     @Test fun wholeHoursHaveNoMinutes() = assertEquals("2 h", WeekRowWords.right(120, false, 870))
 
