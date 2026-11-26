@@ -172,7 +172,7 @@ def test_material_move_to_day_on_school_says_only_that_day_changed(qapp, window)
     bridge(window).property("week").moveBlock("school", 4, 4, 9 * 60, 14 * 60 + 30)
     wait_until(qapp, lambda: "Only this" in snack(window))
     assert snack(window).endswith(
-        "Only this Friday changed. To change every week, run setup again from Settings."
+        "Only this Friday changed. To change every week, open School hours."
     )
     assert str(bridge(window).property("snackAction")) == "UNDO"
     assert block(session, "school")["days"] == [0, 1, 2, 3]
@@ -262,7 +262,7 @@ def test_material_dragging_one_day_of_school_says_only_that_day_changed_and_undo
     week.moveBlock("school", WEDNESDAY, WEDNESDAY, 10 * 60, 12 * 60)
     wait_until(qapp, lambda: "Only this" in snack(window))
     assert snack(window).endswith(
-        "Only this Wednesday changed. To change every week, run setup again from Settings."
+        "Only this Wednesday changed. To change every week, open School hours."
     )
     assert str(bridge(window).property("snackAction")) == "UNDO"
     assert school_of(session)[0] == [0, 1, 3, 4]
