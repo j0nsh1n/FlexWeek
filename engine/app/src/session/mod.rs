@@ -30,6 +30,7 @@ pub mod spotify;
 pub mod status;
 pub mod transfer;
 pub mod unfinished;
+pub mod views;
 pub mod week;
 pub mod words;
 

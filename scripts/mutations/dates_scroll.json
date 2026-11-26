@@ -1,9 +1,9 @@
 [
  {
   "name": "Month discards the picked day",
-  "file": "desktop/native/controller.py",
-  "old": "        anchor = self.selected_day if self.selected_day[:7] == self.selected_month else (\n            month_anchor_date(self.selected_month, today)\n        )\n",
-  "new": "        anchor = month_anchor_date(self.selected_month, today)\n",
-  "test": "desktop/tests/week/test_month_and_my_day_follow_today.py::test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today"
+  "file": "engine/app/src/session/views.rs",
+  "old": "        if prefix7(&self.selected_day) == month {\n            self.selected_day.clone()\n        } else {\n            month_anchor_date(month, today)\n        }\n",
+  "new": "        month_anchor_date(month, today)\n",
+  "test": "cargo:flexweek-app:session_views:month_keeps_a_picked_day_when_leaving_the_month"
  }
 ]
