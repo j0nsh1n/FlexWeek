@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from backend.models import due_is_timed
+from flexweek_engine import due_is_timed  # type: ignore[import-untyped]
+
 from desktop.native.calendar import month_rows
 from desktop.native.fields import week_start_day
 from desktop.native.weekmodel import HOMEWORK as SESSION_CATEGORY

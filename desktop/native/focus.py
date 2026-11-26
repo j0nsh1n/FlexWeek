@@ -6,8 +6,8 @@ import json
 from typing import Any
 
 import flexweek_engine  # type: ignore[import-untyped]
+from flexweek_engine import ESTIMATE_MAX_MIN
 
-from backend.models import ESTIMATE_MAX_MIN
 from desktop.native.wire import plain
 
 FOCUS_PHASES = ("work", "break", "long_break", "ended")

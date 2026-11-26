@@ -7,15 +7,15 @@ been set by hand.
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ValidationError
+import flexweek_engine  # type: ignore[import-untyped]
 
 from backend import clock as wall_clock
-from backend.models import TimeBlock, WeekRequest
 from backend.slots import hhmm_to_minutes
 from desktop.native.calendar import (
     CATEGORIES,
@@ -36,8 +36,8 @@ from desktop.native.remind import clock_parts
 from desktop.native.sheet_rules import (
     BLOCK_PROBLEMS,
     REPEAT_NOTE,
-    _block_problem,
     _preset_locked,
+    block_sheet_problem,
     day_range_and_words,
     first_day_changed,
     full_day_name,
@@ -418,14 +418,13 @@ class BlockDraft:
                 made["removed_days"] = kept
             else:
                 del made["removed_days"]
-        try:
-            WeekRequest(blocks=[TimeBlock.model_validate(made)])
-        except ValidationError as error:
-            message = _block_problem(error)
-            if message == BLOCK_PROBLEMS["title"]:
+        checked = block_sheet_problem(made)
+        if checked is not None:
+            field, message = checked
+            if field == "title":
                 self.title_problem = message
                 self.step = 0 if self.step is not None else None
-            elif message == BLOCK_PROBLEMS["days"]:
+            elif field == "days":
                 self.days_problem = message
                 self.step = 1 if self.step is not None else None
             else:
@@ -521,7 +520,7 @@ class BlockDraft:
             body["until"] = self.until
         else:
             body.pop("until", None)
-        return TimeBlock.model_validate(body).model_dump(mode="json")
+        return json.loads(flexweek_engine.checked_block(json.dumps(body)))
 
     def save_plan(self, made: dict) -> dict:
         """How this save goes. `kind` is plain (today's path), add (a new repeat), make (this fixed time
