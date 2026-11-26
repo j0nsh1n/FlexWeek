@@ -147,10 +147,10 @@
   "test": "desktop/tests/sheets/test_plan_homework.py::test_plan_on_a_week_that_is_over_does_not_ask_the_solver"
  },
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/changes.rs",
   "name": "a plan's Undo is not offered",
-  "old": "            if planned:\n                self.planned.emit(self.message)\n",
-  "new": "",
-  "test": "desktop/tests/sheets/test_plan_undo.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
+  "old": "            planned = answer.pending_step.is_some_and(|step| {\n",
+  "new": "            planned = false && answer.pending_step.is_some_and(|step| {\n",
+  "test": "cargo:flexweek-app:session_changes:a_plan_step_is_reported_planned_only_when_the_save_holding_it_lands"
  }
 ]

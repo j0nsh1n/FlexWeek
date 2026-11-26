@@ -30,7 +30,7 @@
  {
   "file": "desktop/native/window.py",
   "name": "a notice keeps an Undo that would take back a later change",
-  "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
+  "old": "        elif stored and self._notice_step is not None and self.session.last_step_token() != self._notice_step:\n",
   "new": "        elif False:\n",
   "test": "desktop/tests/week/test_material_shared_rules.py::test_a_notice_loses_its_undo_when_a_later_change_is_saved"
  },

@@ -1,9 +1,7 @@
 //! What the session decides when a block is added, moved by hand, deleted, or when the standing
 //! repeats change (P4 slice 4B): the rules of `desktop/native/controller.py`'s `add_block`,
 //! `hand_move`, `delete_block`, `setup_repeats`, `change_repeats` and `_stamp_edited`, moved here with
-//! the same words. The window keeps the state: it writes what is decided here, then settles the week
-//! (`_touch`), which this module does not. `_hold_repeats`, `_acknowledge_repeats`, drag retry, the
-//! setup queue and save orchestration stay in Python.
+//! the same words. The window settles the result and sends it to the Rust session's draft commands.
 
 use flexweek_engine::desk::calendar::is_series_checked;
 use flexweek_engine::desk::grid::{
@@ -343,7 +341,7 @@ pub struct RepeatEditInput<'a> {
 pub struct RepeatEdit {
     pub blocks: Vec<Value>,
     pub repeats: Vec<Value>,
-    /// The stamped intents the save carries: the window holds them until the server answers.
+    /// The stamped intents the session holds until the server answers.
     pub stamped: Vec<Value>,
     /// The unstamped changes, as the preview question sends them.
     pub preview: Vec<Value>,

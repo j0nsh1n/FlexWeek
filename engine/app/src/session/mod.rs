@@ -7,13 +7,15 @@
 //! - `take_event()`: the next thing that happened, or `null`; one at a time, so what the window does with
 //!   one (signing out, say) counts before the next is read.
 //!
-//! So far: the frame (group 1), which sends requests and takes their answers back, and the status (which
-//! request is the latest, whether the session is busy, the status line).
+//! The frame sends requests and receives their answers. Week drafts and history stay with the session
+//! while the window dispatches the week's request effects on its own thread.
 
 pub mod account;
 pub mod autosave;
 pub mod block_edits;
+pub mod changes;
 pub mod copies;
+mod drafts;
 pub mod focus;
 pub mod frame;
 pub mod homework_edits;
@@ -23,6 +25,7 @@ pub mod reminders;
 pub mod spotify;
 pub mod status;
 pub mod transfer;
+pub mod week;
 pub mod words;
 
 use std::collections::BTreeMap;
@@ -41,6 +44,7 @@ pub struct Session {
     flows: BTreeMap<u64, account::Flow>,
     autosave: autosave::Autosave,
     leaving: leaving::Leaving,
+    drafts: drafts::Drafts,
 }
 
 impl Session {
@@ -51,7 +55,20 @@ impl Session {
             flows: BTreeMap::new(),
             autosave: autosave::Autosave::default(),
             leaving: leaving::Leaving::default(),
+            drafts: drafts::Drafts::default(),
         }
+    }
+
+    fn set_account(&mut self, identity: Identity) -> Result<(), String> {
+        let switched = self
+            .frame
+            .account()
+            .is_some_and(|account| account.id != identity.id);
+        self.frame.set_account(identity)?;
+        if switched {
+            self.drafts.clear("");
+        }
+        Ok(())
     }
 
     pub fn frame(&mut self) -> &mut Frame {
@@ -92,15 +109,20 @@ impl Session {
             Some("set_account") => {
                 let id = command["id"].as_i64().ok_or("id is a whole number")?;
                 let username = text("username")?.to_string();
-                self.frame.set_account(Identity { id, username })?;
+                self.set_account(Identity { id, username })?;
                 Ok(json!({}))
             }
             Some("reset") => {
                 self.frame.reset();
+                self.drafts.clear("");
                 Ok(json!({}))
             }
             Some("adopt_session") => {
-                self.frame.adopt_session(text("token")?);
+                let token = text("token")?;
+                if self.frame.account().is_some() {
+                    self.drafts.clear("");
+                }
+                self.frame.adopt_session(token);
                 Ok(json!({}))
             }
             Some("begin") => {
@@ -147,23 +169,32 @@ impl Session {
                 let owner = command["owner"].as_str().map(str::to_string);
                 self.delete_account(text("password")?, owner)
             }
-            Some("autosave") => {
+            Some(cmd @ ("autosave" | "drafts_autosave")) => {
                 let flag = |name: &str| -> Result<bool, String> {
                     command[name]
                         .as_bool()
                         .ok_or_else(|| format!("{name} is true or false"))
                 };
+                let (conflict, dirty, pending) = if cmd == "drafts_autosave" {
+                    self.drafts.save_flags()
+                } else {
+                    (flag("conflict")?, flag("dirty")?, flag("pending")?)
+                };
                 let week = autosave::Week {
                     signed_in: flag("signed_in")?,
-                    conflict: flag("conflict")?,
-                    dirty: flag("dirty")?,
-                    pending: flag("pending")?,
+                    conflict,
+                    dirty,
+                    pending,
                 };
                 let busy = self.status.busy();
                 // The clock is read only when a save could be due, as the window did.
                 let save = !(!week.signed_in || busy || week.conflict)
                     && self.autosave.due(week, busy, self.frame.steady_ms());
-                Ok(json!({ "save": save }))
+                let mut answer = json!({ "save": save });
+                if cmd == "drafts_autosave" {
+                    answer["versions"] = self.drafts.versions();
+                }
+                Ok(answer)
             }
             Some("autosave_times") => {
                 let time = |name: &str| -> Result<Option<i64>, String> {
@@ -199,7 +230,7 @@ impl Session {
                 self.leaving.start(limit, text("again")?);
                 Ok(json!({}))
             }
-            Some("leaving_poll") => {
+            Some(cmd @ ("leaving_poll" | "drafts_leaving_poll")) => {
                 let poll = command["poll_ms"]
                     .as_i64()
                     .ok_or("poll_ms is a whole number")?;
@@ -208,9 +239,16 @@ impl Session {
                         .as_bool()
                         .ok_or_else(|| format!("{name} is true or false"))
                 };
-                let (held, parked) = (flag("held")?, flag("parked")?);
+                let (held, parked) = if cmd == "drafts_leaving_poll" {
+                    self.drafts.leave_flags()
+                } else {
+                    (flag("held")?, flag("parked")?)
+                };
                 let step = self.leaving.poll(poll, self.status.busy(), held, parked);
                 let mut answer = json!({ "step": step.name() });
+                if cmd == "drafts_leaving_poll" {
+                    answer["versions"] = self.drafts.versions();
+                }
                 if step == leaving::Step::GiveUp {
                     answer["words"] = json!(self.leaving.gave_up_words());
                 }
@@ -219,6 +257,10 @@ impl Session {
             Some("say") => {
                 self.status.say(text("text")?);
                 Ok(json!({}))
+            }
+            Some(cmd) if cmd.starts_with("drafts_") => {
+                self.drafts
+                    .command(command, &self.status, self.frame.epoch())
             }
             other => Err(format!("no command called {other:?}")),
         }
@@ -257,7 +299,10 @@ impl Session {
                 "retry_ms": autosave::RETRY_MS,
             })
             .to_string(),
-            other => json!({ "error": format!("no view called {other:?}") }).to_string(),
+            other => match self.drafts.view(other) {
+                Some(value) => value.to_string(),
+                None => json!({ "error": format!("no view called {other:?}") }).to_string(),
+            },
         }
     }
 

@@ -230,7 +230,7 @@ class NativeWindow(QObject):
         self._change_saving: str | None = None
         self._change_saved: str | None = None
         # The Undo step the toast offers to take back.
-        self._notice_step: dict | None = None
+        self._notice_step: int | None = None
         # Something asked for is under way; the next thing the session says is what it did.
         self._telling = False
         # The last reminder the toast said, so Got it on the same reminder takes it away.
@@ -483,16 +483,7 @@ class NativeWindow(QObject):
         student stops changing things, never while a request is in flight or after a 409, and a failed save
         again every few seconds)."""
         session = self.session
-        due = session.client.command(
-            {
-                "cmd": "autosave",
-                "signed_in": session.account is not None,
-                "conflict": bool(session.conflict),
-                "dirty": bool(session.dirty),
-                "pending": session.pending_save is not None,
-            }
-        )["save"]
-        if due:
+        if session.autosave_due():
             session.save()
 
     # When the last change was made and when a save was last tried, on the session's steady clock.
@@ -1372,7 +1363,7 @@ class NativeWindow(QObject):
             return
         words, self._change_saved = self._change_saved, None
         self._set_notice(words, "Undo", self._undo_from_notice)
-        self._notice_step = self.session.last_step()
+        self._notice_step = self.session.last_step_token()
 
     def _told(self, act) -> None:
         """Do what the student asked, and once it is done say what it did in the toast: the first thing
@@ -1403,7 +1394,7 @@ class NativeWindow(QObject):
         # Plan caused this Undo, even when the click has already moved the keyboard.
         self._undo_button = "solveButton"
         self._undo_at = time.monotonic()
-        self._notice_step = self.session.last_step()
+        self._notice_step = self.session.last_step_token()
         # Focusing on the next turn lands after the week redraws and could take the keyboard.
         self._plan_focus_pending = True
 
@@ -1644,7 +1635,7 @@ class NativeWindow(QObject):
         if stored and change is not None:
             self._change_saved = change
             self._show_change()
-        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:
+        elif stored and self._notice_step is not None and self.session.last_step_token() != self._notice_step:
             # A later change, or an Undo, has taken the notice's step off the top: its Undo would now
             # take back something else.
             snack = self._snack_bridge()
@@ -2218,14 +2209,7 @@ class NativeWindow(QObject):
             self._leaving = None
 
         def poll() -> None:
-            answer = session.client.command(
-                {
-                    "cmd": "leaving_poll",
-                    "poll_ms": LEAVE_POLL_MS,
-                    "held": bool(session._held()),
-                    "parked": session.parked_unsaved_week() is not None,
-                }
-            )
+            answer = session.poll_leaving(LEAVE_POLL_MS)
             step = answer["step"]
             if step == "give_up":
                 stop()
