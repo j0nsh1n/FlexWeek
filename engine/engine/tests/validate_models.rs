@@ -765,3 +765,14 @@ fn a_label_or_checklist_line_blank_to_python_is_refused() {
         .is_ok()
     );
 }
+
+#[test]
+fn removed_days_need_a_real_start_not_an_empty_one() {
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "start": "",
+        "duration_min": 390, "days": [0], "removed_days": [0],
+    });
+    assert!(time_block(&school).is_err(), "an empty start is no start");
+    let with_start = with(school, "start", json!("08:00"));
+    assert!(time_block(&with_start).is_ok(), "the same block with a start is fine");
+}

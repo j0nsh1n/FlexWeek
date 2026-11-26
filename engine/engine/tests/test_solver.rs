@@ -744,3 +744,36 @@ fn test_a_window_that_is_too_short_today_is_still_a_work_window_miss() {
     assert_eq!(ids(&trace.unplaced), ["hw"]);
     assert_eq!(unplaced_reason(&trace, "hw").0, "WORK_WINDOW_MISS");
 }
+
+#[test]
+fn a_miss_on_a_day_the_block_was_removed_from_is_refused_not_recorded() {
+    use flexweek_engine::solver::{DeadlineOverrides, PlanRules, reschedule_after_miss};
+    let mut school = locked("school", "School", "08:00", 390, &[0, 1]);
+    school.removed_days = vec![0];
+    let result = reschedule_after_miss(
+        &[school.clone()],
+        "school",
+        0,
+        &[],
+        None,
+        None,
+        Some(&DeadlineOverrides::default()),
+        SOLVE_BUDGET_MS,
+        &real_clock(),
+        PlanRules::default(),
+    );
+    assert!(result.is_err(), "Monday is gone from this week, so it cannot be missed");
+    let result = reschedule_after_miss(
+        &[school],
+        "school",
+        1,
+        &[],
+        None,
+        None,
+        Some(&DeadlineOverrides::default()),
+        SOLVE_BUDGET_MS,
+        &real_clock(),
+        PlanRules::default(),
+    );
+    assert!(result.is_ok(), "Tuesday is still there and can be missed");
+}

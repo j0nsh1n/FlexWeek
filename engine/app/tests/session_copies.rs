@@ -843,3 +843,29 @@ fn day_view_on_another_week_falls_back_to_today() {
         .expect("today decides");
     assert_eq!((found.day, found.start), (Some(2), None));
 }
+
+#[test]
+fn copying_a_series_with_removed_days_takes_only_the_days_still_there() {
+    let mut school = school();
+    school["removed_days"] = json!([1, 4]);
+    let blocks = json!([school]);
+    let copied = clipboard_block(&blocks, Some("school"), Some(0), "occurrence", "g1").unwrap();
+    let clipboard = copied.clipboard.expect("a copy");
+    let item = &clipboard["items"][0];
+    assert_eq!(item["block"]["days"], json!([0, 2, 3]));
+    assert!(item["block"].get("removed_days").is_none(), "{item}");
+}
+
+#[test]
+fn a_removed_day_cannot_be_copied() {
+    let mut school = school();
+    school["removed_days"] = json!([1]);
+    let blocks = json!([school]);
+    let copied = clipboard_block(&blocks, Some("school"), Some(1), "occurrence", "g1").unwrap();
+    assert!(copied.clipboard.is_none());
+    let mut all_gone = weekly();
+    all_gone["removed_days"] = json!([4]);
+    let blocks = json!([all_gone]);
+    let copied = clipboard_block(&blocks, Some("weekly-guitar"), None, "auto", "g1").unwrap();
+    assert!(copied.clipboard.is_none(), "a block with every day removed is not there to copy");
+}

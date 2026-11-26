@@ -446,3 +446,26 @@ fn test_a_step_that_is_not_positive_reads_as_a_quarter_hour() {
         );
     }
 }
+
+#[test]
+fn test_an_occurrence_edit_never_leaves_removed_days_on_a_one_off_id() {
+    let mut standing = school(json!([0, 1, 2]));
+    standing["removed_days"] = json!([1]);
+    let mut edited = standing.clone();
+    edited["start"] = json!("11:00");
+    let result = apply_block_edit(
+        &json!([standing]),
+        &edited,
+        &json!("occurrence"),
+        &json!(1),
+        &mut fresh_ids(),
+    )
+    .expect("an edit");
+    for block in &result {
+        let standing_id = block["id"] == json!("school");
+        assert!(
+            standing_id || block.get("removed_days").is_none(),
+            "a one-off block cannot carry removed days: {block}"
+        );
+    }
+}

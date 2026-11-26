@@ -389,7 +389,7 @@ fn a_from_today_change_applies_on_a_later_week() {
 }
 
 #[test]
-fn deleting_the_last_occurrence_of_a_standing_block_marks_it_missed() {
+fn deleting_the_last_occurrence_of_a_standing_block_removes_it_for_the_week() {
     let blocks = json!([school(vec![2], "08:00")]);
     let repeats = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
     let input = BlockDeleteInput {
@@ -403,9 +403,9 @@ fn deleting_the_last_occurrence_of_a_standing_block_marks_it_missed() {
         label: None,
     };
     let gone = delete_block(&input).unwrap().expect("the block is there");
-    let mut missed = school(vec![2], "08:00");
-    missed["missed_days"] = json!([2]);
-    assert_eq!(gone.blocks, vec![missed]);
+    let mut removed = school(vec![2], "08:00");
+    removed["removed_days"] = json!([2]);
+    assert_eq!(gone.blocks, vec![removed]);
     assert_eq!(gone.repeats, vec![school(vec![0, 1, 2, 3, 4], "08:00")]);
 }
 

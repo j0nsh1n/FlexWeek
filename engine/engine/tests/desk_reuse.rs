@@ -809,6 +809,47 @@ fn test_routines_are_locked_times_without_homework_or_pomodoro() {
 }
 
 #[test]
+fn test_copying_a_series_leaves_out_its_removed_days_and_a_fully_removed_block() {
+    let school = json!({"id": "school", "title": "School", "kind": "locked", "duration_min": 60,
+        "days": [0, 1, 2], "start": "08:00", "removed_days": [1]});
+    let gone = json!({"id": "activity-1", "title": "Guitar", "kind": "locked", "duration_min": 60,
+        "days": [3], "start": "16:00", "removed_days": [3]});
+    let items = [
+        json!({"block": school, "source_day": 0, "scope": "series", "group_id": "g1"}),
+        json!({"block": gone, "source_day": 3, "scope": "series", "group_id": "g2"}),
+    ];
+    let rows = proposals_from_clipboard(
+        &items,
+        "day",
+        "2026-09-07",
+        0,
+        None,
+        &Map::new(),
+        &Map::new(),
+    );
+    let landed: Vec<(&Value, &Value)> = rows
+        .iter()
+        .map(|row| (&row["block"]["title"], &row["day"]))
+        .collect();
+    assert_eq!(landed, [(&json!("School"), &json!(0)), (&json!("School"), &json!(2))]);
+}
+
+#[test]
+fn test_a_routine_saved_from_a_week_leaves_out_removed_days() {
+    let school = json!({"id": "school", "title": "School", "kind": "locked", "duration_min": 60,
+        "days": [0, 1, 2], "start": "08:00", "removed_days": [1]});
+    let gone = json!({"id": "activity-1", "title": "Guitar", "kind": "locked", "duration_min": 60,
+        "days": [3], "start": "16:00", "removed_days": [3]});
+    let sources = routine_source_blocks(&[school, gone, soccer()]);
+    let ids: Vec<&Value> = sources.iter().map(|block| &block["id"]).collect();
+    assert_eq!(ids, ["school", "soccer"]);
+    assert_eq!(sources[0]["days"], json!([0, 2]));
+    assert!(sources[0].get("removed_days").is_none());
+    let template = routine_template(&sources[0], "t1");
+    assert_eq!(template["days"], json!([0, 2]));
+}
+
+#[test]
 fn test_running_late_occupies_from_a_snapped_start_until_the_day_end() {
     let block = running_late_block(0, "22:30", 60, "b-late-1");
     assert_eq!(block["title"], "Running late");

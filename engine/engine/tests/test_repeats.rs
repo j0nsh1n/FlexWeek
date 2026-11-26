@@ -211,7 +211,53 @@ fn a_copy_left_with_no_day_shows_nothing_rather_than_the_repeat() {
     let new = with(school(), json!({"days": [0, 1, 3, 4]}));
     let merged = three_way(&school(), &new, &only_wednesday);
     assert_eq!(merged["days"], json!([0, 1, 3, 4]));
+    assert_eq!(merged["removed_days"], json!([0, 1, 3, 4]));
+    assert!(merged.get("missed_days").is_none_or(|days| days == &json!([])));
+}
+
+#[test]
+fn a_copy_whose_only_day_was_missed_keeps_the_new_days_missed_not_removed() {
+    let missed_wednesday = with(school(), json!({"days": [2], "missed_days": [2]}));
+    let new = with(school(), json!({"days": [0, 1, 3, 4]}));
+    let merged = three_way(&school(), &new, &missed_wednesday);
+    assert_eq!(merged["days"], json!([0, 1, 3, 4]));
     assert_eq!(merged["missed_days"], json!([0, 1, 3, 4]));
+    assert!(merged.get("removed_days").is_none());
+}
+
+#[test]
+fn a_week_emptied_this_week_only_stays_empty_when_the_repeat_gains_or_swaps_days() {
+    let copy = with(soccer(), json!({"removed_days": [1, 3]}));
+    let gains = with(soccer(), json!({"days": [1, 3, 5]}));
+    let merged = three_way(&soccer(), &gains, &copy);
+    assert_eq!(merged["days"], json!([1, 3, 5]));
+    assert_eq!(merged["removed_days"], json!([1, 3, 5]));
+    assert!(merged.get("missed_days").is_none_or(|days| days == &json!([])));
+    let swaps = with(soccer(), json!({"days": [0, 2, 4]}));
+    let merged = three_way(&soccer(), &swaps, &copy);
+    assert_eq!(merged["days"], json!([0, 1, 2, 3, 4]));
+    assert_eq!(merged["removed_days"], json!([0, 1, 2, 3, 4]));
+}
+
+#[test]
+fn a_partly_removed_week_keeps_its_removed_and_missed_days_when_a_day_is_added() {
+    let copy = with(
+        school(),
+        json!({"missed_days": [2], "removed_days": [0, 1, 3, 4]}),
+    );
+    let new = with(school(), json!({"days": [0, 1, 2, 3, 4, 5]}));
+    let merged = three_way(&school(), &new, &copy);
+    assert_eq!(merged["days"], json!([0, 1, 2, 3, 4, 5]));
+    assert_eq!(merged["missed_days"], json!([2]));
+    assert_eq!(merged["removed_days"], json!([0, 1, 3, 4, 5]));
+}
+
+#[test]
+fn a_removed_week_stays_removed_in_a_later_version_of_the_repeat() {
+    let new = with(soccer(), json!({"days": [1, 3, 5]}));
+    let held = with(soccer(), json!({"removed_days": [1, 3]}));
+    let version = restated_version(Some(&soccer()), Some(&new), Some(&held));
+    assert_eq!(version, Some(held));
 }
 
 #[test]

@@ -180,6 +180,32 @@ fn school_and_activities_this_week_keep_removed_days_and_every_week_go() {
     }
 }
 
+/// Jonathan, 2026-11-26 ("Disappear too"): "This day only" on School or an activity makes that day
+/// disappear, even when it is the last day left. It is never marked missed.
+#[test]
+fn this_day_only_on_the_last_day_of_a_standing_block_removes_it_not_misses_it() {
+    for id in setup_ids() {
+        let last = json!({"id": id, "title": "School", "kind": "locked", "duration_min": 60,
+                          "days": [3], "start": "08:30"});
+        let mut removed = last.clone();
+        removed["removed_days"] = json!([3]);
+        assert_eq!(
+            show(delete(std::slice::from_ref(&last), id, "occurrence", Some(3))),
+            Ok(json!({"label": "deleting School", "blocks": [removed], "lost": []})),
+            "{id} one-day piece"
+        );
+        let mut missed = last.clone();
+        missed["missed_days"] = json!([3]);
+        let mut removed_over_missed = last.clone();
+        removed_over_missed["removed_days"] = json!([3]);
+        assert_eq!(
+            show(delete(&[missed], id, "occurrence", Some(3))),
+            Ok(json!({"label": "deleting School", "blocks": [removed_over_missed], "lost": []})),
+            "{id} a missed last day disappears too"
+        );
+    }
+}
+
 /// controller.py:1559 calls _touch, so a session that no longer fits loses its start.
 #[test]
 fn deleting_runs_settle() {
