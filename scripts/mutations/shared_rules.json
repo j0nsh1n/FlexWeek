@@ -21,11 +21,11 @@
   "test": "cargo:flexweek-engine:desk_reuse:test_the_planner_title_follows_the_one_date_format"
  },
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/views.rs",
   "name": "a block made by dragging is School whenever it starts",
-  "old": "        self.armed_category: str | None = None\n",
-  "new": "        self.armed_category: str | None = \"class\"\n",
-  "test": "desktop/tests/week/test_material_shared_rules.py::test_a_block_drawn_on_the_grid_is_not_school_by_default"
+  "old": "            armed_category: None,\n",
+  "new": "            armed_category: Some(\"class\".to_string()),\n",
+  "test": "cargo:flexweek-app:session_views:a_new_view_arms_no_category"
  },
  {
   "file": "desktop/native/window.py",

@@ -24,11 +24,13 @@ pub mod plan;
 pub mod plan_previews;
 pub mod preferences;
 pub mod reminders;
+pub mod routines;
 pub mod sheet_check;
 pub mod spotify;
 pub mod status;
 pub mod transfer;
 pub mod unfinished;
+pub mod views;
 pub mod week;
 pub mod words;
 

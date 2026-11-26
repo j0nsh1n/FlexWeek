@@ -28,10 +28,12 @@ mod session_plan;
 mod session_plan_previews;
 mod session_preferences;
 mod session_reminders;
+mod session_routines;
 mod session_sheet_check;
 mod session_spotify;
 mod session_transfer;
 mod session_unfinished;
+mod session_views;
 mod session_week;
 mod sync;
 
@@ -374,6 +376,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     session_block_edits::add(m)?;
     session_copies::add(m)?;
     session_reminders::add(m)?;
+    session_routines::add(m)?;
     session_changes::add(m)?;
     session_week::add(m)?;
     session_transfer::add(m)?;
@@ -383,6 +386,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     session_sheet_check::add(m)?;
     session_spotify::add(m)?;
     session_unfinished::add(m)?;
+    session_views::add(m)?;
     session_plan::add(m)?;
     session_plan_previews::add(m)?;
     db::add(m)?;
