@@ -5,7 +5,7 @@
 
 use flexweek_app::session::unfinished::{
     ClockNow, HomeworkCountsInput, UnfinishedInput, UnfinishedPlan, UnfinishedPlanInput,
-    UnfinishedPreview, UnfinishedPreviewInput, homework_counts, left_unfinished_items,
+    UnfinishedPreview, UnfinishedPreviewInput, homework_counts, left_unfinished_items, overdue_ids,
     plan_unfinished, unfinished_items, unfinished_preview,
 };
 use serde_json::{Map, Value, json};
@@ -281,6 +281,74 @@ fn homework_counts_reuses_one_done_time_rule_and_handles_under_grid_and_complete
     })
     .unwrap();
     assert!(!short_counts.plan_can_place);
+}
+
+#[test]
+fn overdue_ids_follow_the_due_comparison_without_a_week_start() {
+    // Main's `_overdue_assignment_ids`: a due is set, the homework is not
+    // completed, and parse_due(due) <= (today, hour * 60 + minute). A date
+    // with no time, and 23:59, are minute 1440, so at 23:59 (minute 1439)
+    // they are still ahead of the clock. A draft's week_start is ""; this
+    // comparison does not read it, and the full count still refuses that week.
+    let mut done = assignment("done", "Done", "2026-09-20T10:00", 60);
+    done["completed"] = json!(true);
+    let mut blank = assignment("blank", "Blank", "2026-09-20T10:00", 60);
+    blank["due"] = json!("");
+    let mut nodue = assignment("nodue", "No due", "2026-09-20T10:00", 60);
+    nodue.as_object_mut().unwrap().shift_remove("due");
+    let assignments = map_of(vec![
+        assignment("almost", "Almost", "2026-09-26T23:58", 60),
+        blank,
+        assignment("date_only", "Date only", "2026-09-26", 60),
+        done,
+        assignment("eod", "End of day", "2026-09-26T23:59", 60),
+        nodue,
+        assignment("past", "Past", "2026-09-26T10:00", 60),
+        assignment("tomorrow", "Tomorrow", "2026-09-27T00:00", 60),
+    ]);
+
+    let mut at_2359 = overdue_ids(&assignments, &ClockNow::at("2026-09-26", 23, 59)).unwrap();
+    at_2359.sort();
+    assert_eq!(at_2359, vec!["almost".to_string(), "past".to_string()]);
+
+    let mut at_1000 = overdue_ids(&assignments, &ClockNow::at("2026-09-26", 10, 0)).unwrap();
+    at_1000.sort();
+    assert_eq!(at_1000, vec!["past".to_string()]);
+
+    let mut next_morning = overdue_ids(&assignments, &ClockNow::at("2026-09-27", 0, 0)).unwrap();
+    next_morning.sort();
+    assert_eq!(
+        next_morning,
+        vec![
+            "almost".to_string(),
+            "date_only".to_string(),
+            "eod".to_string(),
+            "past".to_string(),
+            "tomorrow".to_string(),
+        ]
+    );
+
+    let mut bad = assignment("bad", "Bad", "2026-09-26T10:00", 60);
+    bad["due"] = json!("not-a-date");
+    let err = overdue_ids(&map_of(vec![bad]), &ClockNow::at("2026-09-26", 10, 0)).unwrap_err();
+    assert!(
+        err.contains("YYYY-MM-DD"),
+        "a due the save would refuse must still raise, got: {err}"
+    );
+
+    let empty_week = homework_counts(HomeworkCountsInput {
+        week_start: "",
+        first_weekday: 0,
+        blocks: &[],
+        assignments: &assignments,
+        assignments_basis: &[],
+        now: ClockNow::at("2026-09-26", 23, 59),
+    })
+    .unwrap_err();
+    assert!(
+        empty_week.contains("week_start"),
+        "an empty week_start still refuses the full count, got: {empty_week}"
+    );
 }
 
 #[test]

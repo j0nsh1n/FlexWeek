@@ -3,7 +3,8 @@
 
 use flexweek_app::session::unfinished::{
     ClockNow, HomeworkCountsInput, UnfinishedInput, UnfinishedPlanInput, UnfinishedPreviewInput,
-    homework_counts, left_unfinished_items, plan_unfinished, unfinished_items, unfinished_preview,
+    homework_counts, left_unfinished_items, overdue_ids, plan_unfinished, unfinished_items,
+    unfinished_preview,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -126,6 +127,22 @@ fn req_clock<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<ClockNow<'a
     })
 }
 
+/// Overdue homework ids from the due comparison alone, as a JSON list.
+/// A draft week's empty `week_start` is not an input: main's touch path only
+/// compared dues, and the full count refuses that empty week.
+#[pyfunction]
+fn session_overdue_assignment_ids(args: &str) -> PyResult<String> {
+    guard(|| {
+        let map = parse_root(args)?;
+        let ids = overdue_ids(
+            req_assignments(&map, "assignments")?,
+            &req_clock(&map, "now")?,
+        )
+        .map_err(PyValueError::new_err)?;
+        Ok(Value::Array(ids.into_iter().map(Value::String).collect()).to_string())
+    })
+}
+
 /// Unified homework counts for the open week, as JSON text.
 #[pyfunction]
 fn session_homework_counts(args: &str) -> PyResult<String> {
@@ -216,6 +233,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
         session_homework_counts,
+        session_overdue_assignment_ids,
         session_unfinished_items,
         session_unfinished_preview,
         session_plan_unfinished

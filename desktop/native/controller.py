@@ -2813,7 +2813,16 @@ class NativeSession(QObject):
         return json.loads(flexweek_engine.session_unfinished_items(self._unfinished_args()))
 
     def _overdue_assignment_ids(self, assignments: dict[str, dict] | None = None) -> set[str]:
-        return set(self._homework_counts(assignments=assignments)["overdue_assignment_ids"])
+        chosen = self.assignments
+        if assignments is not None:
+            chosen = assignments
+        return set(
+            json.loads(
+                flexweek_engine.session_overdue_assignment_ids(
+                    json.dumps({"assignments": chosen, "now": self._clock_now()})
+                )
+            )
+        )
 
     def consume_unfinished(self) -> list[dict]:
         items = self.unfinished()

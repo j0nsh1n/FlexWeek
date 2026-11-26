@@ -82,7 +82,7 @@ fn screen_now(week_start: &str, now: &ClockNow<'_>) -> Result<Option<Value>, Str
     )
 }
 
-fn overdue_ids(
+pub fn overdue_ids(
     assignments: &Map<String, Value>,
     now: &ClockNow<'_>,
 ) -> Result<Vec<String>, String> {
