@@ -319,6 +319,8 @@ def test_switch_off_with_removed_days_keeps_only_active_days_and_keeps_repeats_w
     assert sheets.form["error"] == "one-off refused"
     assert any(r["id"] == repeat["id"] for r in week.session.repeats)
     monkeypatch.undo()
+    # This week has its own edit (the removed days), so the save asks about edited weeks; answer the default.
+    monkeypatch.setattr(week, "_pose_edited", lambda _line: "keep")
 
     # With validation passing, the stopped one-off keeps only Monday and carries no removed_days.
     sheets.next()
@@ -510,7 +512,7 @@ def test_the_201st_repeat_is_refused_with_the_stores_sentence_and_the_sheet_stay
 
 
 def test_ticking_a_removed_day_back_on_and_saving_this_week_and_later_shows_it_here_too(
-    qapp, week, sheets
+    qapp, week, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Delete Mon–Fri of a weekly fixed time for this week, tick Monday back on, and save "This week
     and later". Monday is drawn this week and next week; Tue–Fri stay off this week only. One Undo
@@ -518,6 +520,8 @@ def test_ticking_a_removed_day_back_on_and_saving_this_week_and_later_shows_it_h
 
     Setup's School block does not ask this on edit: it saves this week only, which already restores
     a ticked day. Monday is day 0 of the week of 2 Nov 2026 (the clock is Thursday 5 Nov)."""
+    # This week's deletion is its own edit, so the later save asks about edited weeks; answer the default.
+    monkeypatch.setattr(week, "_pose_edited", lambda _line: "keep")
     repeat = _add_weekly(qapp, week, sheets, days=tuple(WEEKDAYS))
     sheets.askDeleteBlock(repeat["id"], -1)
     sheets.answer("week")
