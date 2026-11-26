@@ -15,7 +15,9 @@ use flexweek_engine::stored::truthy;
 use flexweek_store::Revision;
 use serde_json::{Map, Value, json};
 
+use super::autosave;
 use super::changes::{self, SaveAnswer, SaveDraft, SaveFailureKind, StepPlace, Travel};
+use super::leaving::Unsaved;
 use super::week::{self, DraftFlags, History, LoadFinish, LoadReply, LoadRoute, ReadWeek, Row};
 
 /// A week's own fields: what the open week holds and what a week set aside keeps.
@@ -566,19 +568,27 @@ impl Drafts {
         self.put("dirty_assignments", json!(ids));
     }
 
-    pub(super) fn save_flags(&self) -> (bool, bool, bool) {
-        (
-            truthy(Some(self.field("conflict"))),
-            self.flags().dirty,
-            self.week.pending.is_some(),
-        )
+    pub(super) fn autosave_week(&self, signed_in: bool) -> autosave::Week {
+        autosave::Week {
+            signed_in,
+            conflict: truthy(Some(self.field("conflict"))),
+            dirty: truthy(Some(self.field("dirty"))),
+            pending: self.week.pending.is_some(),
+        }
     }
 
-    pub(super) fn leave_flags(&self) -> (bool, bool) {
-        (
-            self.flags().held(),
-            week::first_held(&self.parked_flags()).is_some(),
-        )
+    pub(super) fn unsaved_before_leaving(&self) -> Option<Unsaved<'_>> {
+        if self.flags().held() {
+            Some(Unsaved::Open)
+        } else {
+            self.first_parked_held().map(Unsaved::Parked)
+        }
+    }
+
+    fn first_parked_held(&self) -> Option<&str> {
+        self.parked
+            .iter()
+            .find_map(|(start, parked)| flags_of(&parked.fields).held().then_some(start.as_str()))
     }
 
     pub(super) fn versions(&self) -> Value {
@@ -612,7 +622,7 @@ impl Drafts {
             "meta" => Some(json!({
                 "held": self.flags().held(),
                 "parked_count": self.parked_count(),
-                "parked_held": week::first_held(&self.parked_flags()).cloned(),
+                "parked_held": self.first_parked_held(),
             })),
             field if known(field) => Some(self.get(field)),
             _ => None,
@@ -798,9 +808,7 @@ impl Drafts {
                     .collect();
                 Ok(json!({ "weeks": weeks }))
             }
-            "drafts_parked_held" => {
-                Ok(json!({ "week": week::first_held(&self.parked_flags()).cloned() }))
-            }
+            "drafts_parked_held" => Ok(json!({ "week": self.first_parked_held() })),
             "drafts_meta" => Ok(json!({ "held": self.flags().held() })),
             other => Err(format!("no command called {other:?}")),
         }

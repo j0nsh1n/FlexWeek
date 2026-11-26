@@ -3,31 +3,26 @@
 //! save fails, or the wait runs out, it stays open and says so. The window runs the poll's timer and does each
 //! step; the session decides the step.
 
+/// The first unsaved draft to attend to, with the open week taking priority.
+#[derive(Clone, Copy, Debug)]
+pub enum Unsaved<'a> {
+    Open,
+    Parked(&'a str),
+}
+
 /// What the window does on one poll.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
+pub enum Step<'a> {
     /// A request is in flight: poll again.
     Wait,
     /// Save the week on screen (the first time it is found unsaved).
     Save,
     /// Open a week parked with unsaved changes, so it can be saved next.
-    Load,
+    Load(&'a str),
     /// Everything is saved: leave.
     Leave,
     /// The save failed or the wait ran out: stay open and say so.
     GiveUp,
-}
-
-impl Step {
-    pub fn name(self) -> &'static str {
-        match self {
-            Step::Wait => "wait",
-            Step::Save => "save",
-            Step::Load => "load",
-            Step::Leave => "leave",
-            Step::GiveUp => "give_up",
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -53,9 +48,8 @@ impl Leaving {
         };
     }
 
-    /// One poll, `poll_ms` after the last: `busy` (a request in flight), `held` (the week on screen has unsaved
-    /// changes), `parked` (another week does).
-    pub fn poll(&mut self, poll_ms: i64, busy: bool, held: bool, parked: bool) -> Step {
+    /// One poll, `poll_ms` after the last. The session supplies its current request and draft state.
+    pub fn poll<'a>(&mut self, poll_ms: i64, busy: bool, unsaved: Option<Unsaved<'a>>) -> Step<'a> {
         self.waited_ms += poll_ms;
         if self.waited_ms > self.limit_ms {
             return Step::GiveUp;
@@ -63,18 +57,18 @@ impl Leaving {
         if busy {
             return Step::Wait;
         }
-        if held {
-            if self.tried_week {
-                return Step::GiveUp;
+        match unsaved {
+            Some(Unsaved::Open) if self.tried_week => Step::GiveUp,
+            Some(Unsaved::Open) => {
+                self.tried_week = true;
+                Step::Save
             }
-            self.tried_week = true;
-            return Step::Save;
+            Some(Unsaved::Parked(week)) => {
+                self.tried_week = false;
+                Step::Load(week)
+            }
+            None => Step::Leave,
         }
-        if parked {
-            self.tried_week = false;
-            return Step::Load;
-        }
-        Step::Leave
     }
 
     /// What the window says when it gives up.

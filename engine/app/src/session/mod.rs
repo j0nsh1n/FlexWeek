@@ -169,32 +169,15 @@ impl Session {
                 let owner = command["owner"].as_str().map(str::to_string);
                 self.delete_account(text("password")?, owner)
             }
-            Some(cmd @ ("autosave" | "drafts_autosave")) => {
-                let flag = |name: &str| -> Result<bool, String> {
-                    command[name]
-                        .as_bool()
-                        .ok_or_else(|| format!("{name} is true or false"))
-                };
-                let (conflict, dirty, pending) = if cmd == "drafts_autosave" {
-                    self.drafts.save_flags()
-                } else {
-                    (flag("conflict")?, flag("dirty")?, flag("pending")?)
-                };
-                let week = autosave::Week {
-                    signed_in: flag("signed_in")?,
-                    conflict,
-                    dirty,
-                    pending,
-                };
+            Some("drafts_autosave") => {
+                let signed_in = command["signed_in"]
+                    .as_bool()
+                    .ok_or("signed_in is true or false")?;
+                let week = self.drafts.autosave_week(signed_in);
                 let busy = self.status.busy();
-                // The clock is read only when a save could be due, as the window did.
-                let save = !(!week.signed_in || busy || week.conflict)
-                    && self.autosave.due(week, busy, self.frame.steady_ms());
-                let mut answer = json!({ "save": save });
-                if cmd == "drafts_autosave" {
-                    answer["versions"] = self.drafts.versions();
-                }
-                Ok(answer)
+                let save =
+                    week.can_save(busy) && self.autosave.due(week, busy, self.frame.steady_ms());
+                Ok(json!({ "save": save, "versions": self.drafts.versions() }))
             }
             Some("autosave_times") => {
                 let time = |name: &str| -> Result<Option<i64>, String> {
@@ -223,35 +206,36 @@ impl Session {
                 self.autosave.last_try_ms = self.frame.steady_ms();
                 Ok(json!({}))
             }
-            Some("leaving_start") => {
+            Some("drafts_leaving_start") => {
                 let limit = command["limit_ms"]
                     .as_i64()
                     .ok_or("limit_ms is a whole number")?;
-                self.leaving.start(limit, text("again")?);
-                Ok(json!({}))
+                let again = text("again")?;
+                let waiting = self.drafts.unsaved_before_leaving().is_some();
+                if waiting {
+                    self.leaving.start(limit, again);
+                }
+                Ok(json!({ "waiting": waiting, "versions": self.drafts.versions() }))
             }
-            Some(cmd @ ("leaving_poll" | "drafts_leaving_poll")) => {
+            Some("drafts_leaving_poll") => {
                 let poll = command["poll_ms"]
                     .as_i64()
                     .ok_or("poll_ms is a whole number")?;
-                let flag = |name: &str| -> Result<bool, String> {
-                    command[name]
-                        .as_bool()
-                        .ok_or_else(|| format!("{name} is true or false"))
+                let step = self.leaving.poll(
+                    poll,
+                    self.status.busy(),
+                    self.drafts.unsaved_before_leaving(),
+                );
+                let mut answer = match step {
+                    leaving::Step::Wait => json!({ "step": "wait" }),
+                    leaving::Step::Save => json!({ "step": "save" }),
+                    leaving::Step::Load(week) => json!({ "step": "load", "week": week }),
+                    leaving::Step::Leave => json!({ "step": "leave" }),
+                    leaving::Step::GiveUp => {
+                        json!({ "step": "give_up", "words": self.leaving.gave_up_words() })
+                    }
                 };
-                let (held, parked) = if cmd == "drafts_leaving_poll" {
-                    self.drafts.leave_flags()
-                } else {
-                    (flag("held")?, flag("parked")?)
-                };
-                let step = self.leaving.poll(poll, self.status.busy(), held, parked);
-                let mut answer = json!({ "step": step.name() });
-                if cmd == "drafts_leaving_poll" {
-                    answer["versions"] = self.drafts.versions();
-                }
-                if step == leaving::Step::GiveUp {
-                    answer["words"] = json!(self.leaving.gave_up_words());
-                }
+                answer["versions"] = self.drafts.versions();
                 Ok(answer)
             }
             Some("say") => {
