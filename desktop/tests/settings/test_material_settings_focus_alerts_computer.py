@@ -12,8 +12,9 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from backend import clock as wall_clock
-from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
+from desktop.native.window import SIGN_OUT_QUESTION, WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.logic_support import sign_in
 from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
@@ -28,7 +29,7 @@ from desktop.tests.settings.support_material_settings import (
     _texts,
 )
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import PASSWORD, USERNAME, qapp  # noqa: F401
 
 # ruff: noqa: F811
 
@@ -751,3 +752,154 @@ def test_restarting_a_code_by_keyboard_keeps_focus_in_the_dialog(
     wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is False)
     _pump(qapp, 5)
     assert scene.activeFocusItem().objectName() == "pairCopy"
+
+
+def test_this_computer_sign_out_shows_who_is_signed_in_and_asks_before_leaving(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sign out is the row under Account. Cancel stays signed in with Settings still open.
+    Sign out runs the same leaving as the More menu, once."""
+    out: list[int] = []
+    monkeypatch.setattr(window.session, "logout", lambda: out.append(1))
+    root = _open_settings(qapp, window, "computer")
+    account = _named(root, "row_account")[0]
+    row = _named(root, "row_signOut")[0]
+    button = _named(root, "signOut")[0]
+    name = str(window.session.account["username"])
+    rows = [
+        str(child.objectName())
+        for child in row.parentItem().childItems()
+        if str(child.objectName()).startswith("row_")
+    ]
+    assert rows[rows.index("row_account") + 1] == "row_signOut"
+    assert str(account.property("subtitle")) == "Name, password, recovery codes and your files."
+    assert str(row.property("title")) == "Sign out"
+    assert str(row.property("subtitle")) == f"Signed in as {name}. Your week is saved first."
+    assert str(button.property("text")) == "Sign out"
+    assert button.property("enabled") is True
+
+    _click(qapp, window, button)
+    sheets = _bridge(window).sheets
+    ask = dict(sheets.property("ask"))
+    assert ask["id"] == "sign-out"
+    assert ask["title"] == "Sign out"
+    assert ask["body"] == SIGN_OUT_QUESTION.format(where="this computer")
+    assert [answer["label"] for answer in ask["answers"]] == ["Cancel", "Sign out"]
+    sheets.answer("stay")
+    _pump(qapp, 20)
+    assert out == []
+    assert window.session.account is not None
+    assert dict(sheets.property("ask")) == {}
+    assert _bridge(window).property("screen") == "settings"
+    assert _panel(window).property("state")["section"] == "computer"
+
+    _click(qapp, window, _named(root, "signOut")[0])
+    sheets.answer("yes")
+    _pump(qapp, 20)
+    assert out == [1]
+    assert dict(sheets.property("ask")) == {}
+
+
+def test_this_computer_sign_out_is_disabled_while_the_session_is_busy(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[str] = []
+    monkeypatch.setattr(window, "_log_out", lambda: asked.append("signOut"))
+    root = _open_settings(qapp, window, "computer")
+    button = _named(root, "signOut")[0]
+    assert button.property("enabled") is True
+    built: list[str] = []
+    _panel(window).changed.connect(lambda: built.append("changed"))
+    window.session.busy = True
+    try:
+        window.session.busy_changed.emit(True)
+        _pump(qapp, 20)
+        assert button.property("enabled") is False
+        assert built == [], "a busy toggle rebuilds Settings"
+        _panel(window).signOut()
+        assert asked == []
+        assert dict(_bridge(window).sheets.property("ask")) == {}
+    finally:
+        window.session.busy = False
+        window.session.busy_changed.emit(False)
+    _pump(qapp, 20)
+    assert button.property("enabled") is True
+    assert built == [], "clearing busy rebuilds Settings"
+
+
+def test_the_sign_out_row_does_not_name_a_missing_account(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """No account name means the row says the week is saved, and nothing else."""
+    root = _open_settings(qapp, window, "computer")
+    row = _named(root, "row_signOut")[0]
+    held = dict(window.session.account)
+    window.session.account = {"id": held["id"]}
+    window.session.week_changed.emit()
+    _pump(qapp)
+    subtitle = str(row.property("subtitle"))
+    assert subtitle == "Your week is saved first."
+    assert "Signed in as ." not in subtitle
+    for item in _texts(row):
+        assert "Signed in as ." not in str(item.property("text"))
+    window.session.account = held
+
+
+def test_signing_out_of_this_computer_opens_the_week_without_the_old_drafts(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Sign out, then sign in: Week is showing, and the drafts left in Settings are gone."""
+    root = _open_settings(qapp, window, "computer")
+    panel = _panel(window)
+    panel.addWorkCustom()
+    panel.toggleSchoolDay(6)
+    panel.setSpotify("not-a-link")
+    saved_clock = (window.session.preferences or {}).get("clock_24h") is True
+    panel._sync_problem = "Sync failed: the old phone"
+    panel._unsaved = {"clock_24h": not saved_clock}
+    panel.setReminderLead(999)
+    _pump(qapp)
+    before = panel.property("state")
+    assert before["section"] == "computer"
+    assert before["studyDirty"] is True
+    assert before["schoolDirty"] is True
+    assert before["spotifyError"] == "Use a link that starts with https://open.spotify.com."
+    assert before["notice"] == "Couldn't save that change. Try again."
+    assert before["syncProblem"] == "Sync failed: the old phone"
+    assert before["clock24"] is not saved_clock
+
+    _click(qapp, window, _named(root, "signOut")[0])
+    # Left for last: the remove-phone prompt covers This computer and would take the click above.
+    panel._remove_ask = {"id": "old", "name": "Old phone"}
+    panel._publish()
+    assert panel.property("state")["askRemove"] is True
+    _bridge(window).sheets.answer("yes")
+    wait_until(qapp, lambda: window.session.account is None and not window.session.busy)
+    _pump(qapp)
+    page = window._material_page
+    assert page is not None and page.root is not None
+    signed_out_rows = _named(page.root, "row_signOut")
+    if signed_out_rows:
+        assert str(signed_out_rows[0].property("subtitle")) == "Your week is saved first."
+    for item in _texts(page.root):
+        assert "Signed in as ." not in str(item.property("text"))
+
+    sign_in(qapp, window, USERNAME, PASSWORD)
+    wait_until(
+        qapp,
+        lambda: window.session.account is not None
+        and window.session.preferences is not None
+        and not window.session.busy,
+    )
+    _pump(qapp)
+    assert _bridge(window).property("screen") == "week"
+    state = panel.property("state")
+    assert state["section"] == "look"
+    assert state["page"] == "sections"
+    assert state["studyDirty"] is False
+    assert state["schoolDirty"] is False
+    assert state["notice"] == ""
+    assert state["spotifyError"] == ""
+    assert state["syncProblem"] == ""
+    assert state["askRemove"] is False
+    assert state["clock24"] is ((window.session.preferences or {}).get("clock_24h") is True)

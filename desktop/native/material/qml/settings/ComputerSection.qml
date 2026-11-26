@@ -37,8 +37,18 @@ SectionPage {
         LinkRow {
             key: "account"
             title: "Account"
-            subtitle: "Name, password and sign out."
+            subtitle: "Name, password, recovery codes and your files."
             onClicked: page.panel.openAccount()
+        }
+        ActionRow {
+            key: "signOut"
+            title: "Sign out"
+            subtitle: page.st.accountName
+                ? "Signed in as " + page.st.accountName + ". Your week is saved first."
+                : "Your week is saved first."
+            buttonText: "Sign out"
+            buttonEnabled: !page.panel.sessionBusy
+            onActivated: page.panel.signOut()
         }
         LinkRow {
             key: "setup"

@@ -216,6 +216,27 @@ def test_a_taller_account_sheet_shows_a_scroll_bar_and_every_action_is_reachable
     assert _asking(sheets) != "", "Delete account is reached by scrolling and asks first"
 
 
+def _sign_out_labels(item: QObject) -> list[str]:
+    found: list[str] = []
+    text = item.property("text")
+    if text is not None and str(text) == "Sign out":
+        found.append(str(text))
+    if hasattr(item, "childItems"):
+        for child in item.childItems():
+            found.extend(_sign_out_labels(child))
+    return found
+
+
+def test_manage_account_has_no_sign_out_button(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    """Sign out lives on Settings > This computer. Manage account does not offer it."""
+    _open_account(qapp, shell, sheets)
+    assert named(_root(shell), "accountSignOut") == []
+    assert _sign_out_labels(_one(shell, "accountSheet")) == []
+    assert _text(shell, "sheetTitle") == "Manage account"
+
+
 def test_no_recovery_codes_left_is_said_as_a_problem(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     shell.session.recovery_remaining = 0
     _open_account(qapp, shell, sheets)

@@ -931,6 +931,8 @@ class SettingsBridge(QObject):
     """The five sections, and the advanced page that stays a draft until Done."""
 
     changed = Signal()
+    # The Sign out button reads this on its own. A busy request must not rebuild Settings.
+    busyChanged = Signal()
 
     def __init__(self, parent: QObject) -> None:
         super().__init__(parent)
@@ -997,9 +999,13 @@ class SettingsBridge(QObject):
         self._state: dict[str, Any] = {}
         self._preview = PreviewBridge(parent, self)
         session = getattr(self._window, "session", None)
+        self._session_busy = bool(getattr(session, "busy", False))
         signal = getattr(session, "week_changed", None)
         if signal is not None:
             signal.connect(self._on_session)
+        busy = getattr(session, "busy_changed", None)
+        if busy is not None:
+            busy.connect(self._on_busy)
         week_start_notice().changed.connect(self._on_week_start)
         # The phone list and the sync dot change on the window's own clock, so This computer is read again
         # every few seconds while it is the page on view.
@@ -1072,6 +1078,42 @@ class SettingsBridge(QObject):
             self._publish()
         except OSError, KeyError, ValueError:
             return
+
+    def _on_busy(self, busy: bool) -> None:
+        busy = bool(busy)
+        if busy == self._session_busy:
+            return
+        self._session_busy = busy
+        self.busyChanged.emit()
+
+    @Property(bool, notify=busyChanged)
+    def sessionBusy(self) -> bool:
+        return self._session_busy
+
+    def clear_account(self) -> None:
+        """Drop this account's Settings drafts and notices. The next sign-in reads its own."""
+        leftover = (
+            self._section != "look"
+            or self._page != "sections"
+            or bool(self._unsaved)
+            or bool(self._notice)
+            or bool(self._spotify_error)
+            or bool(self._sync_problem)
+            or bool(self._remove_ask)
+            or self._study.dirty
+            or self._school.dirty
+        )
+        self._section = "look"
+        self._page = "sections"
+        self._unsaved = {}
+        self._notice = ""
+        self._spotify_error = ""
+        self._sync_problem = ""
+        self._remove_ask = {}
+        self._study.dirty = False
+        self._school.dirty = False
+        if leftover:
+            self._publish()
 
     def _worn_dark(self) -> bool:
         from desktop.native.material.host import appearance_of
@@ -1151,6 +1193,8 @@ class SettingsBridge(QObject):
         sync_word, sync_tone = SYNC_STATUS_LABELS.get(sync_key, ("Not linked", "muted"))
         self._phones_seen = (phone_rows, sync_words, sync_key)
         problems = self._problem_rows()
+        session = getattr(self._window, "session", None)
+        account = getattr(session, "account", None) or {}
         return {
             "section": self._section,
             "page": self._page,
@@ -1254,6 +1298,7 @@ class SettingsBridge(QObject):
             "developerBuilds": self._window._updates.get("developer_builds") is True,
             "developerBuildsOffered": offers_developer_builds(install_kind()),
             "feedbackAvailable": feedback.available(),
+            "accountName": str(account.get("username") or ""),
             "version": (
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
@@ -2645,6 +2690,13 @@ class SettingsBridge(QObject):
     @Slot()
     def openAccount(self) -> None:
         self._window._open_account()
+
+    @Slot()
+    def signOut(self) -> None:
+        session = getattr(self._window, "session", None)
+        if session is not None and session.busy:
+            return
+        self._window._log_out()
 
     @Slot()
     def runSetup(self) -> None:

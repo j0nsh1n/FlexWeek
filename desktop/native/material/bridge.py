@@ -216,7 +216,12 @@ class MaterialBridge(QObject):
         session = self._window.session
         account = session.account
         if account is None:
+            # Signing out from Week leaves the week on screen. Settings must do the same, and its
+            # drafts belong to the account that left. More's Sign out uses this path too.
             self._opened_for = None
+            self._settings_bridge.clear_account()
+            if self._screen == "settings":
+                self.open_page("week")
             return
         prefs = session.preferences
         if prefs is None or self._opened_for == str(account["id"]):
