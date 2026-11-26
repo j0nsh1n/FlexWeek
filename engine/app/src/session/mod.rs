@@ -27,6 +27,7 @@ pub mod reminders;
 pub mod spotify;
 pub mod status;
 pub mod transfer;
+pub mod unfinished;
 pub mod week;
 pub mod words;
 
