@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from backend import clock as wall_clock
-from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
+from desktop.native.window import SIGN_OUT_QUESTION, WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.settings.support_material_settings import (
@@ -751,3 +751,70 @@ def test_restarting_a_code_by_keyboard_keeps_focus_in_the_dialog(
     wait_until(qapp, lambda: _panel(window).property("state").get("pairStarting") is False)
     _pump(qapp, 5)
     assert scene.activeFocusItem().objectName() == "pairCopy"
+
+
+def test_this_computer_sign_out_shows_who_is_signed_in_and_asks_before_leaving(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sign out is the row under Account. Cancel stays signed in with Settings still open.
+    Sign out runs the same leaving as the More menu, once."""
+    out: list[int] = []
+    monkeypatch.setattr(window.session, "logout", lambda: out.append(1))
+    root = _open_settings(qapp, window, "computer")
+    account = _named(root, "row_account")[0]
+    row = _named(root, "row_signOut")[0]
+    button = _named(root, "signOut")[0]
+    name = str(window.session.account["username"])
+    rows = [
+        str(child.objectName())
+        for child in row.parentItem().childItems()
+        if str(child.objectName()).startswith("row_")
+    ]
+    assert rows[rows.index("row_account") + 1] == "row_signOut"
+    assert str(account.property("subtitle")) == "Name, password, recovery codes and your files."
+    assert str(row.property("title")) == "Sign out"
+    assert str(row.property("subtitle")) == f"Signed in as {name}. Your week is saved first."
+    assert str(button.property("text")) == "Sign out"
+    assert button.property("enabled") is True
+
+    _click(qapp, window, button)
+    sheets = _bridge(window).sheets
+    ask = dict(sheets.property("ask"))
+    assert ask["id"] == "sign-out"
+    assert ask["title"] == "Sign out"
+    assert ask["body"] == SIGN_OUT_QUESTION.format(where="this computer")
+    assert [answer["label"] for answer in ask["answers"]] == ["Cancel", "Sign out"]
+    sheets.answer("stay")
+    _pump(qapp, 20)
+    assert out == []
+    assert window.session.account is not None
+    assert dict(sheets.property("ask")) == {}
+    assert _bridge(window).property("screen") == "settings"
+    assert _panel(window).property("state")["section"] == "computer"
+
+    _click(qapp, window, _named(root, "signOut")[0])
+    sheets.answer("yes")
+    _pump(qapp, 20)
+    assert out == [1]
+    assert dict(sheets.property("ask")) == {}
+
+
+def test_this_computer_sign_out_is_disabled_while_the_session_is_busy(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[str] = []
+    monkeypatch.setattr(window, "_log_out", lambda: asked.append("signOut"))
+    root = _open_settings(qapp, window, "computer")
+    button = _named(root, "signOut")[0]
+    assert button.property("enabled") is True
+    window.session.busy = True
+    try:
+        window.session.busy_changed.emit(True)
+        _pump(qapp, 20)
+        assert button.property("enabled") is False
+        _panel(window).signOut()
+        assert asked == []
+        assert dict(_bridge(window).sheets.property("ask")) == {}
+    finally:
+        window.session.busy = False
+        window.session.busy_changed.emit(False)

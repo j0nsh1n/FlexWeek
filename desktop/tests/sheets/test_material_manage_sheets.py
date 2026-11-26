@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog
 from desktop.native.account_copy import READ_WEEK_FAILED, REPLACE_WEEK_QUESTION
 from desktop.native.files import EXPORT_FORMAT
 from desktop.native.reuse import week_label
-from desktop.native.window import SIGN_OUT_QUESTION, NativeWindow
+from desktop.native.window import NativeWindow
 from desktop.tests.material_support import focus_quick, named, pump, quick_of, quick_window_of
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     open_light,
@@ -216,60 +216,13 @@ def test_a_taller_account_sheet_shows_a_scroll_bar_and_every_action_is_reachable
     assert _asking(sheets) != "", "Delete account is reached by scrolling and asks first"
 
 
-def test_manage_account_sign_out_asks_the_same_question_and_signing_out_leaves_once(
-    qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
+def test_manage_account_has_no_sign_out_button(
+    qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
-    """Sign out sits above Delete account. Yes runs the More menu's sign-out; Cancel stays signed in."""
-    out: list[int] = []
-    monkeypatch.setattr(shell.session, "logout", lambda: out.append(1))
+    """Sign out lives on Settings > This computer. Manage account does not offer it."""
     _open_account(qapp, shell, sheets)
-    button = _one(shell, "accountSignOut")
-    delete = _one(shell, "deleteAccount")
-    content = _one(shell, "sheetBody").property("contentItem")
-    assert str(button.property("text")) == "Sign out"
-    assert button.property("enabled") is True
-    assert str(button.property("kind")) not in ("danger", "danger-outlined")
-    assert button.mapToItem(content, 0, 0).y() < delete.mapToItem(content, 0, 0).y()
-
-    _type(shell, "currentPassword", "typed-before-cancel")
-    _click(shell, "accountSignOut")
-    ask = dict(sheets.property("ask"))
-    assert ask["id"] == "sign-out"
-    assert ask["title"] == "Sign out"
-    assert ask["body"] == SIGN_OUT_QUESTION.format(where="this computer")
-    assert [answer["label"] for answer in ask["answers"]] == ["Cancel", "Sign out"]
-    sheets.answer("stay")
-    assert out == []
-    assert shell.session.account is not None
-    assert _asking(sheets) == "" and _kind(sheets) == "account"
-    assert str(_one(shell, "currentPassword").property("text")) == "typed-before-cancel"
-
-    _click(shell, "accountSignOut")
-    sheets.answer("yes")
-    assert out == [1]
-    assert dict(sheets.property("ask")) == {}
-    assert _kind(sheets) == "", "Manage account stayed open under the sign-in screen"
-
-
-def test_manage_account_sign_out_is_disabled_while_the_session_is_busy(
-    qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    asked: list[str] = []
-    monkeypatch.setattr(shell, "_log_out", lambda: asked.append("signOut"))
-    _open_account(qapp, shell, sheets)
-    button = _one(shell, "accountSignOut")
-    assert button.property("enabled") is True
-    shell.session.busy = True
-    try:
-        shell.session.busy_changed.emit(True)
-        pump(qapp, 20)
-        assert button.property("enabled") is False
-        sheets.accountAct("signOut", "", "")
-        assert asked == []
-        assert _asking(sheets) == ""
-    finally:
-        shell.session.busy = False
-        shell.session.busy_changed.emit(False)
+    assert named(_root(shell), "accountSignOut") == []
+    assert _text(shell, "sheetTitle") == "Manage account"
 
 
 def test_no_recovery_codes_left_is_said_as_a_problem(qapp: QApplication, shell: NativeWindow, sheets) -> None:
