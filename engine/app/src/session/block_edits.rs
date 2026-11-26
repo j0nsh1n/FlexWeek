@@ -7,11 +7,13 @@ use flexweek_engine::desk::calendar::is_series_checked;
 use flexweek_engine::desk::grid::{
     apply_block_edit as grid_apply, delete_occurrence, is_standing_block,
 };
+use flexweek_engine::desk::weekmodel::moved_words;
 use flexweek_engine::shown::{
-    apply_repeats_to_shown_week, family_id, replaced_repeat_on_shown_week,
+    apply_repeats_to_shown_week, family_id, one_day_note_on_shown_week,
+    replaced_repeat_on_shown_week,
 };
 use flexweek_engine::standing::remove_for_week;
-use flexweek_engine::stored::truthy;
+use flexweek_engine::stored::{py_str, truthy, type_name};
 use flexweek_engine::{EngineError, ErrorKind, repeats};
 use flexweek_service::blocks::check_block;
 use serde_json::{Value, json};
@@ -484,4 +486,165 @@ pub fn setup_standing(blocks: &Value, repeats: &Value) -> Result<Vec<Value>, Eng
     }
     made.extend(weekly);
     Ok(made)
+}
+
+fn days_contain(days: &Value, day: i64) -> Result<bool, EngineError> {
+    let Value::Array(items) = days else {
+        return Err(EngineError {
+            kind: ErrorKind::Type,
+            message: format!("argument of type '{}' is not iterable", type_name(days)),
+        });
+    };
+    Ok(items.iter().any(|item| match item {
+        Value::Number(number) => {
+            number.as_i64() == Some(day)
+                || number
+                    .as_f64()
+                    .is_some_and(|float| float.fract() == 0.0 && float == day as f64)
+        }
+        Value::Bool(flag) => i64::from(*flag) == day,
+        _ => false,
+    }))
+}
+
+/// Whether `block_id` exists in `blocks`.
+pub fn has_block(blocks: &Value, block_id: &str) -> Result<bool, EngineError> {
+    let blocks = rows(blocks, "blocks")?;
+    Ok(blocks
+        .iter()
+        .any(|item| item.get("id").and_then(Value::as_str) == Some(block_id)))
+}
+
+/// What `place_block` announces after a hand move succeeds: the moved sentence plus, for a
+/// repeating block, the one-day note naming where every week is changed. Material has School hours
+/// under Settings > Planning, so School's note points there rather than Setup. `None` when the
+/// block is not in `blocks`.
+pub fn place_block_words(
+    blocks: &Value,
+    block_id: &str,
+    from_day: i64,
+    day: i64,
+    start: i64,
+    end: i64,
+    week_start: &str,
+) -> Result<Option<String>, EngineError> {
+    let blocks = rows(blocks, "blocks")?;
+    let Some(block) = blocks
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(block_id))
+    else {
+        return Ok(None);
+    };
+    let days = block.get("days").ok_or_else(|| EngineError::key("days"))?;
+    let origin = if days_contain(days, from_day)? {
+        from_day
+    } else {
+        day
+    };
+    let mut words = moved_words(block, origin, day, start, end, week_start)?;
+    if let Some(note) = one_day_note_on_shown_week(week_start, block, origin, true)?
+        && !note.is_empty()
+    {
+        words = format!("{words} {note}");
+    }
+    Ok(Some(words))
+}
+
+/// What `_resume_pending` schedules once the session is no longer busy: any queued hand move, and
+/// whether pending setup writes should flush.
+#[derive(Debug, PartialEq)]
+pub struct ResumePending {
+    pub place: Option<Value>,
+    pub flush_setup: bool,
+}
+
+impl ResumePending {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "place": self.place,
+            "flush_setup": self.flush_setup,
+        })
+    }
+}
+
+pub fn resume_pending(
+    busy: bool,
+    hand_waiting: Option<&Value>,
+    has_setup_prefs: bool,
+    has_setup_work_windows: bool,
+    has_setup_week: bool,
+) -> ResumePending {
+    if busy {
+        return ResumePending {
+            place: None,
+            flush_setup: false,
+        };
+    }
+    ResumePending {
+        place: hand_waiting.filter(|value| !value.is_null()).cloned(),
+        flush_setup: has_setup_prefs || has_setup_work_windows || has_setup_week,
+    }
+}
+
+/// Which block and scope `delete_selected` removes. `None` when nothing is selected or the
+/// selected block is not on the week.
+#[derive(Debug, PartialEq)]
+pub struct DeleteSelectedPlan {
+    pub block_id: String,
+    pub scope: &'static str,
+    pub day: Option<i64>,
+}
+
+impl DeleteSelectedPlan {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "block_id": self.block_id,
+            "scope": self.scope,
+            "day": self.day,
+        })
+    }
+}
+
+pub fn delete_selected_plan(
+    blocks: &Value,
+    selected_block_id: Option<&str>,
+    selected_occurrence_day: Option<i64>,
+) -> Result<Option<DeleteSelectedPlan>, EngineError> {
+    let Some(selected) = selected_block_id else {
+        return Ok(None);
+    };
+    let blocks = rows(blocks, "blocks")?;
+    let Some(block) = blocks
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(selected))
+    else {
+        return Ok(None);
+    };
+    let scope = if is_series_checked(block)? {
+        "occurrence"
+    } else {
+        "series"
+    };
+    Ok(Some(DeleteSelectedPlan {
+        block_id: selected.to_string(),
+        scope,
+        day: selected_occurrence_day,
+    }))
+}
+
+/// The Undo step label for `unpin_assignment`: `"unpinning <title>"`, falling back to `"homework"`
+/// when the assignment or its title is missing or blank.
+pub fn unpin_label(assignments: &Value, assignment_id: &str) -> Result<String, EngineError> {
+    let map = assignments.as_object().ok_or_else(|| EngineError {
+        kind: ErrorKind::Type,
+        message: "the assignments are an object".to_string(),
+    })?;
+    let title = map
+        .get(assignment_id)
+        .and_then(Value::as_object)
+        .and_then(|item| item.get("title"))
+        .filter(|value| truthy(Some(value)))
+        .map(py_str)
+        .unwrap_or_else(|| "homework".to_string());
+    Ok(format!("unpinning {title}"))
 }
