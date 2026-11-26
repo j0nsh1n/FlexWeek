@@ -91,7 +91,7 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     override fun cancelSync() { native.cancelSync() }
     override fun unlink() {
         val result = JSONObject(native.unlink())
-        check(result.optBoolean("ok")) { result.optString("error", "Could not unlink. Try again.") }
+        check(result.optBoolean("ok")) { result.optString("error", "Couldn't unpair this computer. Try again.") }
     }
     override fun isPaired(): Boolean = JSONObject(syncStatus()).optBoolean("has_account")
 

@@ -178,7 +178,8 @@ def test_deleting_soccer_just_this_week_leaves_it_in_the_week_after(qapp, after_
     assert standing(after_setup) == EXPECTED
     go_to(qapp, after_setup, plus_weeks(setup_week, 1))
     soccer = next(b for b in after_setup.blocks if b["id"] == "activity-1")
-    assert soccer["missed_days"] == [1, 3]
+    assert soccer["removed_days"] == [1, 3]
+    assert not soccer.get("missed_days")
 
 
 def test_deleting_soccer_every_week_takes_it_from_later_weeks_only(qapp, after_setup) -> None:

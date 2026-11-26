@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 /// The restore points the window lists, newest first.
 pub const RESTORE_POINT_LIMIT: usize = 20;
 
-pub const PREVIEW_FIRST: &str = "Preview the restore point first.";
+pub const PREVIEW_FIRST: &str = "Preview the saved copy first.";
 
 /// The list after a restore point was made: the new one first, any older one with the same id gone, and
 /// no more than [`RESTORE_POINT_LIMIT`].

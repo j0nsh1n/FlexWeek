@@ -95,7 +95,7 @@ def test_fixed_time_checks_end_after_start_and_previews_a_clash(sheets) -> None:
     sheets.setText("start", "09:00")
     # School is Monday 08:00 to 14:30. Material draws the two overlapped, one a little over the other
     # (Jonathan, 2026-11-08), so the sheet says that, not "side by side".
-    assert sheets.form["clash"] == "School is at that time too. Both will show, one slightly over the other."
+    assert sheets.form["clash"] == "School is at that time too. Both will stay visible and overlap slightly."
     sheets.setNumber("end", 9 * 60)
     assert sheets.form["durationIsProblem"] is True
     assert sheets.form["durationLine"].startswith("End needs to be later than Start")

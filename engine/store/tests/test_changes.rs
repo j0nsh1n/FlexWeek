@@ -386,7 +386,7 @@ fn a_stale_assignment_revision_writes_nothing() {
     });
     assert_eq!(
         apply_shown(&conn, user_id, &input),
-        Err("This assignment changed in another window. Reload before saving. @ 1".into()),
+        Err("This homework changed in another window. Reload before saving. @ 1".into()),
         "app.py:206 a stale revision names the conflict and the current revision"
     );
     assert_eq!(assignment_title(&conn, user_id, "essay"), "Essay");

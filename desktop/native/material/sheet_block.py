@@ -92,7 +92,8 @@ class BlockDraft:
         self.step: int | None = None if self.existing else 0
         original = self.original
         self.title: str = original["title"]
-        self.days: list[int] = sorted(original["days"])
+        # A day deleted from this week only is not on the sheet: it shows unticked and is not counted.
+        self.days: list[int] = self._active_days()
         self.start: int = hhmm_to_minutes(original.get("start") or start)
         self.length: int = int(original["duration_min"])
         self.end: int = min(self.start + self.length, DAY_END)
@@ -101,7 +102,7 @@ class BlockDraft:
         self.guessing = not self.existing and not self.category
         if self.guessing:
             self.category = guess_locked_category(_clock(self.start))
-        self.series = self.existing and is_series(original)
+        self.series = self.existing and is_series({**original, "days": self._active_days()})
         self.scope = "occurrence" if self.series and occurrence_day is not None else "series"
         self.series_days: list[int] | None = None
         if self.scope == "occurrence":
@@ -169,6 +170,11 @@ class BlockDraft:
         self.days = turned_days
         self._opened_as = (title, tuple(turned(opened_days)), *rest)
         self._days_week = week
+
+    def _active_days(self) -> list[int]:
+        """The original's days that are still on this week: those not deleted for this week only."""
+        removed = set(self.original.get("removed_days") or [])
+        return sorted(day for day in self.original["days"] if day not in removed)
 
     def _picture(self) -> tuple:
         return (
@@ -281,7 +287,7 @@ class BlockDraft:
             self.series_days = list(self.days)
             self.days = [self.occurrence_day]
         elif scope == "series" and self.scope == "occurrence":
-            self.days = sorted(self.series_days or self.original["days"])
+            self.days = sorted(self.series_days or self._active_days())
             self.series_days = None
         self.scope = scope
 
@@ -364,7 +370,7 @@ class BlockDraft:
         for day in self.days:
             found = span_clash(self.session.blocks, self.original["id"], day, self.start, self.end)
             if found:
-                return f"{found} is at that time too. Both will show, one slightly over the other."
+                return f"{found} is at that time too. Both will stay visible and overlap slightly."
         return ""
 
     def candidate(self) -> dict | None:
@@ -394,10 +400,24 @@ class BlockDraft:
         else:
             made["missed_days"] = [day for day in made.get("missed_days", []) if day in made["days"]]
         if made["kind"] != "locked":
-            self.error = "Use the homework editor for flexible work."
+            self.error = "Use the homework editor for homework sessions."
             return None
         if self.scope == "occurrence" and self.series_days is not None:
             made["days"] = sorted(self.series_days)
+        if not made["days"]:
+            self.days_problem = BLOCK_PROBLEMS["days"]
+            self.step = 1 if self.step is not None else None
+            return None
+        if "removed_days" in made:
+            # A day the student ticked back on is no longer removed; the rest stay removed and stay
+            # among the block's days, which the sheet never showed ticked.
+            ticked = set(made["days"])
+            kept = [day for day in made["removed_days"] if day not in ticked]
+            made["days"] = sorted(ticked | set(kept))
+            if kept:
+                made["removed_days"] = kept
+            else:
+                del made["removed_days"]
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(made)])
         except ValidationError as error:
@@ -411,12 +431,26 @@ class BlockDraft:
             else:
                 self.error = message
             return None
-        problem = self._until_problem(made["days"])
+        problem = self._until_problem(self._series_days_now())
         if problem:
             self.until_problem_text = problem
             self.step = 1 if self.step is not None else None
             return None
         return made
+
+    def stopped_one_off(self, made: dict) -> dict | None:
+        """The one-off kept for this week when a weekly fixed time stops repeating. Days deleted from
+        this week only stay gone, and the one-off id never carries removed_days."""
+        removed = set(made.get("removed_days") or [])
+        kept = [day for day in (made.get("days") or []) if day not in removed]
+        if not kept:
+            return None
+        alone = {key: value for key, value in made.items() if key not in ("until", "removed_days")}
+        alone["id"] = self.family[len(WEEKLY_PREFIX) :]
+        alone["days"] = kept
+        if "missed_days" in alone:
+            alone["missed_days"] = [day for day in alone["missed_days"] if day in kept]
+        return alone
 
     def _until_problem(self, days: list[int]) -> str:
         """The sentence for an Until the repeat cannot use, from the engine. None with the switch off."""
@@ -465,6 +499,7 @@ class BlockDraft:
         if base is None:
             body = deepcopy(made)
             body.pop("missed_days", None)
+            body.pop("removed_days", None)
             body["days"] = self._week_to_monday(self.days)
             body["id"] = WEEKLY_PREFIX + (str(made["id"]) if self.existing else str(uuid4()))
         else:
@@ -537,7 +572,7 @@ class BlockDraft:
             day_name = day_full_names(week)[self.occurrence_day]
             question = f"Delete {name} on {day_name} {stamp.day} {stamp.strftime('%b')} only?"
         else:
-            days = day_range_and_words(self.original.get("days") or [], self._week())
+            days = day_range_and_words(self._active_days(), self._week())
             question = f"Delete {name} on every {days} this week?"
         if is_standing_block(self.original):
             answers = [{"id": "stay", "label": "Cancel", "kind": "text"}]
@@ -617,8 +652,7 @@ class BlockDraft:
     def _scope_choices(self) -> list[dict]:
         days = (
             (self.series_days if self.scope == "occurrence" and self.series_days is not None else self.days)
-            or self.original.get("days")
-            or []
+            or self._active_days()
         )
         return [
             {"value": "occurrence", "label": "This day only"},
@@ -712,7 +746,7 @@ class BlockDraft:
             "seriesNote": (
                 "Changes apply to every selected day in this series."
                 if self.existing
-                and len(self.original.get("days") or []) > 1
+                and len(self._active_days()) > 1
                 and not (self.series and self.occurrence_day is not None)
                 else ""
             ),

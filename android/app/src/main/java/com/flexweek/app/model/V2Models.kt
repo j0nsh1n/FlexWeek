@@ -105,7 +105,7 @@ object WeekRowWords {
     private const val HOURS_PER_HALF_DAY = 12
 
     fun right(minutes: Int, heavy: Boolean, lastClassEnd: Int?): String = when {
-        minutes > 0 -> duration(minutes) + if (heavy) " · heavy" else ""
+        minutes > 0 -> duration(minutes) + if (heavy) " · busy day" else ""
         lastClassEnd != null -> "free after ${clock(lastClassEnd)}"
         else -> "free"
     }
@@ -120,7 +120,7 @@ object WeekRowWords {
 
     /** What a day's heading says on its right: the homework time, or when school lets out on a day with none. */
     fun dayTotal(minutes: Int, heavy: Boolean, lastClassEnd: Int?): String = when {
-        minutes > 0 -> duration(minutes) + if (heavy) " · heavy" else ""
+        minutes > 0 -> duration(minutes) + if (heavy) " · busy day" else ""
         lastClassEnd != null -> "free after ${clock(lastClassEnd)}"
         else -> ""
     }
@@ -131,7 +131,7 @@ object WeekRowWords {
         return when {
             hours == 0 -> "$rest min"
             rest == 0 -> "$hours h"
-            else -> "$hours h $rest"
+            else -> "$hours h $rest min"
         }
     }
 

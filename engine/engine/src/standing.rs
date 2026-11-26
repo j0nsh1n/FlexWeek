@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::EngineResult;
 use crate::desk::grid::is_setup_block;
@@ -17,11 +17,46 @@ fn id_of(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
 }
 
-/// The block as it stands in every week: missed days belong to one week, never to the standing one.
+pub fn removed_on(block: &Value, day: &Value) -> bool {
+    block
+        .get("removed_days")
+        .and_then(Value::as_array)
+        .is_some_and(|days| days.contains(day))
+}
+
+pub fn keep_removed_days(fields: &mut Map<String, Value>) {
+    if let Some(Value::Array(mut removed)) = fields.shift_remove("removed_days") {
+        removed.retain(|day| {
+            fields
+                .get("days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| days.contains(day))
+        });
+        if !removed.is_empty() {
+            fields.insert("removed_days".into(), Value::Array(removed));
+        }
+    }
+}
+
+/// Keep a week's copy so the standing block cannot fill it in again.
+pub fn remove_for_week(mut block: Value) -> Value {
+    let missed = block.get("missed_days").and_then(Value::as_array);
+    let removed: Vec<i64> = days_of(&block)
+        .into_iter()
+        .filter(|day| !missed.is_some_and(|missed| missed.contains(&Value::from(*day))))
+        .collect();
+    if !removed.is_empty() {
+        block["removed_days"] = json!(removed);
+    }
+    block
+}
+
+/// The block as it stands in every week, without that week's day exceptions.
 pub fn standing_body(block: &Value) -> Value {
     let mut body = block.clone();
     if let Some(fields) = body.as_object_mut() {
         fields.shift_remove("missed_days");
+        fields.shift_remove("removed_days");
     }
     body
 }
@@ -63,21 +98,23 @@ pub fn cut_at_until(block: &Value, week_start: &str) -> EngineResult<Option<Valu
     let mut out = block.clone();
     out["days"] = json!(days);
     if let Some(fields) = out.as_object_mut() {
-        let missed: Vec<i64> = fields
-            .get("missed_days")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_i64)
-                    .filter(|day| *day <= last)
-                    .collect()
-            })
-            .unwrap_or_default();
-        if missed.is_empty() {
-            fields.shift_remove("missed_days");
-        } else {
-            fields.insert("missed_days".into(), json!(missed));
+        for key in ["missed_days", "removed_days"] {
+            let kept: Vec<i64> = fields
+                .get(key)
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_i64)
+                        .filter(|day| *day <= last)
+                        .collect()
+                })
+                .unwrap_or_default();
+            if kept.is_empty() {
+                fields.shift_remove(key);
+            } else {
+                fields.insert(key.into(), json!(kept));
+            }
         }
     }
     Ok(Some(out))
@@ -94,19 +131,41 @@ pub fn uncut_copy(copy: &Value, repeat: Option<&Value>, week_start: &str) -> Eng
     let shown = cut_at_until(repeat, week_start)?
         .map(|block| days_of(&block))
         .unwrap_or_default();
-    let mut days = days_of(copy);
-    let before = days.len();
+    let orig_days = days_of(copy);
+    let mut days = orig_days.clone();
+    let mut added = Vec::new();
     for day in days_of(repeat) {
         if !shown.contains(&day) && !days.contains(&day) {
             days.push(day);
+            added.push(day);
         }
     }
-    if days.len() == before {
+    if added.is_empty() {
         return Ok(copy.clone());
     }
     days.sort_unstable();
     let mut out = copy.clone();
     out["days"] = json!(days);
+    let missed = copy.get("missed_days").and_then(Value::as_array);
+    let all_absent = !orig_days.is_empty()
+        && orig_days.iter().all(|day| {
+            removed_on(copy, &Value::from(*day))
+                || missed.is_some_and(|days| days.contains(&Value::from(*day)))
+        });
+    let has_removed = orig_days
+        .iter()
+        .any(|day| removed_on(copy, &Value::from(*day)));
+    if all_absent && has_removed {
+        let mut removed: Vec<i64> = copy
+            .get("removed_days")
+            .and_then(Value::as_array)
+            .map(|items| items.iter().filter_map(Value::as_i64).collect())
+            .unwrap_or_default();
+        removed.extend(added);
+        removed.sort_unstable();
+        removed.dedup();
+        out["removed_days"] = json!(removed);
+    }
     Ok(out)
 }
 

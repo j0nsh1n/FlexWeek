@@ -2,7 +2,7 @@
 //! Setup's week on; a week's own version of a standing block wins for that week.
 
 use flexweek_engine::standing::{
-    derive_standing, most_standing_at_once, standing_body, with_standing,
+    derive_standing, most_standing_at_once, standing_body, uncut_copy, with_standing,
 };
 use serde_json::{Value, json};
 
@@ -88,4 +88,29 @@ fn the_most_repeats_standing_at_once_counts_each_week_a_row_starts_and_skips_sto
     let mut more = rows.to_vec();
     more.push(row("a", "2026-11-16", body));
     assert_eq!(most_standing_at_once(&more), 3);
+}
+
+#[test]
+fn days_an_until_hid_come_back_removed_in_a_week_deleted_this_week_only() {
+    // Monday 9 November 2026; Until Wednesday 11 November hides Thursday and Friday.
+    let mut repeat = school();
+    repeat["until"] = json!("2026-11-11");
+    let mut copy = school();
+    copy["days"] = json!([0, 1, 2]);
+    copy["removed_days"] = json!([0, 1, 2]);
+    let back = uncut_copy(&copy, Some(&repeat), "2026-11-09").unwrap();
+    assert_eq!(back["days"], json!([0, 1, 2, 3, 4]));
+    assert_eq!(back["removed_days"], json!([0, 1, 2, 3, 4]));
+}
+
+#[test]
+fn days_an_until_hid_come_back_live_in_a_week_that_still_shows_some_of_the_block() {
+    let mut repeat = school();
+    repeat["until"] = json!("2026-11-11");
+    let mut copy = school();
+    copy["days"] = json!([0, 1, 2]);
+    copy["removed_days"] = json!([0]);
+    let back = uncut_copy(&copy, Some(&repeat), "2026-11-09").unwrap();
+    assert_eq!(back["days"], json!([0, 1, 2, 3, 4]));
+    assert_eq!(back["removed_days"], json!([0]));
 }

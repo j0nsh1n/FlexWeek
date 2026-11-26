@@ -551,6 +551,12 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     if occurrence && args.day.is_none() {
         return Err("an occurrence edit needs the day".into());
     }
+    if occurrence
+        && let Some(day) = args.day
+        && flexweek_engine::standing::removed_on(&original, &Value::from(day))
+    {
+        return Err(NOT_IN_WEEK.into());
+    }
     let held_start = original["start"].as_str().unwrap_or("").to_string();
     let held_length = original["duration_min"].as_i64().unwrap_or(0);
     let start = args.start.clone().unwrap_or_else(|| held_start.clone());
@@ -607,6 +613,7 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
             .cloned()
             .collect();
         fields.insert("missed_days".into(), Value::Array(missed));
+        flexweek_engine::standing::keep_removed_days(fields);
     }
     let Some((first, first_blocks, first_rev, second, second_blocks, second_rev, offset)) =
         shown_parts
@@ -974,6 +981,9 @@ fn perform_skip(app: &crate::App, args: &SkipArgs) -> Result<Value, String> {
         else {
             return Err(NOT_IN_WEEK.into());
         };
+        if flexweek_engine::standing::removed_on(block, &Value::from(args.day)) {
+            return Err(NOT_IN_WEEK.into());
+        }
         let mut missed: Vec<i64> = block["missed_days"]
             .as_array()
             .into_iter()

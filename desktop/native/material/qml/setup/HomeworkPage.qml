@@ -14,7 +14,7 @@ Column {
     property bool reduceMotion: false
     property bool highContrast: false
     property bool phone: false
-    spacing: 12
+    spacing: 8
 
     M3Palette { id: m3Palette; theme: page.theme }
 
@@ -42,14 +42,14 @@ Column {
         width: parent.width
         columns: width >= 440 ? 2 : 1
         columnSpacing: 12
-        rowSpacing: 12
+        rowSpacing: 8
         Repeater {
             model: bridge ? bridge.studyCards : []
             ChoiceCard {
                 required property var modelData
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                Layout.alignment: Qt.AlignTop
                 objectName: "setupStudy-" + modelData.value
                 theme: page.theme
                 density: page.density
@@ -139,8 +139,8 @@ Column {
                 width: page.width
                 implicitHeight: inner.implicitHeight + 32
                 height: implicitHeight
-                radius: 16
-                color: m3Palette.surfaceContainerLow
+                radius: m3Palette.cornerFor(16)
+                color: m3Palette.cardSurface
                 border.width: page.highContrast ? 1.5 : 1
                 border.color: m3Palette.outlineVariant
                 Column {

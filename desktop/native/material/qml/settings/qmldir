@@ -18,6 +18,8 @@ PlanningSection 1.0 PlanningSection.qml
 FocusSection 1.0 FocusSection.qml
 AlertsSection 1.0 AlertsSection.qml
 ComputerSection 1.0 ComputerSection.qml
+SyncSection 1.0 SyncSection.qml
+PairingDialog 1.0 PairingDialog.qml
 AdvancedPage 1.0 AdvancedPage.qml
 PreviewStage 1.0 PreviewStage.qml
 ActionRow 1.0 ActionRow.qml

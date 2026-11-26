@@ -17,8 +17,8 @@ BACKEND_ENV = "QT_QUICK_BACKEND"
 SOFTWARE = "software"
 # Set only on the copy started after a failure, so its first Material screen can say why once.
 NOTICE_ENV = "FLEXWEEK_CPU_NOTICE"
-NOTICE = "FlexWeek is drawing without the graphics card because it could not use it. Your week is unchanged."
-DRAW_ERROR = "FlexWeek could not draw its window, even without the graphics card."
+NOTICE = "FlexWeek couldn't use the graphics card, so it switched to basic drawing. Your week is unchanged."
+DRAW_ERROR = "FlexWeek couldn't open its window. Try again, or choose Quit."
 
 
 def drawing_on_cpu() -> bool:

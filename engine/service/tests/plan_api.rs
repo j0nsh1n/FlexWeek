@@ -114,6 +114,33 @@ fn a_replan_for_something_that_is_not_a_fixed_block_on_that_day_is_refused() {
 }
 
 #[test]
+fn planner_uses_time_freed_by_removed_school() {
+    let db = TestDb::new("plan-removed-school");
+    let ana = db.account("ana");
+    work_hours(&db, ana, Some(0));
+    let mut school = fixed("school", "School", "06:00", 1020, None);
+    school["days"] = json!([0, 1]);
+    school["removed_days"] = json!([0]);
+    let trace = solve(&db, ana, json!({ "blocks": [school, homework(json!({}))] })).unwrap();
+    assert_eq!(trace["unplaced"], json!([]));
+    let placed = trace["placed"].as_array().unwrap();
+    assert_eq!(
+        placed.iter().find(|b| b["id"] == "hw").unwrap()["days"],
+        json!([0])
+    );
+    assert_eq!(
+        placed.iter().find(|b| b["id"] == "school").unwrap()["days"],
+        json!([1])
+    );
+    let recover = json!({ "missed_block_id": "school", "missed_day": 0, "previous_placed": [] });
+    assert!(invalid(solve(
+        &db,
+        ana,
+        json!({ "blocks": [school], "recover": recover })
+    )));
+}
+
+#[test]
 fn a_saved_week_keeps_a_missed_day_of_a_fixed_block() {
     let db = TestDb::new("plan-missed-saved");
     let ana = db.account("ana");

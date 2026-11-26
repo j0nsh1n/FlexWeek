@@ -1,6 +1,7 @@
 # ruff: noqa: F811
-"""Settings > This computer in Material 3 lists each linked phone with when it last synced and lets the
-student remove it (after asking), sync now, and read the status, the clock warning and the problem line."""
+"""Settings > Phone & sync in Material 3 lists each linked phone with when it last synced and lets the
+student remove it (after asking), sync now, and read the single-word status, the clock warning and the
+problem line."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from flexweek_engine import SyncService
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.settings_copy import DOT_WORDS, RELAY_SENTENCE, UNREACHABLE_WORDS
-from desktop.native.window import NativeWindow
+from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.settings.support_material_settings import (
     _click,
     _named,
@@ -40,8 +41,9 @@ def test_a_linked_phone_is_listed_with_when_it_last_synced(
     qapp: QApplication, light_desk: NativeWindow, phone: SyncService
 ) -> None:
     window = light_desk
-    root = _open_settings(qapp, window, "computer")
+    root = _open_settings(qapp, window, "sync")
     assert _rows(window) == []
+    assert _named(root, "syncStatusWord")[0].property("text") == "Not linked"
     assert _named(root, "note_relayNote")[0].property("text") == RELAY_SENTENCE
     _pair(window, phone)
     _panel(window)._publish()
@@ -52,13 +54,14 @@ def test_a_linked_phone_is_listed_with_when_it_last_synced(
     row = _named(root, f"row_phone_{rows[0]['id']}")[0]
     assert str(row.property("title")) == PHONE_NAME
     assert str(row.property("subtitle")) == "Synced just now"
+    assert str(_named(root, f"phone_{rows[0]['id']}")[0].property("kind")) == "danger-outlined"
 
 
 def test_remove_asks_first_and_keeping_the_phone_leaves_it_linked(
     qapp: QApplication, light_desk: NativeWindow, phone: SyncService
 ) -> None:
     window = light_desk
-    root = _open_settings(qapp, window, "computer")
+    root = _open_settings(qapp, window, "sync")
     _pair(window, phone)
     _panel(window)._publish()
     _pump(qapp)
@@ -78,7 +81,7 @@ def test_confirming_removes_the_phone_and_it_can_no_longer_sync(
     from flexweek_engine import SyncError
 
     window = light_desk
-    _open_settings(qapp, window, "computer")
+    _open_settings(qapp, window, "sync")
     _pair(window, phone)
     _panel(window)._publish()
     _panel(window).askRemovePhone(_rows(window)[0]["id"])
@@ -90,7 +93,7 @@ def test_confirming_removes_the_phone_and_it_can_no_longer_sync(
 
 
 def test_remove_ignores_an_unknown_phone(qapp: QApplication, light_desk: NativeWindow) -> None:
-    _open_settings(qapp, light_desk, "computer")
+    _open_settings(qapp, light_desk, "sync")
     _panel(light_desk).askRemovePhone("no-such-device")
     assert _panel(light_desk).property("state")["askRemove"] is False
 
@@ -99,7 +102,7 @@ def test_sync_now_reports_the_status_and_no_problem(
     qapp: QApplication, light_desk: NativeWindow, phone: SyncService
 ) -> None:
     window = light_desk
-    root = _open_settings(qapp, window, "computer")
+    root = _open_settings(qapp, window, "sync")
     assert not _named(root, "row_syncNow")[0].property("visible"), "no phone, nothing to sync"
     _pair(window, phone)
     _panel(window)._publish()
@@ -108,6 +111,8 @@ def test_sync_now_reports_the_status_and_no_problem(
     _click(qapp, window, _named(root, "syncNow")[0])
     wait_until(None, lambda: _panel(window).property("state")["syncWords"] == DOT_WORDS["synced"])
     state = _panel(window).property("state")
+    assert state["syncStatusWord"] == "Synced" and state["syncStatusTone"] == "ok"
+    assert str(_named(root, "syncStatusWord")[0].property("text")) == "Synced"
     assert state["syncProblem"] == "" and state["clockWarning"] == "" and state["syncBusy"] is False
 
 
@@ -115,7 +120,7 @@ def test_a_phone_that_cannot_be_reached_shows_the_problem_line(
     qapp: QApplication, light_desk: NativeWindow, phone: SyncService, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     window = light_desk
-    root = _open_settings(qapp, window, "computer")
+    root = _open_settings(qapp, window, "sync")
     _pair(window, phone)
     phone.stop()
     _panel(window)._publish()
@@ -124,6 +129,7 @@ def test_a_phone_that_cannot_be_reached_shows_the_problem_line(
     assert _panel(window).property("state")["syncProblem"] in (UNREACHABLE_WORDS,) or str(
         _panel(window).property("state")["syncProblem"]
     ).startswith("Sync failed")
+    assert _panel(window).property("state")["syncStatusWord"] == "Not synced"
     assert _named(root, "note_syncProblem")[0].property("visible")
 
 
@@ -131,7 +137,7 @@ def test_the_clock_warning_is_said_when_changes_were_held_back(
     qapp: QApplication, light_desk: NativeWindow, phone: SyncService
 ) -> None:
     window = light_desk
-    root = _open_settings(qapp, window, "computer")
+    root = _open_settings(qapp, window, "sync")
     _panel(window)._synced([("phone", {"clock_skewed": 2}, None)], None)
     assert _panel(window).property("state")["clockWarning"] == (
         "Your phone's clock looks wrong. 2 changes were held back."
@@ -139,3 +145,92 @@ def test_the_clock_warning_is_said_when_changes_were_held_back(
     assert _named(root, "note_clockWarning")[0].property("visible")
     _panel(window)._synced([("phone", {"clock_skewed": 0}, None)], None)
     assert _panel(window).property("state")["clockWarning"] == ""
+
+
+def test_failed_phone_removal_does_not_override_healthy_sync_status_and_newer_sync_clears_old_error(
+    qapp: QApplication, light_desk: NativeWindow, phone: SyncService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 8 & Claude #6: Syncing and linked-never-synced status words, removal failure leaving Synced
+    intact, and a newer successful service sync clearing a stale manual sync error."""
+    window = light_desk
+    root = _open_settings(qapp, window, "sync")
+    _pair(window, phone)
+    panel = _panel(window)
+    panel._publish()
+    _pump(qapp)
+
+    fake_status: dict[str, Any] = {"syncing": True, "last_error": None, "last_sync_ms": None}
+    real_sync = window._sync
+
+    class _SyncProxy:
+        def status(self) -> dict[str, Any]:
+            return dict(fake_status)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(real_sync, name)
+
+    monkeypatch.setattr(window, "_sync", _SyncProxy())
+    panel._publish()
+    _pump(qapp)
+    assert panel.property("state")["syncStatusWord"] == "Syncing"
+    assert panel.property("state")["syncStatusTone"] == "info"
+    assert str(_named(root, "syncStatusWord")[0].property("text")) == "Syncing"
+
+    # Linked phone that has never synced reports Not synced with the warn tone.
+    fake_status["syncing"] = False
+    panel._publish()
+    _pump(qapp)
+    assert panel.property("state")["syncStatusWord"] == "Not synced"
+    assert panel.property("state")["syncStatusTone"] == "warn"
+
+    fake_status["last_sync_ms"] = 1000
+    panel._publish()
+    _pump(qapp)
+    assert panel.property("state")["syncStatusWord"] == "Synced"
+    assert panel.property("state")["syncStatusTone"] == "ok"
+
+    # A failed removal writes removeError but leaves Synced intact.
+    monkeypatch.setattr(
+        window.session, "unlink_phone", lambda _dev_id, done: done(None, RuntimeError("denied"))
+    )
+    panel.askRemovePhone(_rows(window)[0]["id"])
+    panel.answerRemovePhone("remove")
+    _pump(qapp)
+    state = panel.property("state")
+    assert "Could not remove" in state["removeError"]
+    assert state["syncStatusWord"] == "Synced"
+    assert _named(root, "note_removeError")[0].property("visible") is True
+
+    # A failed manual sync shows Not synced until a newer automatic sync succeeds.
+    panel._synced(None, RuntimeError("offline"))
+    assert panel.property("state")["syncStatusWord"] == "Not synced"
+    fake_status["last_sync_ms"] = 2000
+    panel._publish()
+    assert panel.property("state")["syncProblem"] == ""
+    assert panel.property("state")["syncStatusWord"] == "Synced"
+
+
+def test_sync_status_card_wraps_controls_at_phone_width_and_large_text(
+    qapp: QApplication, light_desk: NativeWindow, phone: SyncService
+) -> None:
+    """Finding 4: at 320 px and Large text with a linked phone, the title keeps usable width and controls
+    wrap."""
+    window = light_desk
+    root = _open_settings(qapp, window, "sync")
+    _pair(window, phone)
+    panel = _panel(window)
+    window.setMinimumWidth(320)
+    try:
+        panel.setTextSize("large")
+        window.resize(320, 640)
+        panel._publish()
+        _pump(qapp, 15)
+        title_col = _named(root, "syncStatusTitleCol")[0]
+        controls = _named(root, "syncStatusControls")[0]
+        assert float(title_col.width()) >= 160
+        assert float(controls.y()) >= float(title_col.y()) + float(title_col.height()) - 1
+    finally:
+        panel.setTextSize("normal")
+        window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        _pump(qapp)

@@ -6,10 +6,20 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Settings > Phone & sync is now its own section under This computer, with a single colored sync status word (Synced, Syncing, Not synced or Not linked), separate clock-warning and problem lines, linked phones with red-outlined Remove buttons, and a summary of what syncs vs what stays on each device.
+- Pair a phone opens a centered pop-up with a computer-and-phone graphic, two large 4-character code tiles, a live 5-minute countdown bar, tries left, Copy code, Start a new code, three numbered steps, and the n0 relay note.
 - Settings > Computer has Report a problem. It opens a short form in your browser with your FlexWeek version and computer already filled in.
 - The phone's Settings has Report a problem. It opens an online form with your app version and phone model filled in.
 
 ### Changed
+- Material 3 desktop redesign across every main screen, using a 5-step tonal surface hierarchy, consistent rounded corners, and Material Symbols icons:
+  - Week frames the hour grid in an elevated card beside a tonal homework panel with urgency-striped cards whose menu places them now, softens the overdue banner, and shows category icons on blocks where titles fit without cutting off.
+  - Day shows a full-height hour timeline on the left and the Now card above the collapsible mini-month on the right, separated by a draggable and keyboard-resizable divider whose width is remembered between launches.
+  - My day combines the progress ring and Now card into a horizontal hero banner on desktop and places Up next and Done side by side in matching cards.
+  - Settings adds icons to every section, group headers to every card (including This computer), and a draggable and keyboard-resizable section list that collapses to icons when narrow and is remembered between launches.
+  - Sign in splits desktop windows into a left welcome panel that cycles smoothly through five theme-drawn FlexWeek scenes (pausing on hover and showing one static picture under Reduce motion or Animations Off) beside the sign-in form on the right.
+  - First-run setup uses a top step bar, 2x2 grids of choice cards beside the live week preview, and a pinned bottom bar so cards are never cut off above the buttons.
+  - Update opens as a centered floating pop-up with a tinted version card and green safety strip on the left and release notes and download progress on the right.
 - The app icon is the dumbbell on a lime square, with no light square around it, so it no longer shows as a white box on dark taskbars or in About. On the phone it takes your launcher's icon shape.
 - FlexWeek no longer runs a small web server on your computer. The app reads and saves your week itself and opens no network port (phone sync, once you pair a phone, still listens for it).
 - When signing in or creating an account gets no answer for 30 seconds, FlexWeek says "FlexWeek stopped responding. Close FlexWeek, open it again, then sign in." It used to say it couldn't reach its server, which it no longer has.
@@ -20,6 +30,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - The FLEXWEEK_ORIGIN and FLEXWEEK_DESKTOP_ORIGIN settings, which pointed the app at a hosted FlexWeek server. The app always uses the data saved on this computer.
 
 ### Fixed
+- Deleting School or another weekly fixed time for this week frees up those days in the calendar and planner. Days marked missed stay marked missed, and Undo brings the deleted days back.
+- Plan notices count sessions without calling every Study task homework. Setup's Spotify test says only that FlexWeek opened the link, phone contact stays "Last seen on", and the Delete retry, task-splitting, unfinished-drawer, saved-copy, sign-in and assistant date wording matches what each action does.
 - Settings > Alerts: the reminder notes now say "if the track doesn't play" and "until it's handled", in the app's usual wording.
 
 ## [1.5.0] - 2026-11-20

@@ -121,7 +121,8 @@ def test_item7_setup_again_shows_the_usual_week_and_keeps_school_deleted_this_we
 
     session.set_setup_blocks([{**SCHOOL, "start": "08:00"}, dict(SOCCER), dict(JOB)])
     save_and_settle(qapp, session)
-    assert school_of(session) == ([0, 1, 2, 3, 4], "08:00", 405, [0, 1, 2, 3, 4])
+    assert school_of(session) == ([0, 1, 2, 3, 4], "08:00", 405, [])
+    assert block(session, "school")["removed_days"] == [0, 1, 2, 3, 4]
     go_to(qapp, session, WEEK_AFTER)
     assert school_of(session) == ([0, 1, 2, 3, 4], "08:00", 405, [])
 

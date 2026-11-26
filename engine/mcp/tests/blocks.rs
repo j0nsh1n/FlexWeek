@@ -589,10 +589,9 @@ fn move_and_delete_change_school_and_activities_this_week() {
         let (stored, _) =
             week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
         assert_eq!(
-            find_block(&stored, id).get("missed_days"),
+            find_block(&stored, id).get("removed_days"),
             Some(&json!([4])),
-            "{id} taken out of this week stays missed on its days, so the standing week does \
-             not bring it back (controller.py delete_block)"
+            "{id} keeps a record of its removed days so the standing week cannot fill them in"
         );
     }
     let (_, stored_revision) =

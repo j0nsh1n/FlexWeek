@@ -17,7 +17,8 @@ pub const ROUTINE_CONFLICT: &str = "This routine changed in another window. Relo
 pub const HOMEWORK_UNKNOWN: &str = store::writes::ASSIGNMENT_MISSING;
 pub const HOMEWORK_CONFLICT: &str = store::writes::ASSIGNMENT_CONFLICT;
 pub const RESTORE_UNKNOWN: &str = "Restore point not found";
-pub const RESTORE_STALE: &str = "This preview is out of date. Refresh it before restoring.";
+pub const RESTORE_STALE: &str =
+    "This preview is out of date. Preview the saved copy again before restoring.";
 const MAX_OPERATIONS: i64 = 100;
 const MAX_RESTORE_POINTS: i64 = 20;
 

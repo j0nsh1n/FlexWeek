@@ -92,6 +92,7 @@ pub fn day_copy(copy: &Value, day: &Value) -> EngineResult<Value> {
         return Err(attribute_error(&copy, "get"));
     };
     fields.insert("days".into(), json!([day]));
+    crate::standing::keep_removed_days(fields);
     if let Some(missed) = fields.get("missed_days").cloned()
         && truthy(Some(&missed))
     {
@@ -142,7 +143,9 @@ fn refused(message: impl Into<String>) -> Value {
 /// whether it carries a homework list. `readable` is whether the text parsed; `data` what it parsed to.
 pub fn import_head(empty: bool, readable: bool, data: Option<&Value>) -> EngineResult<Value> {
     if empty {
-        return Ok(refused("Empty file."));
+        return Ok(refused(
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file.",
+        ));
     }
     let Some(data) = data.filter(|_| readable) else {
         return Ok(refused(NOT_WEEK_OR_DAY));
@@ -173,11 +176,13 @@ pub fn import_head(empty: bool, readable: bool, data: Option<&Value>) -> EngineR
         _ => None,
     };
     let Some(number) = number.filter(|found| *found >= 1) else {
-        return Ok(refused("Export has no version."));
+        return Ok(refused(
+            "Nothing imported: this file has no FlexWeek version.",
+        ));
     };
     if number > i128::from(EXPORT_VERSION) {
         return Ok(refused(format!(
-            "Export came from a newer FlexWeek (version {}).",
+            "Nothing imported: this file came from a newer FlexWeek (version {}). Update FlexWeek, then try again.",
             py_str(version)
         )));
     }
@@ -500,6 +505,7 @@ pub fn merge_imported_blocks(
             };
             fields.insert("id".into(), split_id.clone());
             fields.insert("days".into(), json!([day]));
+            fields.shift_remove("removed_days");
             let mut missed = Vec::new();
             for item in iterate(&list_or_empty(fields.get("missed_days")))? {
                 if eq(&item, day) {
@@ -519,6 +525,7 @@ pub fn merge_imported_blocks(
                     }
                 }
                 kept_fields.insert("days".into(), Value::Array(kept_days));
+                crate::standing::keep_removed_days(kept_fields);
                 kept_fields.insert("missed_days".into(), Value::Array(still));
                 by_id.set(subscript(current, "id")?.clone(), kept)?;
             } else {
@@ -797,11 +804,14 @@ mod tests {
     #[test]
     fn a_refused_file_has_no_blocks_to_check() {
         let (head, blocks, homework) = import_start(true, false, None).unwrap();
-        assert_eq!(head["error"], "Empty file.");
+        assert_eq!(
+            head["error"],
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file."
+        );
         assert!(blocks.is_empty() && homework.is_empty());
         assert_eq!(
             import_finish(&head, &[], &[], None).unwrap()["error"],
-            "Empty file."
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file."
         );
     }
 

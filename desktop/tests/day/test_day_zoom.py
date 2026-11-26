@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from PySide6.QtCore import QObject, QPointF, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -179,3 +179,34 @@ def test_day_steps_through_the_two_closer_levels_and_stops_at_256(
     for _ in range(8):
         _ctrl(window, Qt.Key.Key_Minus)
     assert int(bridge.property("dayHourRow")) == 32
+
+
+def _scene_rect(item: QObject) -> tuple:
+    top_left = item.mapToScene(QPointF(0.0, 0.0))
+    bottom_right = item.mapToScene(
+        QPointF(float(item.property("width")), float(item.property("height")))
+    )
+    return (top_left.x(), top_left.y(), bottom_right.x(), bottom_right.y())
+
+
+def _rects_overlap(first: tuple, second: tuple) -> bool:
+    return first[0] < second[2] and second[0] < first[2] and first[1] < second[3] and second[1] < first[3]
+
+
+@pytest.mark.parametrize("density", ["comfortable", "compact"])
+def test_the_zoom_pill_leaves_the_now_label_clear_at_the_top_row(
+    qapp: QApplication, window: NativeWindow, density: str
+) -> None:
+    """The zoom pill floats over the hour column. With now at the top of the hours, the red now
+    label sits clear below the pill instead of under it, in both row sizes."""
+    root = open_day_page(qapp, window)
+    look(window, density=density)
+    pump(qapp)
+    day = day_item(root)
+    scroller = qml(day, "dayScroller")
+    pill = qml(day, "weekZoom")
+    now = qml(day, "nowLabel")
+    assert pill.property("visible") and now.property("visible")
+    scroller.setProperty("contentY", max(0.0, float(now.property("y")) - 10.0))
+    pump(qapp)
+    assert not _rects_overlap(_scene_rect(pill), _scene_rect(now))

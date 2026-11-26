@@ -103,7 +103,7 @@ OUTSIDE_CHECK_MS = 2000
 
 
 
-SIGN_OUT_QUESTION = "Your week is saved on {where}, under this account. Sign in again to see it."
+SIGN_OUT_QUESTION = "Sign out? Your week is saved on {where}, under this account. Sign in again to see it."
 RECOVERY_CHOOSE = "Choose where to save"
 # The pages Material 3 answers for, as its own screens.
 MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
@@ -230,7 +230,7 @@ class NativeWindow(QObject):
         self._change_saving: str | None = None
         self._change_saved: str | None = None
         # The Undo step the toast offers to take back.
-        self._notice_step: dict | None = None
+        self._notice_step: int | None = None
         # Something asked for is under way; the next thing the session says is what it did.
         self._telling = False
         # The last reminder the toast said, so Got it on the same reminder takes it away.
@@ -483,16 +483,7 @@ class NativeWindow(QObject):
         student stops changing things, never while a request is in flight or after a 409, and a failed save
         again every few seconds)."""
         session = self.session
-        due = session.client.command(
-            {
-                "cmd": "autosave",
-                "signed_in": session.account is not None,
-                "conflict": bool(session.conflict),
-                "dirty": bool(session.dirty),
-                "pending": session.pending_save is not None,
-            }
-        )["save"]
-        if due:
+        if session.autosave_due():
             session.save()
 
     # When the last change was made and when a save was last tried, on the session's steady clock.
@@ -1254,7 +1245,7 @@ class NativeWindow(QObject):
         return choice
 
     def _pose_edited(self, line: str) -> str | None:
-        """The three answers, or None for Cancel. Asked on Material's answers sheet, Except edited the
+        """The three answers, or None for Cancel. Asked on Material's answers sheet, Keep edited weeks the
         default. Material not on screen means no answer, so nothing changes."""
         bridge = self._account_bridge()
         material = self._surface == "material" and not self._material_gave_up
@@ -1290,8 +1281,8 @@ class NativeWindow(QObject):
             "title": "Edited weeks",
             "body": line,
             "answers": [
-                {"id": "keep", "label": "Except edited", "kind": "filled", "default": True},
-                {"id": "replace", "label": "All weeks", "kind": "danger"},
+                {"id": "keep", "label": "Keep edited weeks", "kind": "filled", "default": True},
+                {"id": "replace", "label": "Replace all weeks", "kind": "danger"},
                 {"id": "from_today", "label": "From today on", "kind": "danger"},
                 {"id": "stay", "label": "Cancel", "kind": "text"},
             ],
@@ -1299,7 +1290,7 @@ class NativeWindow(QObject):
                 {
                     "id": "keep",
                     "title": "Keep my edited weeks",
-                    "line": "Updates the other weeks. Weeks you changed yourself keep their own times.",
+                    "line": "Changes only weeks you haven't edited. Your edited weeks keep their own times.",
                 },
                 {
                     "id": "from_today",
@@ -1372,7 +1363,7 @@ class NativeWindow(QObject):
             return
         words, self._change_saved = self._change_saved, None
         self._set_notice(words, "Undo", self._undo_from_notice)
-        self._notice_step = self.session.last_step()
+        self._notice_step = self.session.last_step_token()
 
     def _told(self, act) -> None:
         """Do what the student asked, and once it is done say what it did in the toast: the first thing
@@ -1403,7 +1394,7 @@ class NativeWindow(QObject):
         # Plan caused this Undo, even when the click has already moved the keyboard.
         self._undo_button = "solveButton"
         self._undo_at = time.monotonic()
-        self._notice_step = self.session.last_step()
+        self._notice_step = self.session.last_step_token()
         # Focusing on the next turn lands after the week redraws and could take the keyboard.
         self._plan_focus_pending = True
 
@@ -1644,7 +1635,7 @@ class NativeWindow(QObject):
         if stored and change is not None:
             self._change_saved = change
             self._show_change()
-        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:
+        elif stored and self._notice_step is not None and self.session.last_step_token() != self._notice_step:
             # A later change, or an Undo, has taken the notice's step off the top: its Undo would now
             # take back something else.
             snack = self._snack_bridge()
@@ -2031,7 +2022,7 @@ class NativeWindow(QObject):
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
         machine, since starting at login is a property of the machine rather than of the account."""
         if autostart.sync(wanted) is None and wanted:
-            self.session._say("This machine doesn't support starting at login.")
+            self.session._say("This computer doesn't support opening FlexWeek at login.")
 
     def _log_out(self) -> None:
         question = SIGN_OUT_QUESTION.format(where="this computer")
@@ -2147,7 +2138,7 @@ class NativeWindow(QObject):
                 body["material"] = material
             path.write_text(json.dumps(body) + "\n")
         except OSError:
-            self.session._say("Could not save the look for this device.")
+            self.session._say("FlexWeek couldn't save this computer's look.")
 
     def _apply_appearance(self) -> None:
         """Set the Animations level from the preference and the look worn."""
@@ -2204,13 +2195,11 @@ class NativeWindow(QObject):
         session = self.session
         if self._leaving is not None:
             return False
-        if session.account is None or not (session._held() or session.parked_unsaved_week()):
+        if not session.start_leaving(LEAVE_WAIT_MS, again):
             return True
         timer = QTimer(self)
         timer.setInterval(LEAVE_POLL_MS)
         self._leaving = timer
-        # Which step each poll takes is the session's (engine/app/src/session/leaving.rs).
-        session.client.command({"cmd": "leaving_start", "limit_ms": LEAVE_WAIT_MS, "again": again})
 
         def stop() -> None:
             timer.stop()
@@ -2218,14 +2207,7 @@ class NativeWindow(QObject):
             self._leaving = None
 
         def poll() -> None:
-            answer = session.client.command(
-                {
-                    "cmd": "leaving_poll",
-                    "poll_ms": LEAVE_POLL_MS,
-                    "held": bool(session._held()),
-                    "parked": session.parked_unsaved_week() is not None,
-                }
-            )
+            answer = session.poll_leaving(LEAVE_POLL_MS)
             step = answer["step"]
             if step == "give_up":
                 stop()
@@ -2234,7 +2216,7 @@ class NativeWindow(QObject):
             elif step == "save":
                 session.save()
             elif step == "load":
-                session.load_week(session.parked_unsaved_week())
+                session.load_week(answer["week"])
             elif step == "leave":
                 stop()
                 self._saved_to_leave = True

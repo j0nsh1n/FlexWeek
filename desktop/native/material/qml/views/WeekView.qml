@@ -22,8 +22,9 @@ Item {
     readonly property bool handing: hoursPane.handing
     readonly property int scrollClearance: phone ? 96 : 0
     readonly property int gutter: hoursPane.hourGutter
-    readonly property int drawerWidth: 320
-    readonly property real gridWidth: phone ? width : Math.max(0, width - drawerWidth)
+    readonly property int drawerWidth: 296
+    readonly property int outerPad: phone || passive ? 0 : 8
+    readonly property real gridWidth: calendarCard.width
     property alias drawer: drawer
     // Five columns with weekends off, seven otherwise. Weekday columns widen by the freed space.
     readonly property int columns: bridge && bridge.week ? Math.max(1, bridge.week.columns) : 7
@@ -162,17 +163,23 @@ Item {
         }
     }
 
-    // Homework left over from before: the Widgets line above the week, with its two buttons.
+    // Homework left over from before: soft rounded warning pill banner above the week card.
     Rectangle {
         id: leftRow
         objectName: "leftOverRow"
         readonly property string words: bridge && bridge.week ? bridge.week.leftWords : ""
         visible: words !== "" && !root.passive
         anchors.left: parent.left
+        anchors.leftMargin: root.outerPad
         anchors.right: root.phone ? parent.right : drawer.left
+        anchors.rightMargin: root.outerPad
         anchors.top: parent.top
+        anchors.topMargin: visible ? root.outerPad : 0
         height: visible ? Math.max(48, flow.implicitHeight + 16) : 0
-        color: m3.secondaryContainer
+        radius: m3.cornerFor(14)
+        color: m3.statusOverdueTint
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: root.highContrast ? m3.statusOverdue : Qt.rgba(m3.statusOverdue.r, m3.statusOverdue.g, m3.statusOverdue.b, 0.25)
 
         Flow {
             id: flow
@@ -180,19 +187,30 @@ Item {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 16
-            anchors.rightMargin: 16
+            anchors.rightMargin: 12
             spacing: 8
-            Text {
-                objectName: "leftOverWords"
+            Row {
+                spacing: 8
                 height: 40
-                verticalAlignment: Text.AlignVCenter
-                text: leftRow.words
-                color: m3.inkSecondaryContainer
-                font.family: M3Font.family
-                font.pixelSize: M3Font.px(14)
-                font.weight: 500
-                Accessible.role: Accessible.StaticText
-                Accessible.name: leftRow.words
+                M3Icon {
+                    name: "warning"
+                    width: 18
+                    height: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: m3.statusOverdue
+                }
+                Text {
+                    objectName: "leftOverWords"
+                    height: 40
+                    verticalAlignment: Text.AlignVCenter
+                    text: leftRow.words
+                    color: m3.statusOverdue
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(14)
+                    font.weight: 600
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: leftRow.words
+                }
             }
             Button {
                 objectName: "leftOverPlan"
@@ -200,7 +218,7 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "text"
+                kind: "tonal"
                 text: "Plan into this week"
                 accessName: "Plan into this week"
                 activeFocusOnTab: leftRow.visible
@@ -221,128 +239,147 @@ Item {
         }
     }
 
-    Item {
-        id: headerRow
+    Rectangle {
+        id: calendarCard
+        objectName: "weekCalendarCard"
         anchors.left: parent.left
+        anchors.leftMargin: root.outerPad
         anchors.right: root.phone ? parent.right : drawer.left
+        anchors.rightMargin: root.outerPad
         anchors.top: leftRow.bottom
-        height: 56
+        anchors.topMargin: leftRow.visible ? root.outerPad : 0
+        anchors.bottom: root.phone ? drawer.top : parent.bottom
+        anchors.bottomMargin: 0
+        radius: root.phone ? 0 : m3.cornerFor(16)
+        color: m3.cardSurface
+        border.width: root.phone ? 0 : (root.highContrast ? 1.5 : 1)
+        border.color: root.highContrast ? m3.outline : m3.outlineVariant
+        clip: true
 
-        Rectangle {
+        Item {
+            id: headerRow
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: root.highContrast ? 1.5 : 1
-            color: root.line
-        }
+            anchors.top: parent.top
+            height: 56
 
-        IconButton {
-            objectName: "toggleWeekends"
-            small: !root.phone && !root.passive
-            x: Math.round((root.gutter - width) / 2)
-            y: root.phone || root.passive ? Math.round((parent.height - height) / 2) : 0
-            theme: root.theme
-            density: root.density
-            reduceMotion: root.reduceMotion
-            highContrast: root.highContrast
-            icon: "calendar_view_week"
-            accessName: root.columns === 7 ? "Hide weekends" : "Show weekends"
-            activeFocusOnTab: !root.passive
-            onClicked: if (root.bridge) root.bridge.week.toggleWeekends()
-        }
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: root.highContrast ? 1.5 : 1
+                color: root.line
+            }
 
-        ZoomPill {
-            visible: !root.phone && !root.passive
-            x: Math.round((root.gutter - width) / 2)
-            y: 32
-            theme: root.theme
-            density: root.density
-            reduceMotion: root.reduceMotion
-            highContrast: root.highContrast
-            canZoomIn: !!(bridge && bridge.canZoomIn)
-            canZoomOut: !!(bridge && bridge.canZoomOut)
-            onZoomOut: root.zoomFromKeys(-1)
-            onZoomIn: root.zoomFromKeys(1)
-        }
+            IconButton {
+                objectName: "toggleWeekends"
+                small: !root.phone && !root.passive
+                x: Math.round((root.gutter - width) / 2)
+                y: root.phone || root.passive ? Math.round((parent.height - height) / 2) : 0
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "calendar_view_week"
+                accessName: root.columns === 7 ? "Hide weekends" : "Show weekends"
+                activeFocusOnTab: !root.passive
+                onClicked: if (root.bridge) root.bridge.week.toggleWeekends()
+            }
 
-        Repeater {
-            id: dayHeaders
-            objectName: "dayHeaders"
-            model: bridge ? bridge.days : 0
+            ZoomPill {
+                visible: !root.phone && !root.passive
+                x: Math.round((root.gutter - width) / 2)
+                y: 32
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                canZoomIn: !!(bridge && bridge.canZoomIn)
+                canZoomOut: !!(bridge && bridge.canZoomOut)
+                onZoomOut: root.zoomFromKeys(-1)
+                onZoomIn: root.zoomFromKeys(1)
+            }
 
-            Item {
-                id: header
-                objectName: "dayHeader"
-                // "Thu 5": what a reader of the column hears and a test can find.
-                property string text: model.label
-                readonly property bool today: model.today
-                x: root.gutter + index * root.dayWidth
-                width: root.dayWidth
-                height: 56
-                Accessible.role: Accessible.StaticText
-                Accessible.name: model.label + (model.today ? ", today" : "")
+            Repeater {
+                id: dayHeaders
+                objectName: "dayHeaders"
+                model: bridge ? bridge.days : 0
 
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 2
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: model.name
-                        color: m3.inkMuted
-                        font.family: M3Font.family
-                        font.pixelSize: M3Font.px(12)
-                        font.weight: 500
-                    }
-                    Rectangle {
-                        objectName: "dayDate"
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: 26
-                        height: 26
-                        radius: 13
-                        color: model.today && !(root.theme && root.theme.todayHighlight === false)
-                               ? m3.primary
-                               : "transparent"
+                Item {
+                    id: header
+                    objectName: "dayHeader"
+                    // "Thu 5": what a reader of the column hears and a test can find.
+                    property string text: model.label
+                    readonly property bool today: model.today
+                    x: root.gutter + index * root.dayWidth
+                    width: root.dayWidth
+                    height: 56
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: model.label + (model.today ? ", today" : "")
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
                         Text {
-                            anchors.centerIn: parent
-                            text: model.date
-                            color: parent.color.a > 0 ? m3.inkPrimary : m3.inkSurface
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: model.name
+                            color: model.today ? m3.primary : m3.inkMuted
                             font.family: M3Font.family
-                            font.pixelSize: M3Font.px(14)
-                            font.weight: model.today ? 700 : 500
+                            font.pixelSize: M3Font.px(11)
+                            font.weight: 600
+                            font.letterSpacing: 0.4
+                        }
+                        Rectangle {
+                            objectName: "dayDate"
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 26
+                            height: 26
+                            radius: 13
+                            color: model.today && !(root.theme && root.theme.todayHighlight === false)
+                                   ? m3.primary
+                                   : "transparent"
+                            Text {
+                                anchors.centerIn: parent
+                                text: model.date
+                                color: parent.color.a > 0 ? m3.inkPrimary : m3.inkSurface
+                                font.family: M3Font.family
+                                font.pixelSize: M3Font.px(14)
+                                font.weight: model.today ? 700 : 600
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    HoursPane {
-        id: hoursPane
-        anchors.left: parent.left
-        anchors.right: root.phone ? parent.right : drawer.left
-        anchors.top: headerRow.bottom
-        anchors.bottom: root.phone ? drawer.top : parent.bottom
-        bridge: root.bridge
-        theme: root.theme
-        density: root.density
-        reduceMotion: root.reduceMotion
-        highContrast: root.highContrast
-        passive: root.passive
-        phone: root.phone
-        row: root.row
-        gutter: root.gutter
-        columns: root.columns
-        dayWidth: root.dayWidth
-        filterDay: -1
-        showNowLine: hoursPane.nowColumn >= 0 && hoursPane.nowColumn < root.columns
-        showPill: false
-        weekMode: true
-        followNow: true
-        scrollClearance: root.scrollClearance
-        scrollerName: "weekScroller"
-        host: root
-        dropDay: root.dropDay
-        dropMinute: root.dropMinute
+        HoursPane {
+            id: hoursPane
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: headerRow.bottom
+            anchors.bottom: parent.bottom
+            bridge: root.bridge
+            theme: root.theme
+            density: root.density
+            reduceMotion: root.reduceMotion
+            highContrast: root.highContrast
+            passive: root.passive
+            phone: root.phone
+            row: root.row
+            gutter: root.gutter
+            columns: root.columns
+            dayWidth: root.dayWidth
+            filterDay: -1
+            showNowLine: hoursPane.nowColumn >= 0 && hoursPane.nowColumn < root.columns
+            showPill: false
+            weekMode: true
+            followNow: true
+            scrollClearance: root.scrollClearance
+            scrollerName: "weekScroller"
+            host: root
+            dropDay: root.dropDay
+            dropMinute: root.dropMinute
+        }
     }
 
     HomeworkDrawer {
@@ -350,7 +387,9 @@ Item {
         objectName: "homeworkDrawer"
         passive: root.passive
         anchors.right: parent.right
+        anchors.rightMargin: root.outerPad
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: 0
         width: root.phone ? parent.width : root.drawerWidth
         height: root.phone ? Math.min(implicitHeight, Math.max(160, parent.height * 0.45)) : parent.height
         bridge: root.bridge

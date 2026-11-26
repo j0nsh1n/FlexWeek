@@ -16,7 +16,14 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: palette.surfaceContainerLow
+        color: palette.panelSurface
+    }
+    Rectangle {
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        width: root.highContrast ? 1.5 : 1
+        color: palette.outlineVariant
     }
 
     Item {

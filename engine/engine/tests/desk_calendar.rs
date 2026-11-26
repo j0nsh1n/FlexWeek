@@ -208,7 +208,7 @@ fn test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or_
     assert_eq!(problem(1, h(22, 30), h(23, 30), None), None);
     assert_eq!(
         problem(1, h(23, 30), h(24, 30), None),
-        Some("That's outside the hours FlexWeek plans in, so it stayed where it was.")
+        Some("FlexWeek can't use that time, so the block stayed where it was.")
     );
     assert_eq!(
         problem(3, h(19, 0), h(20, 0), Some((3, h(19, 30)))),
@@ -443,6 +443,29 @@ fn test_a_step_that_is_not_positive_reads_as_a_quarter_hour() {
                 .expect("a refusal"),
             "That time has passed. Choose 19:15 or later today, or another day.",
             "step {step}"
+        );
+    }
+}
+
+#[test]
+fn test_an_occurrence_edit_never_leaves_removed_days_on_a_one_off_id() {
+    let mut standing = school(json!([0, 1, 2]));
+    standing["removed_days"] = json!([1]);
+    let mut edited = standing.clone();
+    edited["start"] = json!("11:00");
+    let result = apply_block_edit(
+        &json!([standing]),
+        &edited,
+        &json!("occurrence"),
+        &json!(1),
+        &mut fresh_ids(),
+    )
+    .expect("an edit");
+    for block in &result {
+        let standing_id = block["id"] == json!("school");
+        assert!(
+            standing_id || block.get("removed_days").is_none(),
+            "a one-off block cannot carry removed days: {block}"
         );
     }
 }

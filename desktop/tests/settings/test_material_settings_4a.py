@@ -103,7 +103,7 @@ def test_the_volume_saves_inside_zero_to_one_hundred_and_refuses_outside(
         _panel(window).setVolume(bad)
         _pump(qapp)
         assert _prefs(window).get("alert_volume") == 35
-        assert _state(window)["notice"] == "Could not save that."
+        assert _state(window)["notice"] == "Couldn't save that change. Try again."
 
 
 def test_play_sounds_the_chosen_tone_at_the_saved_volume(
@@ -231,7 +231,7 @@ def test_a_custom_length_saves_up_to_the_backend_limit_and_refuses_past_it(
         _panel(window).setTimerLength(key, value)
         _pump(qapp)
         assert _prefs(window).get(field) == ok, value
-        assert _state(window)["notice"] == "Could not save that."
+        assert _state(window)["notice"] == "Couldn't save that change. Try again."
 
 
 def test_splitting_rounds_lengths_to_the_grid_says_so_and_then_steps_in_fifteens(
@@ -244,7 +244,9 @@ def test_splitting_rounds_lengths_to_the_grid_says_so_and_then_steps_in_fifteens
     prefs = _prefs(window)
     assert (prefs["timer_work_min"], prefs["timer_break_min"]) == (45, 15)
     state = _state(window)
-    assert state["timerNote"] == "Focus lengths rounded to 15 minutes, which splitting needs."
+    assert state["timerNote"] == (
+        "Focus lengths were rounded to 15 minutes so FlexWeek can split them into sessions and breaks."
+    )
     assert (state["timerStep"], state["timerFrom"]) == (15, 15)
     _panel(window).setTimerLength("work", 40)
     _pump(qapp)
@@ -494,7 +496,7 @@ def test_a_one_mode_preset_shows_the_mode_in_use_and_cannot_pick_another(
     seg = _named(root, "mode")[0]
     assert str(seg.property("current")) == shown.lower(), "the highlighted choice is the mode in use"
     by_label = {c["label"]: c["enabled"] for c in seg.property("choices").toVariant()}
-    assert by_label == {"Auto": False, "Light": shown == "Light", "Dark": shown == "Dark"}
+    assert by_label == {"Same as this computer": False, "Light": shown == "Light", "Dark": shown == "Dark"}
     _click_segment(qapp, window, seg, other)
     _pump(qapp, 10)
     assert _material_file().get("mode") == "system", "the disabled choice does nothing"

@@ -29,8 +29,9 @@ SCREENS: list[Screen] = [
         id="setup.m3_first_page",
         area="setup",
         prepare=_first_page,
-        checks="Material's setup opens on its first page with the step rail beside it. No page offers the "
-        "Widgets styles or a way to leave Material.",
+        checks="Material's setup opens on its first page: the step bar runs across the top and the "
+        "school-hours choice is a 2x2 grid beside the week preview. No page offers the Widgets "
+        "styles or a way to leave Material.",
         sources=("desktop/native/material/qml/setup", "desktop/native/material/bridge_account.py"),
         styles=("material",),
     ),

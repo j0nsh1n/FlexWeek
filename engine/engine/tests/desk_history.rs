@@ -338,3 +338,170 @@ mod session_rules {
         );
     }
 }
+
+// A save's answer and an Undo or Redo put back in the open week (P4 slice 2C).
+mod travel_rules {
+    use flexweek_engine::desk::history::{SideApplied, acknowledged_step, travel_side};
+    use serde_json::{Map, Value, json};
+
+    const MONDAY: &str = "2026-11-02";
+    const NEXT_MONDAY: &str = "2026-11-09";
+
+    fn map(value: Value) -> Map<String, Value> {
+        value.as_object().cloned().unwrap()
+    }
+
+    #[test]
+    fn an_acknowledged_step_takes_what_the_server_stored_and_the_homework_as_held() {
+        let step = json!({
+            "label": "moving Club to another date", "id": "step-1", "stale": false,
+            "weeks": [
+                {"week_start": MONDAY, "before": [{"id": "club"}], "after": []},
+                {"week_start": NEXT_MONDAY, "before": [], "after": [{"id": "club"}]}
+            ],
+            "assignments": [
+                {"id": "essay", "before": null, "after": {"id": "essay", "title": "Draft"}},
+                {"id": "gone", "before": {"id": "gone"}, "after": {"id": "gone"}}
+            ]
+        });
+        // The server stores the moved block with its own fields. The open week is not in the reply.
+        let data = json!({"weeks": [
+            {"week_start": NEXT_MONDAY, "revision": 5, "blocks": [{"id": "club", "start": "16:00"}]}
+        ]});
+        let held = map(json!({"essay": {"id": "essay", "title": "Essay", "revision": 2}}));
+        let acknowledged = acknowledged_step(&step, &data, &[], &[], &held).unwrap();
+        assert_eq!(
+            acknowledged,
+            json!({
+                "label": "moving Club to another date", "id": "step-1", "stale": false,
+                "weeks": [
+                    {"week_start": MONDAY, "before": [{"id": "club"}], "after": []},
+                    {"week_start": NEXT_MONDAY, "before": [],
+                     "after": [{"id": "club", "start": "16:00"}], "revision": 5}
+                ],
+                "assignments": [
+                    {"id": "essay", "before": null,
+                     "after": {"id": "essay", "title": "Essay", "revision": 2}},
+                    {"id": "gone", "before": {"id": "gone"}, "after": null}
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn an_acknowledged_step_from_another_day_keeps_each_stored_week_it_changed() {
+        let step = json!({"label": "x", "weeks": [], "assignments": []});
+        let before = [json!({"week_start": MONDAY, "revision": 1, "blocks": []})];
+        let after = [json!({"week_start": MONDAY, "revision": 2, "blocks": [{"id": "a"}]})];
+        let acknowledged =
+            acknowledged_step(&step, &json!({}), &before, &after, &Map::new()).unwrap();
+        assert_eq!(
+            acknowledged["weeks"],
+            json!([{"week_start": MONDAY, "before": [], "after": [{"id": "a"}], "revision": 2}])
+        );
+    }
+
+    #[test]
+    fn undo_puts_back_the_before_side_and_keeps_the_live_revision_focus_credit_and_counts() {
+        let step = json!({
+            "label": "editing Essay",
+            "weeks": [{"week_start": MONDAY, "before": [{"id": "soccer"}], "after": []}],
+            "assignments": [{
+                "id": "essay",
+                "before": {"id": "essay", "title": "Essay", "revision": 1, "focus_minutes": 0},
+                "after": {"id": "essay", "title": "Essay", "notes": "Cite two sources", "revision": 2}
+            }]
+        });
+        let held = map(json!({"essay": {
+            "id": "essay", "title": "Essay", "notes": "Cite two sources", "revision": 3,
+            "focus_minutes": 30, "focus_sessions": 1, "planned_min": 20, "done_min": 0
+        }}));
+        let applied = travel_side(&step, false, MONDAY, &[], &held, &[]).unwrap();
+        assert_eq!(
+            applied,
+            SideApplied {
+                blocks: Some(vec![json!({"id": "soccer"})]),
+                assignments: vec![(
+                    "essay".into(),
+                    Some(json!({
+                        "id": "essay", "title": "Essay", "revision": 3, "focus_minutes": 30,
+                        "planned_min": 20, "done_min": 0, "focus_sessions": 1
+                    }))
+                )],
+                basis: None,
+                dirty: vec!["essay".into()],
+            }
+        );
+        // Redo of a step whose week is not on screen leaves the open week's blocks alone, and no focus
+        // credit held reads as none.
+        let held = map(json!({"essay": {"id": "essay", "revision": 4, "focus_minutes": null}}));
+        let redo = travel_side(&step, true, NEXT_MONDAY, &[], &held, &[]).unwrap();
+        assert_eq!(redo.blocks, None);
+        assert_eq!(
+            redo.assignments[0].1,
+            Some(json!({
+                "id": "essay", "title": "Essay", "notes": "Cite two sources", "revision": 4,
+                "focus_minutes": 0, "focus_sessions": 0
+            }))
+        );
+    }
+
+    #[test]
+    fn homework_back_from_a_delete_gets_the_counts_basis_the_step_kept_or_its_sessions() {
+        let step = json!({
+            "label": "deleting Essay",
+            "weeks": [{"week_start": MONDAY, "before": [
+                {"id": "s1", "assignment_id": "essay"}, {"id": "club"}
+            ], "after": [{"id": "club"}]}],
+            "assignments": [
+                {"id": "essay", "before": {"id": "essay", "revision": 9}, "after": null,
+                 "basis": [{"id": "s0", "assignment_id": "essay"}]},
+                {"id": "math", "before": {"id": "math"}, "after": null},
+                {"id": "chem", "before": null, "after": {"id": "chem"}}
+            ]
+        });
+        let held = map(json!({"chem": {"id": "chem", "revision": 1}}));
+        let basis = [
+            json!({"id": "old", "assignment_id": "essay"}),
+            json!({"id": "keep", "assignment_id": "art"}),
+        ];
+        let applied = travel_side(&step, false, MONDAY, &[], &held, &basis).unwrap();
+        assert_eq!(
+            applied.assignments,
+            vec![
+                ("essay".into(), Some(json!({"id": "essay", "revision": 0}))),
+                ("math".into(), Some(json!({"id": "math", "revision": 0}))),
+                ("chem".into(), None),
+            ]
+        );
+        // Essay takes the basis its step kept; math, with none kept, its sessions as Undo shows them.
+        assert_eq!(
+            applied.basis,
+            Some(vec![
+                json!({"id": "keep", "assignment_id": "art"}),
+                json!({"id": "s0", "assignment_id": "essay"}),
+            ])
+        );
+        assert_eq!(applied.dirty, ["essay", "math", "chem"]);
+        let step = json!({"label": "x", "weeks": [{"week_start": MONDAY, "before": [
+            {"id": "s1", "assignment_id": "math"}
+        ]}], "assignments": [{"id": "math", "before": {"id": "math"}}]});
+        let applied = travel_side(&step, false, MONDAY, &[], &Map::new(), &basis).unwrap();
+        assert_eq!(
+            applied.basis,
+            Some(vec![
+                json!({"id": "old", "assignment_id": "essay"}),
+                json!({"id": "keep", "assignment_id": "art"}),
+                json!({"id": "s1", "assignment_id": "math"}),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_step_side_of_the_wrong_shape_is_refused() {
+        let step = json!({"label": "x", "weeks": [], "assignments": [{"id": "a", "before": 5}]});
+        assert!(travel_side(&step, false, MONDAY, &[], &Map::new(), &[]).is_err());
+        let step = json!({"label": "x", "weeks": [{"week_start": MONDAY, "after": []}]});
+        assert!(travel_side(&step, false, MONDAY, &[], &Map::new(), &[]).is_err());
+    }
+}

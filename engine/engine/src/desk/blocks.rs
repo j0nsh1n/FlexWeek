@@ -7,6 +7,7 @@ use super::pydate::from_iso;
 use super::{grid, planning};
 use crate::EngineResult;
 use crate::model;
+use crate::standing::remove_for_week;
 use crate::stored::{add_days, truthy};
 
 pub struct BlockDeletion {
@@ -55,9 +56,7 @@ pub fn delete_block(
         grid::delete_occurrence(&Value::Array(blocks.to_vec()), &json!(block_id), &day_value)
             .map_err(|err| err.message)?
     };
-    // School or a Setup activity stands in every week, so taking it out of this week alone keeps
-    // it here missed on every day, or the standing week would bring it back. `every_week` is the
-    // caller's to take out of the standing week too.
+    // The standing week would fill the block in again if the saved week held no copy.
     if !every_week && setup {
         let gone: Vec<Value> = blocks
             .iter()
@@ -66,14 +65,17 @@ pub fn delete_block(
             })
             .cloned()
             .collect();
-        for gone in gone {
-            let mut missed = gone.clone();
-            let days = gone.get("days").cloned().unwrap_or_else(|| json!([]));
-            if let Some(fields) = missed.as_object_mut() {
-                fields.insert("missed_days".into(), days);
+        removed.extend(gone.into_iter().map(|mut block| {
+            if whole {
+                remove_for_week(block)
+            } else {
+                block["removed_days"] = block["days"].clone();
+                if let Some(fields) = block.as_object_mut() {
+                    fields.shift_remove("missed_days");
+                }
+                block
             }
-            removed.push(missed);
-        }
+        }));
     }
     let title = match block.get("title") {
         Some(Value::String(text)) => text.clone(),

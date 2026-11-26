@@ -63,7 +63,7 @@ def test_protected_times_may_not_overlap_on_a_shared_day() -> None:
     study.set_time(study.protected_rows, 0, "end", "6 pm")
     study.set_time(study.protected_rows, 1, "start", "5:30 pm")
     study.set_time(study.protected_rows, 1, "end", "6:30 pm")
-    assert study.problem() == "That overlaps protected time already on Monday."
+    assert study.problem() == "That overlaps another protected time on Monday."
     for day in range(5):
         study.toggle_day(study.protected_rows, 1, day)
     study.toggle_day(study.protected_rows, 1, 5)

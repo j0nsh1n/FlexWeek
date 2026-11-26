@@ -238,6 +238,65 @@ fn a_weeks_own_missed_day_stays_in_that_week_only() {
 }
 
 #[test]
+fn removed_school_days_stay_off_day_and_month_after_repeat_edit_and_restore() {
+    let db = TestDb::new("standing-removed");
+    let ana = db.account("ana");
+    set_up(&db, ana, &[school()]);
+    save(
+        &db,
+        ana,
+        NEXT_WEEK,
+        json!([with(
+            school(),
+            json!({ "removed_days": [0, 1, 3, 4], "missed_days": [2] })
+        )]),
+    );
+    let point = restore_point(&db, ana, "week-off", "0123456789abcdef");
+    let check = || {
+        let now = parse_moment(NOW).unwrap();
+        let day = views::day(&db.path, ana, NEXT_WEEK, now).unwrap();
+        assert_eq!(day["locked"], json!([]));
+        assert_eq!(day["workload"]["scheduled_min"], 0);
+        let missed = views::day(&db.path, ana, "2026-10-14", now).unwrap();
+        assert_eq!(missed["locked"][0]["missed_days"], json!([2]));
+        let month = views::month(&db.path, ana, "2026-10", 0, now).unwrap();
+        let on = |date| {
+            month["days"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|day| day["date"] == date)
+                .unwrap()
+        };
+        assert_eq!(on(NEXT_WEEK)["blocks"], json!([]));
+        assert_eq!(on(WEEK_AFTER)["blocks"][0]["id"], "school");
+    };
+    check();
+    stand(
+        &db,
+        ana,
+        json!([change(
+            "school",
+            NEXT_WEEK,
+            json!({ "start": "09:00" }),
+            json!([])
+        )]),
+    );
+    check();
+    week_saves::save_week(
+        &db.path,
+        ana,
+        &json!({
+            "week_start": NEXT_WEEK, "blocks": [school()],
+            "revision": week(&db, ana, NEXT_WEEK)["revision"],
+        }),
+    )
+    .unwrap();
+    restore_to(&db, ana, &point, "fedcba9876543210");
+    check();
+}
+
+#[test]
 fn a_change_reaches_the_open_week_on_and_keeps_missed_days_still_school_days() {
     let db = TestDb::new("standing-change");
     let ana = db.account("ana");

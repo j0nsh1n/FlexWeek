@@ -84,7 +84,12 @@ STUDY_CARDS = (
     ("after_school", "After school", "Plan homework in the afternoon before dinner", "Popular"),
     ("evenings", "Evenings", "Keep afternoons free for sports and rest", ""),
     ("anytime", None, "FlexWeek uses any free time outside school", ""),
-    ("custom", None, "Set hours for each day or class, and how far a drag moves a block", "More options"),
+    (
+        "custom",
+        None,
+        "Set hours for each day or class, and choose how far blocks move when dragged",
+        "More options",
+    ),
 )
 REMINDER_LEADS = (10, 5, 15)
 SOUND_CARD_TITLE = "Choose an alarm sound or Spotify link…"

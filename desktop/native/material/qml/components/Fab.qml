@@ -21,14 +21,16 @@ Item {
     M3Palette { id: palette; theme: root.theme }
     property bool keyDown: false
 
+    readonly property real fabRadius: palette.cornerFor(16)
+
     Rectangle {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 6
-        color: root.enabled ? palette.card : palette.disabledFill
-        border.width: root.highContrast ? 1.5 : 1
-        border.color: palette.edge
+        radius: root.fabRadius
+        color: root.enabled ? palette.primaryContainer : palette.disabledFill
+        border.width: root.highContrast ? 1.5 : 0
+        border.color: palette.outline
         Behavior on color {
             ColorAnimation {
                 duration: Motion.fade(200, root.reduceMotion)
@@ -39,8 +41,8 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 6
-        color: root.enabled ? palette.primary : "transparent"
+        radius: root.fabRadius
+        color: root.enabled ? palette.inkPrimaryContainer : "transparent"
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
         reduceMotion: root.reduceMotion
@@ -49,7 +51,7 @@ Item {
         anchors.fill: parent
         anchors.margins: -4
         ring: palette.focusRing
-        ringRadius: 10
+        ringRadius: root.fabRadius + 4
     }
     M3Icon {
         objectName: "icon"
@@ -57,7 +59,7 @@ Item {
         name: root.icon
         width: 24
         height: 24
-        color: root.enabled ? palette.primary : palette.disabledInk
+        color: root.enabled ? palette.inkPrimaryContainer : palette.disabledInk
     }
 
     HoverHandler { id: hover; enabled: root.enabled }

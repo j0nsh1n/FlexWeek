@@ -217,5 +217,5 @@ def test_plan_waits_for_a_failed_save_before_offering_undo(
     _bridge(window).week.plan()
     pump(qapp, 5)
     assert stored_blocks(window) == before
-    assert session.message == "Saving your last change… Plan will work in a moment."
+    assert session.message == "Saving your last change… Try Plan again in a moment."
     assert not (_snack(window).startswith("Placed") and _action(window) == "UNDO")

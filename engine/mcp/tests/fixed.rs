@@ -788,7 +788,7 @@ fn school_day_off_skips_or_deletes_one_day_this_week() {
 }
 
 #[test]
-fn school_deleted_this_week_stays_missed_and_every_week_stops_it() {
+fn school_deleted_this_week_keeps_removed_days_and_every_week_stops_it() {
     let world = signed_in("school-delete");
     school_stands(&world);
     let mut server = boot(&world);
@@ -801,9 +801,9 @@ fn school_deleted_this_week_stays_missed_and_every_week_stops_it() {
     assert_eq!(body_of(&this_week)["ok"], json!(true), "got {this_week}");
     let week = seen(&mut server, WEEK, 3);
     assert_eq!(
-        by_id(&week, "school")["missed_days"],
+        by_id(&week, "school")["removed_days"],
         json!([0, 1, 2, 3, 4]),
-        "this week keeps school missed on every day, or the standing week brings it back, got {week}"
+        "this week records each removed School day so the standing week cannot fill it in, got {week}"
     );
     let next = seen(&mut server, NEXT, 4);
     assert_eq!(
@@ -1973,5 +1973,38 @@ fn every_week_start_only_edit_on_shown_week_is_refused_when_a_version_would_pass
     assert_eq!(
         after["revision"], initial["revision"],
         "a refused edit writes nothing"
+    );
+}
+
+#[test]
+fn an_occurrence_edit_on_a_removed_day_is_refused() {
+    let world = signed_in("edit-removed-day");
+    seed_week(
+        &world,
+        json!([{
+            "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+            "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class",
+            "removed_days": [0]
+        }]),
+    );
+    let mut server = boot(&world);
+    let refused = server.call(
+        "edit_block",
+        json!({"operation_id": "op-edit-removed", "week_start": WEEK, "expected_revision": 4,
+            "block_id": "school", "scope": "occurrence", "day": 0, "start": "09:00"}),
+        2,
+    );
+    assert_eq!(
+        tool_error_text(&refused),
+        Some("That block is not in this week, so nothing changed."),
+        "got {refused}"
+    );
+    let (blocks, revision) = stored(&world, WEEK);
+    assert_eq!(revision, 4, "nothing was saved");
+    assert_eq!(by_id(&blocks, "school")["removed_days"], json!([0]));
+    assert_eq!(
+        blocks.as_array().map(Vec::len),
+        Some(1),
+        "no one-day block was made"
     );
 }

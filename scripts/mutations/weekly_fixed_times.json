@@ -1,10 +1,10 @@
 [
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/block_edits.rs",
   "name": "Setup run again drops a weekly fixed time",
-  "old": "        return made + weekly\n",
-  "new": "        return made\n",
-  "test": "desktop/tests/week/test_weekly_fixed_times.py::test_finishing_setups_week_page_again_leaves_a_weekly_time_alone"
+  "old": "    made.extend(weekly);\n",
+  "new": "    let _ = weekly;\n",
+  "test": "cargo:flexweek-app:session_block_edits:setup_run_again_keeps_a_weekly_time"
  },
  {
   "file": "desktop/native/material/sheet_block.py",

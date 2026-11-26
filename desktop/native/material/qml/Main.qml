@@ -42,7 +42,7 @@ Item {
     readonly property bool typing: sheetHost.active || _field(Window.activeFocusItem)
     // The Focus screen covers the window. The number keys, Z and Esc belong to it while it is open.
     readonly property bool focusOpen: bridge ? bridge.focus.open : false
-    readonly property bool settingsPromptOpen: bridge && bridge.settingsBridge
+    readonly property bool settingsPromptOpen: bridge && bridge.screen === "settings" && bridge.settingsBridge
         ? bridge.settingsBridge.promptOpen : false
     // Set by the window while one of its own dialogs (Help) is up over this one: its keys are not ours,
     // and a Shortcut here still fires with that dialog active, so Esc never reached it.
@@ -334,7 +334,16 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 height: 64
-                color: root.theme.surface
+                color: topPalette.surface
+                M3Palette { id: topPalette; theme: root.theme }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: root.highContrast ? 1.5 : 1
+                    color: topPalette.outlineVariant
+                }
 
                 Text {
                     id: title
@@ -343,11 +352,12 @@ Item {
                     anchors.leftMargin: 20
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.right: tools.left
+                    anchors.rightMargin: 12
                     text: bridge.title
-                    color: root.theme.onSurface
+                    color: topPalette.inkSurface
                     font.family: M3Font.heading
                     font.pixelSize: M3Font.px(22)
-                    font.weight: 500
+                    font.weight: 600
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
                     // Week and Month titles open the Go to date month, so they are Tab stops. Day and My day
@@ -411,58 +421,94 @@ Item {
                 Row {
                     id: tools
                     anchors.right: parent.right
-                    anchors.rightMargin: 8
+                    anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 4
+                    spacing: 6
                     enabled: !root.settingsPromptOpen
 
-                    IconButton {
-                        objectName: "weekPrevious"
-                        visible: bridge.screen === "week"
-                        theme: root.theme
-                        density: root.density
-                        reduceMotion: root.reduceMotion
-                        highContrast: root.highContrast
-                        icon: "chevron_left"
-                        accessName: "Previous week"
-                        onClicked: bridge.week.previous()
-                    }
-
-                    Button {
-                        objectName: "weekToday"
+                    Rectangle {
+                        id: weekNavCapsule
+                        objectName: "weekNavCapsule"
                         visible: bridge.screen === "week"
                         anchors.verticalCenter: parent.verticalCenter
-                        theme: root.theme
-                        density: root.density
-                        reduceMotion: root.reduceMotion
-                        highContrast: root.highContrast
-                        kind: "text"
-                        text: "Today"
-                        accessName: "Go to today"
-                        onClicked: bridge.week.today()
+                        height: 36
+                        width: weekNavRow.implicitWidth + 8
+                        radius: topPalette.cornerFor(18)
+                        color: topPalette.cardSurface
+                        border.width: root.highContrast ? 1.5 : 1
+                        border.color: root.highContrast ? topPalette.outline : topPalette.outlineVariant
+
+                        Row {
+                            id: weekNavRow
+                            anchors.centerIn: parent
+                            spacing: 0
+
+                            IconButton {
+                                objectName: "weekPrevious"
+                                visible: bridge.screen === "week"
+                                small: true
+                                anchors.verticalCenter: parent.verticalCenter
+                                theme: root.theme
+                                density: root.density
+                                reduceMotion: root.reduceMotion
+                                highContrast: root.highContrast
+                                icon: "chevron_left"
+                                accessName: "Previous week"
+                                onClicked: bridge.week.previous()
+                            }
+
+                            Button {
+                                objectName: "weekToday"
+                                visible: bridge.screen === "week"
+                                height: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                theme: root.theme
+                                density: root.density
+                                reduceMotion: root.reduceMotion
+                                highContrast: root.highContrast
+                                kind: "text"
+                                text: "Today"
+                                accessName: "Go to today"
+                                onClicked: bridge.week.today()
+                            }
+
+                            IconButton {
+                                objectName: "weekNext"
+                                visible: bridge.screen === "week"
+                                small: true
+                                anchors.verticalCenter: parent.verticalCenter
+                                theme: root.theme
+                                density: root.density
+                                reduceMotion: root.reduceMotion
+                                highContrast: root.highContrast
+                                icon: "chevron_right"
+                                accessName: "Next week"
+                                onClicked: bridge.week.next()
+                            }
+                        }
                     }
 
-                    IconButton {
-                        objectName: "weekNext"
-                        visible: bridge.screen === "week"
-                        theme: root.theme
-                        density: root.density
-                        reduceMotion: root.reduceMotion
-                        highContrast: root.highContrast
-                        icon: "chevron_right"
-                        accessName: "Next week"
-                        onClicked: bridge.week.next()
-                    }
+                    Rectangle {
+                        id: clockPill
+                        objectName: "materialClockPill"
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 36
+                        width: clockText.implicitWidth + 24
+                        radius: topPalette.cornerFor(18)
+                        color: topPalette.cardSurface
+                        border.width: root.highContrast ? 1.5 : 1
+                        border.color: root.highContrast ? topPalette.outline : topPalette.outlineVariant
 
-                    Text {
-                        objectName: "materialClock"
-                        height: 48
-                        verticalAlignment: Text.AlignVCenter
-                        text: bridge.clockText
-                        color: root.theme.onSurface
-                        font.family: M3Font.family
-                        font.pixelSize: M3Font.px(16)
-                        font.weight: 500
+                        Text {
+                            id: clockText
+                            objectName: "materialClock"
+                            anchors.centerIn: parent
+                            text: bridge.clockText
+                            color: topPalette.inkSurface
+                            font.family: M3Font.family
+                            font.pixelSize: M3Font.px(14)
+                            font.weight: 600
+                        }
                     }
 
                     IconButton {

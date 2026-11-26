@@ -190,7 +190,7 @@ fn planning_conflict_and_pending_save_block_before_solving() {
     assert_eq!(
         prepare_plan(planning).unwrap(),
         PlanPreparation::Blocked {
-            message: "Planning\u{2026} one moment.".into(),
+            message: "Already planning\u{2026}".into(),
             replan_after_save: false,
         }
     );
@@ -226,7 +226,7 @@ fn planning_conflict_and_pending_save_block_before_solving() {
     assert_eq!(
         prepare_plan(pending_plain).unwrap(),
         PlanPreparation::Blocked {
-            message: "Saving your last change\u{2026} Plan will work in a moment.".into(),
+            message: "Saving your last change\u{2026} Try Plan again in a moment.".into(),
             replan_after_save: false,
         }
     );
@@ -245,7 +245,7 @@ fn planning_conflict_and_pending_save_block_before_solving() {
     assert_eq!(
         prepare_plan(pending_replan).unwrap(),
         PlanPreparation::Blocked {
-            message: "Saving your last change\u{2026} Plan will work in a moment.".into(),
+            message: "Saving your last change\u{2026} Try Plan again in a moment.".into(),
             replan_after_save: true,
         }
     );
@@ -936,10 +936,10 @@ fn auto_split_inflates_for_solve_uses_preinflation_work_lengths_and_keeps_siblin
     assert_eq!(answer.plan_open, 0);
     assert_eq!(answer.plan_first, Some((1, 15 * 60 + 30)));
     assert_eq!(answer.split_count, 1);
-    assert_eq!(answer.split_note, " Split 1 into focus chunks.");
+    assert_eq!(answer.split_note, " Split 1 into focus sessions and breaks.");
     assert_eq!(
         answer.placed_note,
-        "Placed 2 homework blocks. Split 1 into focus chunks."
+        "Placed 2 sessions. Split 1 into focus sessions and breaks."
     );
 
     // Essay split into 3 x 30 min work + 2 x 15 min break; quiz kept start 15:30 on day 1.
@@ -1060,7 +1060,7 @@ fn pre_split_counts_name_uncovered_remainders_against_pre_save_basis() {
     );
     assert_eq!(
         answer.placed_note,
-        "Placed 1 homework block. History essay still has 10 min with no time."
+        "Placed 1 session. History essay still has 10 min with no time."
     );
 }
 
@@ -1118,7 +1118,7 @@ fn the_remainder_is_counted_before_focus_splitting_not_after() {
     assert_eq!(answer.plan_remainders, Vec::<(String, i64)>::new());
     assert_eq!(
         answer.placed_note,
-        "Placed 1 homework block. Split 1 into focus chunks."
+        "Placed 1 session. Split 1 into focus sessions and breaks."
     );
 }
 
@@ -1149,12 +1149,12 @@ fn sentences_and_first_placed_match_desktop_rules() {
     );
     assert_eq!(
         plan_sentence(0, 1, &[]),
-        "Nothing placed. 1 with no time yet."
+        "No homework was placed. 1 still needs a time."
     );
-    assert_eq!(plan_sentence(1, 0, &[]), "Placed 1 homework block.");
+    assert_eq!(plan_sentence(1, 0, &[]), "Placed 1 session.");
     assert_eq!(
         plan_sentence(2, 1, &one),
-        "Placed 2 homework blocks. 1 with no time yet. History essay still has 10 min with no time."
+        "Placed 2 sessions. 1 still needs a time. History essay still has 10 min with no time."
     );
 
     // first_placed picks earliest (day, minute) among targets only.

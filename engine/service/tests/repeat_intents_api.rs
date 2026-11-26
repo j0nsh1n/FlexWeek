@@ -139,7 +139,7 @@ fn a_change_that_is_not_one_is_refused_with_its_sentence_and_saves_nothing() {
     match changes(&db, ana, given) {
         Err(ServiceError::Refused(Refusal::Invalid(words))) => assert_eq!(
             words,
-            "That change leaves no day, so nothing changed. Use stop to take it off the calendar."
+            "That change leaves no days, so nothing changed. To remove it, choose Delete instead."
         ),
         other => panic!("not refused in words: {other:?}"),
     }

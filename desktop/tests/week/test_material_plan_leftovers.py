@@ -46,7 +46,7 @@ def _plan(window, qapp, root) -> None:
     wait_until(
         qapp,
         lambda: (
-            (_snack(window).startswith("Placed") or _snack(window).startswith("Nothing"))
+            (_snack(window).startswith("Placed") or _snack(window).startswith("No homework was placed"))
             and not window.session.busy
         ),
         what=lambda: repr(_snack(window)) + repr(window.session.message),
@@ -75,8 +75,10 @@ def test_a_plan_that_could_place_nothing_says_how_many_it_tried(qapp, window) ->
     _poster(window, qapp)
     _plan(window, qapp, root)
 
-    assert _snack(window) == "Placed 0 of 1. Science fair poster still has 9 h 55 min with no time."
-    assert session.message == "Nothing placed. Science fair poster still has 9 h 55 min with no time."
+    assert _snack(window) == (
+        "Placed 0 of 1. Science fair poster still has 9 h 55 min with no time."
+    )
+    assert session.message == "No homework was placed. Science fair poster still has 9 h 55 min with no time."
     waiting = [b for b in session.blocks if b.get("assignment_id") == "poster" and not b.get("start")]
     assert [b["duration_min"] for b in waiting] == [585]
     assert _qml(root, "homeworkCount").property("text") == "1"
@@ -102,9 +104,11 @@ def test_a_second_homework_that_was_placed_does_not_contradict_the_sentence(qapp
     _pump(qapp)
     _plan(window, qapp, root)
 
-    assert _snack(window) == "Placed 1 of 2. Science fair poster still has 9 h 55 min with no time."
+    assert _snack(window) == (
+        "Placed 1 of 2. Science fair poster still has 9 h 55 min with no time."
+    )
     assert window.session.message == (
-        "Placed 1 homework block. Science fair poster still has 9 h 55 min with no time."
+        "Placed 1 session. Science fair poster still has 9 h 55 min with no time."
     )
 
 

@@ -10,8 +10,7 @@ use flexweek_engine::shown;
 use flexweek_service::blocks::check_block;
 use serde_json::{Map, Value, json};
 
-pub const WEEK_OVER: &str =
-    "This week is over, so nothing was planned. Plan this week or a later one.";
+pub const WEEK_OVER: &str = "That week is over. Open this week or a later one, then plan again.";
 pub const LEFT_NAMED: usize = 2;
 
 /// Minutes in a week: the longest length a placed block can have.
@@ -20,10 +19,10 @@ const WEEK_MINUTES: i64 = 7 * 24 * 60;
 /// The most minutes one share may name; homework is never planned past this.
 const SHARE_MINUTES_MAX: i64 = 1_000_000;
 
-const PLANNING_BUSY: &str = "Planning\u{2026} one moment.";
+const PLANNING_BUSY: &str = "Already planning\u{2026}";
 const WEEK_CONFLICT: &str =
     "This week changed in another window. Choose More > Reload this week, then try again.";
-const SAVING_WAIT: &str = "Saving your last change\u{2026} Plan will work in a moment.";
+const SAVING_WAIT: &str = "Saving your last change\u{2026} Try Plan again in a moment.";
 
 /// Local wall clock read by the host for planning decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -355,17 +354,17 @@ pub fn left_sentence(left: &[(String, i64)]) -> String {
     said
 }
 
-/// How much homework a plan placed, counting homework only. `waiting` is homework whose sessions
+/// How many targeted sessions a plan placed. `waiting` is homework whose sessions
 /// found no room; `left` is homework with minutes no session holds, by title and minutes.
 pub fn plan_sentence(placed: i64, waiting: i64, left: &[(String, i64)]) -> String {
     let mut said = if placed == 0 {
-        "Nothing placed.".to_string()
+        "No homework was placed.".to_string()
     } else {
         let suffix = if placed == 1 { "" } else { "s" };
-        format!("Placed {placed} homework block{suffix}.")
+        format!("Placed {placed} session{suffix}.")
     };
     if waiting != 0 {
-        said.push_str(&format!(" {waiting} with no time yet."));
+        said.push_str(&format!(" {waiting} still needs a time."));
     }
     said.push_str(&left_sentence(left));
     said
@@ -441,7 +440,7 @@ pub fn apply_auto_split(
     Ok(AutoSplit {
         blocks: split,
         count,
-        note: format!(" Split {count} into focus chunks."),
+        note: format!(" Split {count} into focus sessions and breaks."),
     })
 }
 

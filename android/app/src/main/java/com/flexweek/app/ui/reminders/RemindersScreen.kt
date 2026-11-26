@@ -137,7 +137,7 @@ fun RemindersScreen(
             SettingRow(
                 icon = R.drawable.ic_timer,
                 title = "On-time reminders",
-                subtitle = "Android may send them up to 5 min late unless you allow this",
+                subtitle = "Android may send reminders up to 5 min late unless you turn this on.",
                 trailing = {
                     Switch(
                         checked = state.exactReminders,
@@ -281,10 +281,10 @@ private fun UpdatesBlock(
                 update.message?.let { Text(it) }
             }
             is UpdateState.NeedsPermission -> {
-                Text("To install FlexWeek, allow this app to install updates.")
+                Text("Allow FlexWeek to install updates in Android's settings.")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onUpdateLater, modifier = Modifier.heightIn(min = 48.dp)) { Text("Later") }
-                    Button(onClick = onUpdatePermission, modifier = Modifier.heightIn(min = 48.dp)) { Text("Open the setting") }
+                    Button(onClick = onUpdatePermission, modifier = Modifier.heightIn(min = 48.dp)) { Text("Open Android settings") }
                 }
             }
             is UpdateState.Downloading -> {

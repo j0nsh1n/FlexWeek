@@ -16,12 +16,12 @@ use crate::time::{hhmm_to_minutes, minutes_to_hhmm};
 type Fresh<'a> = &'a mut dyn FnMut() -> String;
 
 const DAYS_IN_WEEK: i64 = 7;
-const NOT_FOUND: &str = "That block is not in this week, so nothing moved.";
+const NOT_FOUND: &str = "That block isn't in this week, so nothing moved.";
 const FINISHED: &str = "That's finished, so it stayed where it was.";
 const NO_SUCH_DAY: &str = "That day is not in this week, so it stayed where it was.";
 const NOT_ON_DAY: &str = "That block is not on that day, so it stayed where it was.";
 const END_BEFORE_START: &str = "The end has to come after the start, so it stayed where it was.";
-const NO_TIME_TO_MOVE: &str = "That has no time to move, so it stayed where it was.";
+const NO_TIME_TO_MOVE: &str = "That block has no time yet, so it stayed where it was.";
 
 /// Where the block was let go, in the week's day numbers (0 is Monday) and minutes of the day.
 /// `from_day` is the day it was dragged from, or -1 for homework that has no day yet.
@@ -183,15 +183,16 @@ pub fn hand_move(
         });
     }
     if is_series_checked(block)? {
-        let origin = if contains(
-            &get(block, "days")?.cloned().unwrap_or(json!([])),
-            &json!(drop.from_day),
-        )? {
+        let days = get(block, "days")?.cloned().unwrap_or(json!([]));
+        let on_day = |day| {
+            let day = json!(day);
+            Ok::<_, crate::EngineError>(
+                contains(&days, &day)? && !crate::standing::removed_on(block, &day),
+            )
+        };
+        let origin = if on_day(drop.from_day)? {
             drop.from_day
-        } else if contains(
-            &get(block, "days")?.cloned().unwrap_or(json!([])),
-            &json!(drop.to_day),
-        )? {
+        } else if on_day(drop.to_day)? {
             drop.to_day
         } else {
             return refused(NOT_ON_DAY);
