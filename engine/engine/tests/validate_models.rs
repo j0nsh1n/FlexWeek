@@ -37,6 +37,43 @@ fn block() -> Value {
     })
 }
 
+#[test]
+fn removed_days_round_trip_only_on_standing_occurrences() {
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "start": "08:00",
+        "duration_min": 390, "days": [0, 2], "missed_days": [2], "removed_days": [0],
+    });
+    for invalid in [
+        json!([0, 0]),
+        json!([7]),
+        json!([1]),
+        json!([2]),
+        json!(["0"]),
+        json!(null),
+    ] {
+        let invalid_school = with(school.clone(), "removed_days", invalid);
+        assert!(time_block(&invalid_school).is_err(), "{invalid_school}");
+    }
+    for (field, value) in [
+        ("id", json!("one-off")),
+        ("kind", json!("flexible")),
+        ("start", json!(null)),
+    ] {
+        let invalid_school = with(school.clone(), field, value);
+        assert!(time_block(&invalid_school).is_err(), "{invalid_school}");
+    }
+    let stored = time_block(&school).unwrap().to_value();
+    assert_eq!(stored["removed_days"], json!([0]));
+    assert_eq!(stored["missed_days"], json!([2]));
+    assert!(
+        time_block(&block())
+            .unwrap()
+            .to_value()
+            .get("removed_days")
+            .is_none()
+    );
+}
+
 fn with(mut value: Value, key: &str, patch: Value) -> Value {
     value
         .as_object_mut()

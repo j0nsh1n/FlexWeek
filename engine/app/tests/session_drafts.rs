@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use flexweek_app::session::block_edits::{BlockDeleteInput, delete_block};
 use flexweek_app::session::{Host, Session};
+use flexweek_engine::desk::weekmodel::build_week;
 use flexweek_service::{accounts::Entropy, plans::Stopwatch};
 use flexweek_testkit::{Counting, TestDb};
 use serde_json::{Value, json};
@@ -499,6 +501,72 @@ fn a_wednesday_week_can_save_three_edits_and_undo_each_without_a_conflict() {
     desk.save_to_store("undo-first");
     assert_eq!(desk.stored(FIRST)["blocks"], json!([]));
     assert_eq!(desk.view("redo").as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn deleting_school_for_the_shown_week_survives_a_reload_and_can_be_undone() {
+    const SHOWN: &str = "2026-11-04";
+    const LATER: &str = "2026-11-11";
+    let mut desk = Desk::signed_in("draft-school-week-delete");
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "days": [0, 1, 2, 3, 4],
+        "start": "08:00", "duration_min": 390, "category": "class",
+    });
+    let setup = desk.request(&json!({
+        "method": "POST", "path": "/api/changes", "body": {
+            "weeks": [], "repeats": [{
+                "id": "school", "scope": "from", "from_date": FIRST, "add_days": [0, 1, 2, 3, 4],
+                "set": { "title": "School", "start": "08:00", "duration_min": 390, "category": "class" },
+            }],
+        },
+    }));
+    assert_eq!(setup["ok"], true, "{setup}");
+    desk.first_weekday = 2;
+    desk.load(SHOWN);
+    let visible = |desk: &Desk| {
+        build_week(
+            &desk.view("week_start"),
+            &desk.view("blocks"),
+            &json!({}),
+            &json!({}),
+        )
+        .unwrap()["occurrences"]
+            .as_array()
+            .unwrap()
+            .len()
+    };
+    assert_eq!(visible(&desk), 5);
+    let gone = delete_block(&BlockDeleteInput {
+        blocks: &desk.view("blocks"),
+        repeats: &json!([school]),
+        block_id: "school",
+        scope: "series",
+        day: None,
+        every_week: false,
+        selected_id: None,
+        label: None,
+    })
+    .unwrap()
+    .unwrap();
+    desk.edit(json!(gone.blocks), json!([]), Value::Null);
+    desk.save_to_store("remove-school");
+    let (ticket, fetch) = desk.fetch(SHOWN);
+    assert_eq!(desk.carry(&fetch, &Value::Null)["action"], "loaded");
+    desk.idle(ticket);
+    assert_eq!(visible(&desk), 0);
+    assert_eq!(
+        desk.stored(FIRST)["blocks"][0]["removed_days"],
+        json!([2, 3, 4])
+    );
+    assert_eq!(
+        desk.stored(NEXT)["blocks"][0]["removed_days"],
+        json!([0, 1])
+    );
+    desk.undo();
+    desk.save_to_store("undo-remove-school");
+    assert_eq!(visible(&desk), 5);
+    desk.load(LATER);
+    assert_eq!(visible(&desk), 5);
 }
 
 #[test]

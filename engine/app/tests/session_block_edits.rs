@@ -6,6 +6,7 @@ use flexweek_app::session::block_edits::{
     BlockDeleteInput, BlockEditInput, HandMoveInput, RepeatEditInput, apply_block_edit,
     apply_hand_move, delete_block, repeat_edit, setup_standing,
 };
+use flexweek_engine::desk::{grid::occupied_intervals, weekmodel::build_week};
 use serde_json::{Value, json};
 
 const WEEK: &str = "2026-09-21";
@@ -204,9 +205,11 @@ fn deleting_homework_takes_the_whole_block() {
 }
 
 #[test]
-fn deleting_a_school_seam_takes_every_piece_and_marks_it_missed_this_week() {
+fn deleting_a_school_seam_hides_every_piece_except_days_the_student_missed() {
+    let mut missed = school(vec![0, 1, 2, 3, 4], "08:00");
+    missed["missed_days"] = json!([2]);
     let blocks = json!([
-        school(vec![0, 1, 2, 3, 4], "08:00"),
+        missed,
         {
             "id": "school@20260921-1", "title": "School", "kind": "locked", "duration_min": 390,
             "days": [0, 1], "start": "08:00", "category": "class",
@@ -225,11 +228,14 @@ fn deleting_a_school_seam_takes_every_piece_and_marks_it_missed_this_week() {
     };
     let gone = delete_block(&input).unwrap().expect("the block is there");
     assert_eq!(gone.blocks.len(), 2);
-    for item in &gone.blocks {
-        assert_eq!(
-            item["missed_days"], item["days"],
-            "this week keeps it missed on every day"
-        );
+    let edited = json!(gone.blocks);
+    let view = build_week(&json!(WEEK), &edited, &json!({}), &json!({})).unwrap();
+    let drawn = view["occurrences"].as_array().unwrap();
+    assert_eq!(drawn.len(), 1);
+    assert_eq!(drawn[0]["day"], 2);
+    assert_eq!(drawn[0]["missed"], true);
+    for day in 0..7 {
+        assert!(occupied_intervals(&edited, &json!(day)).unwrap().is_empty());
     }
     assert_eq!(gone.repeats, vec![school(vec![0, 1, 2, 3, 4], "08:00")]);
     assert!(gone.clear_selection);
