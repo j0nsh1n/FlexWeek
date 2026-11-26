@@ -1263,6 +1263,9 @@ class NativeSession(QObject):
             "explanations": [{"block_id": key, "message": value} for key, value in self.needs_time.items()],
         }
 
+    def check_block(self, block: dict) -> dict:
+        return _checked_block(block)
+
     def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
         edit = json.loads(
             flexweek_engine.block_edit_json(

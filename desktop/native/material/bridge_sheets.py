@@ -677,14 +677,23 @@ class SheetsBridge(QObject):
             after = [body if item["id"] == body["id"] else item for item in repeats]
         else:
             after = [item for item in repeats if item["id"] != draft.family]
+        alone: dict | None = None
+        if kind == "stop":
+            alone = draft.stopped_one_off(made)
+            if alone is not None:
+                try:
+                    # Validate before touching repeats so a refusal never leaves them half-changed.
+                    alone = session.check_block(alone)
+                except ValueError as error:
+                    draft.error = str(error)
+                    self._publish()
+                    return
         if not self._window._apply_standing(after, f"changing {name}"):  # type: ignore[attr-defined]
             return
         if kind == "make":
             # The one-off is now the repeat: one Undo step, named for the change.
             session.delete_block(draft.original["id"], scope="series", label=f"changing {name}")
-        elif kind == "stop":
-            alone = {key: value for key, value in made.items() if key != "until"}
-            alone["id"] = draft.family[len("weekly-") :]
+        elif kind == "stop" and alone is not None:
             session.add_block(alone, scope="series")
         said = {
             "add": f"{name} repeats every week from this week on.",

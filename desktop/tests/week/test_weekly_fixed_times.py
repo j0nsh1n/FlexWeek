@@ -289,6 +289,40 @@ def test_switch_off_keeps_this_week_as_a_one_off_and_ends_the_weeks_after(qapp, 
     assert _guitar(week) == []
 
 
+def test_switch_off_with_removed_days_keeps_only_active_days_and_keeps_repeats_whole_on_error(
+    qapp, week, sheets, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repeat = _add_weekly(qapp, week, sheets, days=(0, 2, FRIDAY))
+    current = next(b for b in week.session.blocks if b["id"] == repeat["id"])
+    week.session.add_block({**current, "removed_days": [2, FRIDAY]})
+    week.session.save()
+    _settled(qapp, week)
+
+    # A refused one-off must leave repeats untouched and keep the sheet open.
+    def refuse(_block: dict) -> dict:
+        raise ValueError("one-off refused")
+
+    monkeypatch.setattr(week.session, "check_block", refuse)
+    _edit(sheets, repeat["id"], 0)
+    sheets.setFlag("repeat", False)
+    sheets.next()
+    assert sheets.kind == "block"
+    assert sheets.form["error"] == "one-off refused"
+    assert any(r["id"] == repeat["id"] for r in week.session.repeats)
+    monkeypatch.undo()
+
+    # With validation passing, the stopped one-off keeps only Monday and carries no removed_days.
+    sheets.next()
+    assert sheets.ask == {}
+    _settled(qapp, week)
+    assert _starts(week) == [("17:00", [0])]
+    kept = _guitar(week)[0]
+    assert kept["id"] == repeat["id"].removeprefix("weekly-")
+    assert not kept.get("removed_days")
+    _go(qapp, week, 1)
+    assert _guitar(week) == []
+
+
 def test_delete_this_week_only_keeps_later_weeks_and_this_week_and_later_takes_them_all(
     qapp, week, sheets
 ) -> None:
