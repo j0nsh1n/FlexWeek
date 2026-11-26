@@ -1963,8 +1963,7 @@ class SheetsBridge(QObject):
         elif kind == "update" and self._update is not None:
             self._form = update_form(self._update, self._update_current, self._update_state)
         elif kind == "account":
-            session = self._session
-            self._form = account_form(session.storage_info, session.recovery_remaining)
+            self._form = account_form(self._session.storage_info, self._session.recovery_remaining)
         elif kind == "restore":
             session = self._session
             self._form = restore_form(
