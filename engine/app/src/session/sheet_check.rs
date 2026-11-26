@@ -276,6 +276,10 @@ fn links_problem(map: &Map<String, Value>) -> Option<&'static str> {
     let Some(items) = value.as_array() else {
         return Some(HOMEWORK_LINKS_LIMIT_PROBLEM);
     };
+    // pydantic reports a list over its cap before looking at any item, so the cap sentence wins.
+    if items.len() > 20 {
+        return Some(HOMEWORK_LINKS_LIMIT_PROBLEM);
+    }
     for item in items {
         let Some(obj) = item.as_object() else {
             return Some(HOMEWORK_LINKS_LIMIT_PROBLEM);
@@ -304,9 +308,6 @@ fn links_problem(map: &Map<String, Value>) -> Option<&'static str> {
             return Some(HOMEWORK_LINKS_LIMIT_PROBLEM);
         }
     }
-    if items.len() > 20 {
-        return Some(HOMEWORK_LINKS_LIMIT_PROBLEM);
-    }
     None
 }
 
@@ -315,6 +316,10 @@ fn checklist_problem(map: &Map<String, Value>) -> Option<&'static str> {
     let Some(items) = value.as_array() else {
         return Some(HOMEWORK_CHECKLIST_LIMIT_PROBLEM);
     };
+    // pydantic reports a list over its cap before looking at any item, so the cap sentence wins.
+    if items.len() > 40 {
+        return Some(HOMEWORK_CHECKLIST_LIMIT_PROBLEM);
+    }
     for item in items {
         let Some(obj) = item.as_object() else {
             return Some(HOMEWORK_CHECKLIST_LIMIT_PROBLEM);
@@ -338,9 +343,6 @@ fn checklist_problem(map: &Map<String, Value>) -> Option<&'static str> {
         if obj.keys().any(|k| k != "id" && k != "text" && k != "done") {
             return Some(HOMEWORK_CHECKLIST_LIMIT_PROBLEM);
         }
-    }
-    if items.len() > 40 {
-        return Some(HOMEWORK_CHECKLIST_LIMIT_PROBLEM);
     }
     None
 }

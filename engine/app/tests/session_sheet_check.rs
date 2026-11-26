@@ -316,6 +316,32 @@ fn homework_checklist_reports_text_and_limit_separately() {
 }
 
 #[test]
+fn a_list_over_its_cap_says_the_cap_even_when_its_first_item_is_bad() {
+    // pydantic 2.13.5 reports the list's too_long and never reaches the items.
+    let mut links = valid_homework();
+    let mut items: Vec<Value> = vec![json!({"label": "", "url": "https://example.com"})];
+    items.extend(
+        (0..20).map(|i| json!({"label": format!("Link {i}"), "url": "https://example.com"})),
+    );
+    links["links"] = Value::Array(items);
+    assert_eq!(
+        homework_sheet_problem(&links),
+        Some(("links".into(), HOMEWORK_LINKS_LIMIT_PROBLEM.into()))
+    );
+
+    let mut steps = valid_homework();
+    let mut items: Vec<Value> = vec![json!({"id": "c0", "text": "", "done": false})];
+    items.extend(
+        (1..41).map(|i| json!({"id": format!("c{i}"), "text": format!("Step {i}"), "done": false})),
+    );
+    steps["checklist"] = Value::Array(items);
+    assert_eq!(
+        homework_sheet_problem(&steps),
+        Some(("checklist".into(), HOMEWORK_CHECKLIST_LIMIT_PROBLEM.into()))
+    );
+}
+
+#[test]
 fn homework_model_validators_and_unmapped_fields_return_homework_refused() {
     let mut completed_no_stamp = valid_homework();
     completed_no_stamp["completed"] = json!(true);
