@@ -14,7 +14,8 @@ use super::Session;
 use super::frame::{Event, Identity, Outcome};
 
 /// Said when a sign-in's answer cannot be read as an account.
-const UNDISPLAYABLE: &str = "FlexWeek could not display this response.";
+const UNDISPLAYABLE: &str =
+    "FlexWeek couldn't read its own answer. Close and reopen it, then try again.";
 
 /// A flow waiting for its request's answer, with the ticket it began with.
 #[derive(Clone, Debug)]
@@ -247,7 +248,7 @@ impl Session {
         if let Some(token) = started {
             self.frame.use_session(token);
         }
-        self.frame.set_account(made.clone()).ok()?;
+        self.set_account(made.clone()).ok()?;
         Some(json!({ "kind": "signed_in", "how": how, "account": account_json(&made) }))
     }
 
@@ -272,7 +273,7 @@ impl Session {
         if let Some(token) = started {
             self.frame.use_session(token);
         }
-        self.frame.set_account(made.clone()).ok()?;
+        self.set_account(made.clone()).ok()?;
         self.status.set_busy(false);
         self.status
             .say("Save these recovery codes before continuing.");
@@ -335,6 +336,7 @@ impl Session {
             return None;
         }
         self.frame.reset();
+        self.drafts.clear("");
         self.status.set_busy(false);
         self.status.say("Signed out.");
         Some(json!({ "kind": "signed_out", "account_id": account }))
@@ -373,7 +375,7 @@ impl Session {
         }
         let account = match made {
             Some(made) => {
-                self.frame.set_account(made.clone()).ok()?;
+                self.set_account(made.clone()).ok()?;
                 Some(account_json(&made))
             }
             None => None,
@@ -418,6 +420,7 @@ impl Session {
             self.status.cancel();
         }
         self.frame.reset();
+        self.drafts.clear("");
         self.status.set_busy(false);
         self.status.say("Account deleted.");
         Some(json!({ "kind": "account_deleted", "owner": owner }))

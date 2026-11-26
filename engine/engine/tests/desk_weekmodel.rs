@@ -349,8 +349,8 @@ fn test_work_nobody_has_planned_yet_says_so() {
     assert_eq!(
         waiting,
         [
-            ("chem-1", "Not planned yet."),
-            ("poster-1", "Not planned yet.")
+            ("chem-1", "Not placed yet."),
+            ("poster-1", "Not placed yet.")
         ]
     );
 }

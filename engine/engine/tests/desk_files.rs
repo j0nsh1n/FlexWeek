@@ -133,7 +133,10 @@ fn test_week_export_carries_referenced_homework_and_drops_unknown_links() {
 
 #[test]
 fn test_parse_rejects_newer_versions_and_plain_text() {
-    assert_eq!(error_of(""), "Empty file.");
+    assert_eq!(
+        error_of(""),
+        "Nothing imported: the file is empty. Choose a FlexWeek week or day file."
+    );
     assert_eq!(
         error_of("not json"),
         "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. Export it again from FlexWeek."
@@ -141,7 +144,7 @@ fn test_parse_rejects_newer_versions_and_plain_text() {
     let newer = json!({"format": "flexweek-week", "version": 99, "blocks": []}).to_string();
     assert_eq!(
         error_of(&newer),
-        "Export came from a newer FlexWeek (version 99)."
+        "Nothing imported: this file came from a newer FlexWeek (version 99). Update FlexWeek, then try again."
     );
 }
 
@@ -186,6 +189,28 @@ fn test_day_import_splits_a_locked_series_instead_of_replacing_other_days() {
     let split = by_id("occ-0-soccer");
     assert_eq!(split["days"], json!([0]));
     assert_eq!(split["start"], "17:00");
+}
+
+#[test]
+fn test_day_import_never_leaves_removed_days_on_the_one_day_split() {
+    let standing = with(soccer(), json!({"id": "activity-1"}));
+    let incoming = [with(
+        standing.clone(),
+        json!({"days": [0], "start": "17:00", "removed_days": [0]}),
+    )];
+    let merged = merge_imported_blocks(
+        &json!([standing]),
+        &json!(incoming),
+        &json!("merge"),
+        &json!(0),
+    )
+    .expect("merged");
+    let split = merged
+        .iter()
+        .find(|block| block["id"] == "occ-0-activity-1")
+        .expect("the one-day split");
+    assert_eq!(split["days"], json!([0]));
+    assert!(split.get("removed_days").is_none(), "{split}");
 }
 
 #[test]

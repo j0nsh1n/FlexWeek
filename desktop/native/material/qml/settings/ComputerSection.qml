@@ -8,10 +8,11 @@ SectionPage {
     readonly property var panel: Ui.settings
 
     Group {
+        GroupHeader { title: "Startup & shortcuts"; icon: "computer" }
         ToggleRow {
             key: "startAtLogin"
             visible: !!page.st.showLogin
-            title: "Launch FlexWeek at login"
+            title: "Open FlexWeek when I log in"
             subtitle: "Open when you sign in to this computer."
             isOn: !!page.st.startAtLogin
             onFlipped: (value) => page.panel.setStartAtLogin(value)
@@ -32,6 +33,7 @@ SectionPage {
         }
     }
     Group {
+        GroupHeader { title: "Account & updates"; icon: "verified_user" }
         LinkRow {
             key: "account"
             title: "Account"
@@ -66,59 +68,6 @@ SectionPage {
             title: "Report a problem"
             subtitle: "Opens a short form in your browser, with your FlexWeek version filled in."
             onClicked: page.panel.reportProblem()
-        }
-    }
-    Group {
-        LinkRow {
-            key: "pair"
-            title: "Pair a phone"
-            subtitle: page.st.pairCode
-                ? "Enter this code on the phone: " + page.st.pairCode + (page.st.pairStatus ? ". " + page.st.pairStatus : "")
-                : "Show a code to link a phone."
-            trailing: ""
-            onClicked: page.panel.pair()
-        }
-        Repeater {
-            model: page.st.phoneRows || []
-            delegate: ActionRow {
-                required property var modelData
-                key: "phone_" + modelData.id
-                title: modelData.name
-                subtitle: modelData.seen
-                buttonText: "Remove"
-                onActivated: page.panel.askRemovePhone(modelData.id)
-            }
-        }
-        ActionRow {
-            key: "syncNow"
-            visible: !!page.st.canSync
-            title: "Sync now"
-            subtitle: page.st.syncWords || "Send and fetch changes with your linked phones."
-            buttonText: page.st.syncBusy ? "Syncing..." : "Sync now"
-            buttonEnabled: !page.st.syncBusy
-            onActivated: page.panel.syncNow()
-        }
-        NoteRow {
-            key: "clockWarning"
-            visible: !!page.st.clockWarning
-            problem: true
-            text: page.st.clockWarning || ""
-        }
-        NoteRow {
-            key: "syncProblem"
-            visible: !!page.st.syncProblem
-            problem: true
-            text: page.st.syncProblem || ""
-        }
-        SettingsRow {
-            visible: !!page.st.pairError
-            title: "Pairing"
-            subtitle: page.st.pairError || ""
-            objectName: "row_pairError"
-        }
-        NoteRow {
-            key: "relayNote"
-            text: page.st.relayNote || ""
         }
     }
 }

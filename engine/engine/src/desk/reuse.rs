@@ -51,7 +51,7 @@ pub fn running_late_refusal(
         );
     }
     if dirty {
-        return Some("Saving your last change… Running late will work in a moment.");
+        return Some("Saving your last change… Try Running late again in a moment.");
     }
     if block_count >= MAX_WEEK_BLOCKS {
         return Some("This week already has 100 blocks. Remove one before recording a late start.");
@@ -137,6 +137,7 @@ pub fn copied_fixed_block_of(
     copy.insert("focus_sessions".into(), json!(0));
     for key in [
         "assignment_id",
+        "removed_days",
         "pomodoro_parent_id",
         "pomodoro_role",
         "pomodoro_index",

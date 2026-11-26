@@ -32,10 +32,10 @@ FocusScope {
             y: Math.max(24, (scroller.height - implicitHeight) / 2)
             implicitHeight: column.implicitHeight + 64
             height: implicitHeight
-            radius: 8
-            color: palette.surfaceContainerLow
-            border.width: root.highContrast ? 1.5 : 0
-            border.color: palette.outline
+            radius: palette.cornerFor(20)
+            color: palette.cardSurface
+            border.width: root.highContrast ? 1.5 : 1
+            border.color: root.highContrast ? palette.outline : palette.outlineVariant
 
             ColumnLayout {
                 id: column
@@ -70,8 +70,10 @@ FocusScope {
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: codes.implicitHeight + 32
-                    radius: 12
-                    color: palette.surfaceContainerHighest
+                    radius: palette.cornerFor(12)
+                    color: palette.wellSurface
+                    border.width: 1
+                    border.color: palette.outlineVariant
                     Text {
                         id: codes
                         objectName: "recoveryList"

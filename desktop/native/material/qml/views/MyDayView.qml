@@ -15,6 +15,8 @@ Item {
     readonly property string density: bridge && bridge.density ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
+    readonly property bool hasStatus: !!(board && (board.waiting || board.loadError))
+    readonly property bool showNow: !!(board && board.showNow)
 
     M3Palette { id: palette; theme: root.theme }
 
@@ -35,21 +37,21 @@ Item {
         id: pane
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight + (root.phone ? 96 : 24)
+        contentHeight: column.implicitHeight + (root.phone ? 96 : 36)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
         Column {
             id: column
-            width: Math.min(760, Math.max(0, pane.width - (root.phone ? 32 : 48)))
+            width: Math.min(1040, Math.max(0, pane.width - (root.phone ? 32 : 48)))
             x: Math.max(root.phone ? 16 : 24, (pane.width - width) / 2)
             y: root.phone ? 16 : 24
-            spacing: 12
+            spacing: 18
 
             Text {
                 objectName: "myDayStatus"
                 width: column.width
-                visible: root.board && (root.board.waiting || root.board.loadError)
+                visible: root.hasStatus
                 text: root.board && root.board.waiting ? "Loading…" : (root.board ? root.board.loadError : "")
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
@@ -60,23 +62,16 @@ Item {
                 Accessible.name: text
             }
 
-            Item {
-                width: column.width
-                height: ring.height
-                visible: !(root.board && (root.board.waiting || root.board.loadError))
-                ProgressRing {
-                    id: ring
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    theme: root.theme
-                    share: root.board ? root.board.ringShare : 0
-                    count: root.board ? root.board.ringCount : 0
-                    caption: root.board ? root.board.ringCaption : ""
-                }
-            }
-
+            // Unified Option B horizontal hero banner (progress ring + Now copy + action).
             NowCard {
                 width: column.width
-                shown: !!(root.board && root.board.showNow)
+                shown: root.showNow && !root.hasStatus
+                hero: true
+                showRing: true
+                narrow: root.phone
+                ringShare: root.board ? root.board.ringShare : 0
+                ringCount: root.board ? root.board.ringCount : 0
+                ringCaption: root.board ? root.board.ringCaption : ""
                 pageHeading: root.pageHeading
                 theme: root.theme
                 density: root.density
@@ -98,8 +93,48 @@ Item {
                 onDismissFinished: if (root.board) root.board.dismissFinished()
             }
 
+            // Calm fallback banner carrying the ring when free-time nudges hide the Now card.
+            Rectangle {
+                id: ringFallback
+                objectName: "myDayRingBanner"
+                visible: !root.showNow && !root.hasStatus
+                width: column.width
+                implicitHeight: fallbackRow.implicitHeight + 36
+                height: implicitHeight
+                radius: palette.cornerFor(20)
+                color: palette.cardSurface
+                border.width: root.highContrast ? 1.5 : 1
+                border.color: root.highContrast ? palette.outline : palette.outlineVariant
+
+                Row {
+                    id: fallbackRow
+                    anchors.centerIn: parent
+                    spacing: 20
+                    ProgressRing {
+                        objectName: ringFallback.visible ? "myDayRing" : ""
+                        countName: ringFallback.visible ? "myDayCount" : ""
+                        captionName: ringFallback.visible ? "myDayCaption" : ""
+                        size: 132
+                        theme: root.theme
+                        share: root.board ? root.board.ringShare : 0
+                        count: root.board ? root.board.ringCount : 0
+                        caption: root.board ? root.board.ringCaption : ""
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !!(root.board && root.board.leftLine)
+                        text: root.board ? root.board.leftLine : ""
+                        color: palette.inkSurface
+                        font.family: M3Font.heading
+                        font.pixelSize: M3Font.px(20)
+                        font.weight: 500
+                    }
+                }
+            }
+
             DayLists {
                 width: column.width
+                sideBySide: !root.phone && column.width >= 680
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion

@@ -95,3 +95,15 @@ def test_the_material_week_comes_from_the_session(qapp: QApplication, material_w
     material_window._material_page.bridge.refresh()
     pump(qapp)
     assert named(root, "weekBlock") == []
+
+
+def test_the_material_week_hides_school_deleted_for_this_week(
+    qapp: QApplication, material_window: NativeWindow
+) -> None:
+    root = show_material(qapp, material_window)
+    assert "School" in repeater_texts(root, "weekBlocks", "title")
+    session = material_window.session
+    session.delete_block("school")
+    session.save()
+    settle(qapp, material_window)
+    assert "School" not in repeater_texts(root, "weekBlocks", "title")

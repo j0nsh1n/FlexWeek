@@ -21,7 +21,7 @@ from desktop.native.wire import plain, restore, restored
 
 SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
 PLENTY_WITHIN_MIN = 24 * 60
-NOT_PLANNED = "Not planned yet."
+NOT_PLANNED = "Not placed yet."
 # A homework session is saved with no category unless the student picked one. It is still homework.
 HOMEWORK = "assignments"
 END_OF_DAY = 24 * 60

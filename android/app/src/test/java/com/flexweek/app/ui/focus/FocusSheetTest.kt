@@ -16,7 +16,7 @@ class FocusSheetTest {
     }
 
     @Test fun finishSheetSaysMinutesAndKeepGoingIsTheDefault() {
-        assertEquals("You have done 7 min of History essay.", FocusJson.finishText(7, "History essay"))
+        assertEquals("You've done 7 min of History essay.", FocusJson.finishText(7, "History essay"))
         assertEquals("End this session?", FocusSheetText.finishTitle)
         assertEquals("Keep going", FocusSheetText.keepGoing)
     }

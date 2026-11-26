@@ -503,7 +503,7 @@ fn unfinished_preview_builds_row_or_says_too_short_or_already_planned() {
     assert_eq!(
         short,
         UnfinishedPreview::Say(
-            "History essay has 10 min left, less than the 15 minutes Plan places.".to_string()
+            "History essay has 10 min left. Plan needs at least 15 minutes.".to_string()
         )
     );
 
@@ -524,7 +524,7 @@ fn unfinished_preview_builds_row_or_says_too_short_or_already_planned() {
     .unwrap();
     assert_eq!(
         full,
-        UnfinishedPreview::Say("That homework is already fully planned.".to_string())
+        UnfinishedPreview::Say("There's no time left to plan for this homework.".to_string())
     );
 }
 
@@ -636,7 +636,7 @@ fn plan_unfinished_handles_week_over_under_grid_already_has_time_and_duplicate_i
     assert_eq!(
         over,
         UnfinishedPlan::Say(
-            "This week is over, so nothing was planned. Plan this week or a later one.".to_string()
+            "That week is over. Open this week or a later one, then plan again.".to_string()
         )
     );
 
@@ -658,7 +658,7 @@ fn plan_unfinished_handles_week_over_under_grid_already_has_time_and_duplicate_i
     assert_eq!(
         under,
         UnfinishedPlan::Say(
-            "History essay has 10 min left, less than the 15 minutes Plan places.".to_string()
+            "History essay has 10 min left. Plan needs at least 15 minutes.".to_string()
         )
     );
 
@@ -679,7 +679,7 @@ fn plan_unfinished_handles_week_over_under_grid_already_has_time_and_duplicate_i
     .unwrap();
     assert_eq!(
         already,
-        UnfinishedPlan::Say("That homework already has a time.".to_string())
+        UnfinishedPlan::Say("There's no time left to plan for this homework.".to_string())
     );
 
     // 4. Duplicate assignment IDs in one call never create a duplicate block.

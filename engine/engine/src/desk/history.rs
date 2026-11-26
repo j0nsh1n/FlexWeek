@@ -383,6 +383,197 @@ pub fn keep_step_revisions(step: &Value, data: &Value) -> Vec<Value> {
         .collect()
 }
 
+/// A captured step once its save is in: each week takes the blocks the server stored (the last copy
+/// of that week in the reply) and the revision of its first copy, a week on screen from another day
+/// keeps each stored week the save changed, and each homework's `after` is the copy the window holds
+/// once the reply is applied (null when it is gone).
+pub fn acknowledged_step(
+    step: &Value,
+    data: &Value,
+    stored_before: &[Value],
+    stored_after: &[Value],
+    assignments: &Map<String, Value>,
+) -> EngineResult<Value> {
+    let mut out = step
+        .as_object()
+        .cloned()
+        .ok_or_else(|| EngineError::value("step must be an object"))?;
+    let replied = list_of(data, "weeks");
+    let mut weeks = Vec::new();
+    for entry in list_of(step, "weeks") {
+        let mut entry = entry.clone();
+        let start = entry
+            .get("week_start")
+            .cloned()
+            .ok_or_else(|| EngineError::key("week_start"))?;
+        let stored = replied
+            .iter()
+            .rev()
+            .find(|week| week.get("week_start") == Some(&start));
+        if let Some(stored) = stored {
+            let blocks = stored
+                .get("blocks")
+                .cloned()
+                .ok_or_else(|| EngineError::key("blocks"))?;
+            if let Some(fields) = entry.as_object_mut() {
+                fields.insert("after".into(), blocks);
+            }
+        }
+        weeks.push(entry);
+    }
+    out.insert("weeks".into(), Value::Array(weeks));
+    let revised = keep_step_revisions(&Value::Object(out.clone()), data);
+    out.insert("weeks".into(), Value::Array(revised));
+    let kept = keep_stored_weeks(&Value::Object(out.clone()), stored_before, stored_after);
+    out.insert("weeks".into(), Value::Array(kept));
+    let mut homework = Vec::new();
+    for entry in list_of(step, "assignments") {
+        let mut entry = entry
+            .as_object()
+            .cloned()
+            .ok_or_else(|| EngineError::value("a step's homework must be an object"))?;
+        let id = entry
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| EngineError::key("id"))?;
+        let after = assignments.get(id).cloned().unwrap_or(Value::Null);
+        entry.insert("after".into(), after);
+        homework.push(Value::Object(entry));
+    }
+    out.insert("assignments".into(), Value::Array(homework));
+    Ok(Value::Object(out))
+}
+
+/// What Undo (`redo` false, the `before` side) or Redo (the `after` side) puts in the open week before
+/// its save goes out. Each homework edit is in step order, to apply one by one: null removes it.
+#[derive(Debug, PartialEq)]
+pub struct SideApplied {
+    pub blocks: Option<Vec<Value>>,
+    pub assignments: Vec<(String, Option<Value>)>,
+    pub basis: Option<Vec<Value>>,
+    pub dirty: Vec<String>,
+}
+
+const HELD_COUNTS: [&str; 3] = ["unplanned_min", "planned_min", "done_min"];
+
+/// `int(value or 0)` for a held revision.
+fn held_revision(value: Option<&Value>) -> EngineResult<i64> {
+    if !truthy(value) {
+        return Ok(0);
+    }
+    match value {
+        Some(Value::Bool(_)) => Ok(1),
+        Some(Value::String(text)) => text
+            .trim()
+            .parse()
+            .map_err(|_| EngineError::value(format!("invalid literal for int(): {text:?}"))),
+        Some(Value::Number(number)) => number
+            .as_i64()
+            .or_else(|| number.as_f64().map(|float| float.trunc() as i64))
+            .ok_or_else(|| EngineError::value("revision is too large")),
+        _ => Err(EngineError::value("a held revision must be a number")),
+    }
+}
+
+/// One side of a step put back in the open week. A homework that comes back keeps the revision and
+/// focus credit the window holds now, and the server's counts; one that comes back from a delete gets
+/// the count basis the step kept, or its sessions as this side has them.
+pub fn travel_side(
+    step: &Value,
+    redo: bool,
+    open_week: &str,
+    blocks: &[Value],
+    assignments: &Map<String, Value>,
+    basis: &[Value],
+) -> EngineResult<SideApplied> {
+    let side = if redo { "after" } else { "before" };
+    let mut shown: Option<Vec<Value>> = None;
+    for week in list_of(step, "weeks") {
+        if week.get("week_start").and_then(Value::as_str) == Some(open_week) {
+            let rows = week
+                .get(side)
+                .ok_or_else(|| EngineError::key(side))?
+                .as_array()
+                .ok_or_else(|| EngineError::value("a step's week must be a list of blocks"))?;
+            shown = Some(rows.clone());
+        }
+    }
+    let mut live = assignments.clone();
+    let mut counted: Option<Vec<Value>> = None;
+    let mut edits = Vec::new();
+    let mut dirty = Vec::new();
+    for entry in list_of(step, "assignments") {
+        let id = entry
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| EngineError::key("id"))?
+            .to_string();
+        let target = entry.get(side).ok_or_else(|| EngineError::key(side))?;
+        if target.is_null() {
+            live.shift_remove(&id);
+            edits.push((id.clone(), None));
+        } else {
+            let mut restored = target
+                .as_object()
+                .cloned()
+                .ok_or_else(|| EngineError::value("a step's homework must be an object"))?;
+            let held = live.get(&id);
+            restored.insert(
+                "revision".into(),
+                Value::from(held_revision(held.and_then(|item| item.get("revision")))?),
+            );
+            match held {
+                None => {
+                    let paired = entry.get("basis").filter(|paired| !paired.is_null());
+                    let source = match paired {
+                        Some(paired) => paired
+                            .as_array()
+                            .ok_or_else(|| EngineError::value("a step's basis must be a list"))?
+                            .clone(),
+                        None => shown
+                            .as_deref()
+                            .unwrap_or(blocks)
+                            .iter()
+                            .filter(|block| of_homework(block, &id))
+                            .cloned()
+                            .collect(),
+                    };
+                    let mut next: Vec<Value> = counted
+                        .as_deref()
+                        .unwrap_or(basis)
+                        .iter()
+                        .filter(|block| !of_homework(block, &id))
+                        .cloned()
+                        .collect();
+                    next.extend(source);
+                    counted = Some(next);
+                }
+                Some(held) => {
+                    for key in HELD_COUNTS {
+                        if let Some(count) = held.get(key) {
+                            restored.insert(key.into(), count.clone());
+                        }
+                    }
+                    for key in ["focus_minutes", "focus_sessions"] {
+                        let credit = held.get(key).filter(|value| truthy(Some(value)));
+                        restored.insert(key.into(), credit.cloned().unwrap_or(json!(0)));
+                    }
+                }
+            }
+            let restored = Value::Object(restored);
+            live.insert(id.clone(), restored.clone());
+            edits.push((id.clone(), Some(restored)));
+        }
+        dirty.push(id);
+    }
+    Ok(SideApplied {
+        blocks: shown,
+        assignments: edits,
+        basis: counted,
+        dirty,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

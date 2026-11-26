@@ -16,7 +16,7 @@ fn test_a_passed_deadline_and_no_study_time_today_have_their_own_sentences() {
     );
     assert_eq!(
         sentence("NO_STUDY_TIME_TODAY").unwrap(),
-        "Due today and no study time is left today."
+        "It's due today, and there's no study time left today."
     );
 }
 

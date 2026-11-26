@@ -10,10 +10,9 @@ use flexweek_engine::stored::truthy;
 use flexweek_engine::{model, plan, time};
 use serde_json::{Map, Value, json};
 
-pub const WEEK_OVER: &str =
-    "This week is over, so nothing was planned. Plan this week or a later one.";
-pub const ALREADY_FULLY_PLANNED: &str = "That homework is already fully planned.";
-pub const ALREADY_HAS_TIME: &str = "That homework already has a time.";
+pub const WEEK_OVER: &str = "That week is over. Open this week or a later one, then plan again.";
+pub const ALREADY_FULLY_PLANNED: &str = "There's no time left to plan for this homework.";
+pub const ALREADY_HAS_TIME: &str = "There's no time left to plan for this homework.";
 
 /// A local clock reading passed in explicitly so every count and cutoff stays pure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -538,7 +537,7 @@ fn too_short_message(item: Option<&Value>, left_min: i64) -> String {
         .filter(|text| !text.is_empty())
         .unwrap_or("This homework");
     format!(
-        "{title} has {} left, less than the 15 minutes Plan places.",
+        "{title} has {} left. Plan needs at least 15 minutes.",
         weekmodel::length_label(left_min)
     )
 }

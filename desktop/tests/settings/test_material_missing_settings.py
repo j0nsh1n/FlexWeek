@@ -130,7 +130,7 @@ def test_reminder_lead_refuses_what_is_out_of_range_with_the_same_words(
         _panel(window).setReminderLead(bad)
         assert sent == [], "nothing is sent to the server"
         assert _prefs(window).get("reminder_lead_min") == 30
-        assert _panel(window).property("state")["notice"] == "Could not save that."
+        assert _panel(window).property("state")["notice"] == "Couldn't save that change. Try again."
 
 
 def test_the_lead_slider_is_hidden_while_reminders_are_off(qapp: QApplication, window: NativeWindow) -> None:

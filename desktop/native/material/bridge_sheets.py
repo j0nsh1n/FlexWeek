@@ -62,8 +62,8 @@ from desktop.native.weekmodel import added_words, hhmm_text, length_label
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
-WAIT_SAVE = "Saving your last change… Save will work in a moment."
-WAIT_DELETE = "Saving your last change… Delete will work in a moment."
+WAIT_SAVE = "Saving your last change… Try Save again in a moment."
+WAIT_DELETE = "Saving your last change… Try Delete again in a moment."
 UNDO_ALSO = "Undo also takes back anything changed after it."
 MAX_NAMED_WEEKS = 3
 DISCARD = {
@@ -677,14 +677,28 @@ class SheetsBridge(QObject):
             after = [body if item["id"] == body["id"] else item for item in repeats]
         else:
             after = [item for item in repeats if item["id"] != draft.family]
-        if not self._window._apply_standing(after, f"changing {name}"):  # type: ignore[attr-defined]
+        alone: dict | None = None
+        if kind == "stop":
+            alone = draft.stopped_one_off(made)
+            if alone is not None:
+                try:
+                    # Validate before touching repeats so a refusal never leaves them half-changed.
+                    alone = session.check_block(alone)
+                except ValueError as error:
+                    draft.error = str(error)
+                    self._publish()
+                    return
+        label = f"changing {name}"
+        if not self._window._apply_standing(after, label):  # type: ignore[attr-defined]
             return
+        if kind in ("later", "ask"):
+            # A day removed only from this week is already on the repeat. Saving the repeat, even when
+            # the body does change, leaves that removal on the week's copy. Same Undo step.
+            self._live_days_ticked_back(draft, made, label)
         if kind == "make":
             # The one-off is now the repeat: one Undo step, named for the change.
-            session.delete_block(draft.original["id"], scope="series", label=f"changing {name}")
-        elif kind == "stop":
-            alone = {key: value for key, value in made.items() if key != "until"}
-            alone["id"] = draft.family[len("weekly-") :]
+            session.delete_block(draft.original["id"], scope="series", label=label)
+        elif kind == "stop" and alone is not None:
             session.add_block(alone, scope="series")
         said = {
             "add": f"{name} repeats every week from this week on.",
@@ -694,6 +708,36 @@ class SheetsBridge(QObject):
         self._saving_repeat = f"{said} {UNDO_ALSO}"
         self._doubled_name = name
         session.save(snapshot_label=restore_point_label(f"Before changing {name}"))
+
+    def _live_days_ticked_back(self, draft: BlockDraft, made: dict, label: str) -> None:
+        """Days the student ticked back on are live this week. Days they left unticked stay removed."""
+        session = self._session
+        if session is None:
+            return
+        restored = set(draft.original.get("removed_days") or []) - set(made.get("removed_days") or [])
+        if not restored:
+            return
+        family = draft.family
+        blocks: list[dict] = []
+        changed = False
+        for item in session.blocks:
+            if block_family(str(item.get("id") or "")) != family:
+                blocks.append(item)
+                continue
+            had = list(item.get("removed_days") or [])
+            kept = [day for day in had if day not in restored]
+            if kept == had:
+                blocks.append(item)
+                continue
+            updated = dict(item)
+            if kept:
+                updated["removed_days"] = kept
+            else:
+                updated.pop("removed_days", None)
+            blocks.append(updated)
+            changed = True
+        if changed:
+            session._touch(label, blocks=blocks)
 
     def _save_week_copy(self, draft: BlockDraft, made: dict) -> None:
         session = self._session
@@ -1037,7 +1081,7 @@ class SheetsBridge(QObject):
                 title = titles.get(move["block_id"], move["block_id"])
                 changes.append(_late_move(move, block, title, session.week_start))
             changes.extend(
-                block["title"] + " no longer fits and will stay on the task list."
+                block["title"] + " no longer fits and will stay under Not placed yet."
                 for block in trace.get("unplaced") or []
             )
             if not changes:
@@ -1183,9 +1227,9 @@ class SheetsBridge(QObject):
         return {
             "kind": "unfinished",
             "heading": "Unfinished",
-            "intro": "Overdue and left from last week, then homework that still needs a time.",
+            "intro": "Homework that's overdue or left from last week, then homework that still needs a time.",
             "rows": rows,
-            "empty": "Nothing is left over." if not rows else "",
+            "empty": "No homework is overdue, left from last week or waiting for a time." if not rows else "",
         }
 
     def open_preview(self, draft: PreviewDraft) -> None:
@@ -1483,7 +1527,7 @@ class SheetsBridge(QObject):
             self._publish()
             return
         if not self._routine_days:
-            self._routine_error = "Choose at least one weekday to copy."
+            self._routine_error = "Choose at least one day."
             self._publish()
             return
         week = session.week_start

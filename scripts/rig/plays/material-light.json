@@ -6,6 +6,7 @@
     "clock_24h": false
   },
   "steps": [
+    {"click": "weekToday"},
     {"see": "Soccer"},
     {"see": "materialRail"},
     {"click": "navDay"},

@@ -29,7 +29,7 @@ from desktop.native.settings_copy import (
     keys_words,
 )
 from desktop.native.version import VERSION
-from desktop.native.window import SIGN_OUT_QUESTION, NativeWindow
+from desktop.native.window import SIGN_OUT_QUESTION, WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import focus_quick, named, pump, quick_of, quick_window_of, show_material
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
@@ -254,6 +254,25 @@ def test_an_update_found_shows_a_material_sheet_with_what_changed(
     assert _text(root, "updateNotes") == first_lines(NOTES)
     assert _focused(window) == "updateInstall"
 
+    # Finding 12: Update stays a centered floating pop-up at both desktop and narrow/phone widths.
+    # The window minimum is 800, so reach the narrow layout by lowering it first and restoring after.
+    window.setMinimumWidth(480)
+    try:
+        for size, narrow in (((1280, 800), False), ((480, 720), True)):
+            window.resize(*size)
+            pump(qapp, 20)
+            assert (float(root.property("width")) < 768) is narrow, size
+            assert root.property("phone") is narrow, size
+            card = _one(root, "sheetCard")
+            card_top = float(card.property("y"))
+            card_h = float(card.property("height"))
+            parent_h = float(card.parentItem().property("height"))
+            assert abs((card_top + card_h / 2) - parent_h / 2) < 4, size
+    finally:
+        window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        pump(qapp, 10)
+
 
 def test_update_now_starts_the_download_and_shows_progress_and_problems(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
@@ -276,6 +295,18 @@ def test_update_now_starts_the_download_and_shows_progress_and_problems(
     assert _text(root, "updateStatus") == "Could not download the update."
     assert _one(root, "updateInstall").property("enabled") is True
     assert _one(root, "updateProgress").property("visible") is False
+
+    # Claude #8: retrying after an indeterminate bar stops leaves determinate fill anchored at x == 0.
+    _click(quick, _one(root, "updateInstall"))
+    pump(qapp, 10)
+    fill = _one(root, "updateProgressFill")
+    fill.setProperty("x", 48.0)
+    window._on_update_problem("Lost connection.")
+    pump(qapp, 10)
+    _click(quick, _one(root, "updateInstall"))
+    window._on_update_progress(50, 200)
+    pump(qapp, 10)
+    assert float(fill.property("x")) == 0.0
 
 
 def test_not_now_and_esc_close_the_update_and_remember_nothing(
@@ -386,7 +417,9 @@ def test_sign_out_asks_in_a_material_prompt_with_the_same_words(
     pump(qapp, 40)
     ask = dict(_sheets(window).property("ask"))
     assert ask["title"] == "Sign out"
-    assert ask["body"] == "Your week is saved on this computer, under this account. Sign in again to see it."
+    assert ask["body"] == (
+        "Sign out? Your week is saved on this computer, under this account. Sign in again to see it."
+    )
     assert ask["body"] == SIGN_OUT_QUESTION.format(where="this computer")
     assert [(a["label"]) for a in ask["answers"]] == ["Cancel", "Sign out"]
     assert _text(root, "sheetTitle") == "Sign out"
@@ -401,7 +434,7 @@ def test_sign_out_says_in_full_where_the_week_lives(
     window._log_out()
     pump(qapp, 20)
     assert dict(_sheets(window).property("ask"))["body"] == (
-        "Your week is saved on this computer, under this account. Sign in again to see it."
+        "Sign out? Your week is saved on this computer, under this account. Sign in again to see it."
     )
 
 

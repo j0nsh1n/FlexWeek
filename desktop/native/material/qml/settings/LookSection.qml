@@ -57,7 +57,7 @@ SectionPage {
                     : "Follow this device, or choose.")
             // A one-mode preset shows the mode it is drawn in and leaves the other two off.
             choices: [
-                { label: "Auto", value: "system", enabled: !page.st.oneMode },
+                { label: "Same as this computer", value: "system", enabled: !page.st.oneMode },
                 { label: "Light", value: "light", enabled: !page.st.oneMode || page.st.oneMode === "light" },
                 { label: "Dark", value: "dark", enabled: !page.st.oneMode || page.st.oneMode === "dark" }
             ]
@@ -74,7 +74,7 @@ SectionPage {
         }
         ChoiceRow {
             key: "density"
-            title: "Density"
+            title: "Row size"
             subtitle: "How much fits on the screen."
             choices: [{ label: "Comfortable", value: "comfortable" }, { label: "Compact", value: "compact" }]
             current: page.st.density || ""
@@ -119,7 +119,7 @@ SectionPage {
         ToggleRow {
             key: "clock24"
             visible: !!page.st.showClock
-            title: "24-hour time"
+            title: "Use 24-hour time"
             subtitle: "Show 15:40 rather than 3:40 PM."
             isOn: !!page.st.clock24
             onFlipped: (value) => page.panel.setClock(value)

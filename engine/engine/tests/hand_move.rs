@@ -283,7 +283,7 @@ fn a_block_that_is_not_in_the_week_is_refused() {
             AFTERNOON + HOMEWORK_MIN,
         ),
     ));
-    assert_eq!(words, "That block is not in this week, so nothing moved.");
+    assert_eq!(words, "That block isn't in this week, so nothing moved.");
 }
 
 #[test]
@@ -318,7 +318,7 @@ fn a_start_before_midnight_is_refused() {
     ));
     assert_eq!(
         words,
-        "That's outside the hours FlexWeek plans in, so it stayed where it was."
+        "FlexWeek can't use that time, so the block stayed where it was."
     );
 }
 
@@ -336,7 +336,7 @@ fn an_end_past_midnight_is_refused() {
     ));
     assert_eq!(
         words,
-        "That's outside the hours FlexWeek plans in, so it stayed where it was."
+        "FlexWeek can't use that time, so the block stayed where it was."
     );
 }
 
@@ -499,6 +499,6 @@ fn the_answer_for_the_bindings_says_moved_or_why_not() {
     assert_eq!(nothing["moved"], json!(false));
     assert_eq!(
         nothing["problem"],
-        json!("That block is not in this week, so nothing moved.")
+        json!("That block isn't in this week, so nothing moved.")
     );
 }

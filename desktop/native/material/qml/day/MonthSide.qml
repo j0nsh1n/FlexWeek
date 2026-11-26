@@ -17,14 +17,16 @@ Item {
     property var board
 
     visible: !phone
-    width: phone ? 0 : (open ? 16 + miniMonth.width + 16 : 64)
+    implicitWidth: Math.max(240, 7 * miniMonth.naturalCell + 12 + 32)
+    implicitHeight: open ? (headerBar.height + miniMonth.height + 20) : (headerBar.height + 16)
+    height: implicitHeight
     clip: true
     Accessible.role: Accessible.Pane
     Accessible.name: "Month"
 
-    Behavior on width {
+    Behavior on height {
         NumberAnimation {
-            duration: Motion.travel(300, root.reduceMotion)
+            duration: Motion.travel(220, root.reduceMotion)
             easing.type: Easing.BezierSpline
             easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
         }
@@ -34,28 +36,57 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: palette.surfaceContainerLow
+        radius: palette.cornerFor(16)
+        color: palette.cardSurface
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: root.highContrast ? palette.outline : palette.outlineVariant
     }
 
-    IconButton {
-        objectName: "dayMonthToggle"
-        x: 8
-        y: 8
-        theme: root.theme
-        density: root.density
-        reduceMotion: root.reduceMotion
-        highContrast: root.highContrast
-        icon: root.open ? "chevron_left" : "calendar_month"
-        accessName: root.open ? "Hide the month" : "Show the month"
-        activeFocusOnTab: !root.passive
-        onClicked: root.open = !root.open
+    Item {
+        id: headerBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.leftMargin: 16
+        anchors.rightMargin: 8
+        anchors.topMargin: 8
+        height: 36
+
+        Text {
+            anchors.left: parent.left
+            anchors.right: toggleBtn.left
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: miniMonth.monthName()
+            elide: Text.ElideRight
+            color: palette.inkSurface
+            font.family: M3Font.heading
+            font.pixelSize: M3Font.px(15)
+            font.weight: 600
+        }
+
+        IconButton {
+            id: toggleBtn
+            objectName: "dayMonthToggle"
+            small: true
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            theme: root.theme
+            density: root.density
+            reduceMotion: root.reduceMotion
+            highContrast: root.highContrast
+            icon: root.open ? "chevron_left" : "calendar_month"
+            accessName: root.open ? "Hide the month" : "Show the month"
+            activeFocusOnTab: !root.passive
+            onClicked: root.open = !root.open
+        }
     }
 
     MiniMonth {
         id: miniMonth
         objectName: "dayMiniMonth"
-        x: 16
-        y: 64
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: headerBar.y + headerBar.height + 4
         visible: root.open
         theme: root.theme
         density: root.density
@@ -64,6 +95,8 @@ Item {
         year: root.year
         month: root.month
         today: root.today
+        showHeader: false
+        maxWidth: Math.max(152, root.width - 24)
         accessName: "Month"
         activeFocusOnTab: !root.passive
         onDayActivated: (day) => {

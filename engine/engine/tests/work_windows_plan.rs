@@ -46,7 +46,7 @@ fn the_planner_leaves_work_unplaced_rather_than_using_the_night() {
     assert!(has_explanation(
         &trace,
         "WORK_WINDOW_MISS",
-        "That doesn't fit in the times you set aside for work."
+        "That doesn't fit in your study hours."
     ));
 }
 

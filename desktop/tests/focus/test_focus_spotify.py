@@ -82,7 +82,7 @@ def test_focus_spotify_without_a_link_says_so_and_still_starts(
     assert window.session.start_focus("practice", 3) is True
     assert window.session.focus is not None
     assert asked == []
-    assert window.session.message == "Add a Spotify link in Settings, under Alerts. Focus has started."
+    assert window.session.message == "Focus started without Spotify. Add a link under Settings > Alerts."
 
 
 def test_focus_spotify_carries_on_when_the_app_does_not_open(
@@ -93,7 +93,7 @@ def test_focus_spotify_carries_on_when_the_app_does_not_open(
     choose(window, focus_audio="spotify", default_spotify_url=TRACK)
     assert window.session.start_focus("practice", 3) is True
     assert window.session.focus is not None
-    assert window.session.message == "Spotify didn't open. Focus has started."
+    assert window.session.message == "Focus started without Spotify because the app didn't open."
 
 
 def test_focus_rain_is_stored_and_stays_quiet(

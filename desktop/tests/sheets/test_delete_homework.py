@@ -146,4 +146,4 @@ def test_a_change_still_saving_is_finished_before_anything_is_deleted(
     )
     assert session.dirty
     assert session.delete_homework("essay") is False
-    assert session.message == "Saving your last change… Delete will work in a moment."
+    assert session.message == "Saving your last change… Try Delete again in a moment."

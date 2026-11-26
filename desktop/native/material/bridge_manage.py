@@ -33,7 +33,7 @@ from desktop.native.settings_copy import (
     transfer_summary,
 )
 
-NO_LOCATION = "Backup location unavailable"
+NO_LOCATION = "FlexWeek can't find where saved copies are stored."
 # The files the Account sheet moves in and out, in the order the Widgets dialog lists them.
 DATA_ACTIONS = (
     ("exportAccount", "export", "Export backup file"),
@@ -42,12 +42,12 @@ DATA_ACTIONS = (
     ("exportDay", "day", "Export day"),
     ("importFile", "import-week", "Import week or day file"),
 )
-# What Material says for the Widgets dialog's "Choose a restore point."
+# What Material says for the Widgets dialog's "Choose a saved copy."
 RESTORE_FIRST = "Choose a copy."
 RESTORE_QUESTION = {
     "id": "restore-copy",
     "title": "Restore",
-    "body": "Restore this copy? FlexWeek saves a copy of this week first.",
+    "body": "Restore this copy? FlexWeek saves a copy of your current weeks and homework first.",
     "answers": [
         {"id": "not", "label": "Not now", "kind": "text", "default": True},
         {"id": "restore", "label": "Restore", "kind": "danger"},
@@ -81,7 +81,7 @@ def restore_form(
     """Restore points: the saved copies with their times, a name for a new one, and what the previewed one
     would change."""
     return {
-        "heading": "Copies of this week",
+        "heading": "Saved copies",
         "where": (storage or {}).get("label") or NO_LOCATION,
         "label": label,
         "points": [
@@ -117,7 +117,7 @@ def import_question(preview: dict) -> dict[str, Any]:
         "id": "import-account",
         "title": "Import backup file?",
         "body": f"From {source}'s backup: {transfer_summary(preview)}\n"
-        "FlexWeek saves a copy of this week first, so you can go back.",
+        "FlexWeek saves a copy of your current weeks and homework first, so you can go back.",
         "answers": [
             {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
             {"id": "import", "label": "Import", "kind": "filled"},

@@ -112,9 +112,7 @@ def test_enter_after_down_deletes_this_week_only_and_can_be_undone(qapp, window)
     keys(window, Qt.Key.Key_Down, Qt.Key.Key_Return)
     assert sheets.ask == {}
     assert sheets.noticeUndo is True
-    assert not [
-        b for b in window.session.blocks if str(b["id"]).startswith("school") and not b.get("missed_days")
-    ]
+    assert not [item for item in window.session.built_week().occurrences if item.block_id == "school"]
 
 
 def test_every_week_after_can_be_undone_with_what_came_after_it(qapp, window) -> None:

@@ -37,6 +37,43 @@ fn block() -> Value {
     })
 }
 
+#[test]
+fn removed_days_round_trip_only_on_standing_occurrences() {
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "start": "08:00",
+        "duration_min": 390, "days": [0, 2], "missed_days": [2], "removed_days": [0],
+    });
+    for invalid in [
+        json!([0, 0]),
+        json!([7]),
+        json!([1]),
+        json!([2]),
+        json!(["0"]),
+        json!(null),
+    ] {
+        let invalid_school = with(school.clone(), "removed_days", invalid);
+        assert!(time_block(&invalid_school).is_err(), "{invalid_school}");
+    }
+    for (field, value) in [
+        ("id", json!("one-off")),
+        ("kind", json!("flexible")),
+        ("start", json!(null)),
+    ] {
+        let invalid_school = with(school.clone(), field, value);
+        assert!(time_block(&invalid_school).is_err(), "{invalid_school}");
+    }
+    let stored = time_block(&school).unwrap().to_value();
+    assert_eq!(stored["removed_days"], json!([0]));
+    assert_eq!(stored["missed_days"], json!([2]));
+    assert!(
+        time_block(&block())
+            .unwrap()
+            .to_value()
+            .get("removed_days")
+            .is_none()
+    );
+}
+
 fn with(mut value: Value, key: &str, patch: Value) -> Value {
     value
         .as_object_mut()
@@ -726,5 +763,19 @@ fn a_label_or_checklist_line_blank_to_python_is_refused() {
             serde_json::json!([{ "id": "c1", "text": "\u{1c} read" }])
         )
         .is_ok()
+    );
+}
+
+#[test]
+fn removed_days_need_a_real_start_not_an_empty_one() {
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "start": "",
+        "duration_min": 390, "days": [0], "removed_days": [0],
+    });
+    assert!(time_block(&school).is_err(), "an empty start is no start");
+    let with_start = with(school, "start", json!("08:00"));
+    assert!(
+        time_block(&with_start).is_ok(),
+        "the same block with a start is fine"
     );
 }

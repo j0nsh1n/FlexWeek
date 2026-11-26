@@ -26,7 +26,7 @@ Extract, then open the file named FlexWeek. Needs a 64-bit Linux desktop (GNOME,
 ## Download for Android
 `FlexWeek-Android-<version>.apk`
 
-Open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with FlexWeek's own key, not Google Play's. Then pair it with the computer in Settings > This computer > Devices. A phone that already has FlexWeek is offered the update by the app itself.
+Open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with FlexWeek's own key, not Google Play's. Then pair it with the computer in Settings > Phone & sync > Pair a phone. A phone that already has FlexWeek is offered the update by the app itself.
 
 ## Chromebooks
 Not supported. FlexWeek is a Windows and Linux desktop app, and there is no longer a web version to open in a browser.

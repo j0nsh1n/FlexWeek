@@ -390,8 +390,7 @@ fn deleting_the_account_signs_out_and_a_wrong_password_keeps_it() {
 
 /// The words when no answer comes, as the old client gave them: the sign-in card's for signing in and up, the
 /// general ones for recovering and taking up a kept session.
-const NO_ANSWER: &str =
-    "Could not reach FlexWeek. Your changes may not have been saved. Try again.";
+const NO_ANSWER: &str = "FlexWeek didn't answer. Your changes may not have been saved. Try again.";
 
 #[test]
 fn recovering_with_a_code_signs_in_and_a_wrong_code_says_so() {

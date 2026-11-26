@@ -18,7 +18,7 @@ from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.week.support_weekview import fail_once, fixed, settled_session, titles
 from desktop.tests.window_support import qapp  # noqa: F401
 
-STORAGE_DOWN = "Storage is unavailable. Keep your changes and try again shortly."
+STORAGE_DOWN = "FlexWeek can't open its saved data right now. Keep your changes and try again in a minute."
 
 
 def week_after(week_start: str) -> str:

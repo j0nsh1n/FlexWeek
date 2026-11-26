@@ -158,13 +158,25 @@ def test_a_block_in_progress_opens_with_its_top_in_view(qapp: QApplication, open
 
 
 def test_a_long_block_in_progress_does_not_pull_now_off_the_top(qapp: QApplication, open_light) -> None:
-    """School (08:00-14:30) is on at 14:00: its top is far above, so Day still opens 45 minutes above now."""
+    """School (08:00-14:30) is on at 14:00: in a shorter pane (640 px tall), pulling up to 08:00 would push
+    now past the top 60 %, so Day still opens 45 minutes above now."""
     window = seed_thursday(qapp, open_light((1280, 800)), hour=14)
     root = open_day_page(qapp, window)
+    # show_material forces 1280x800, so resize to the shorter 640 px pane and reopen Thursday.
+    window.resize(1280, 640)
+    pump(qapp)
+    day_bridge = bridge_of(window).property("day")
+    day_bridge.previousDay()
+    settled(qapp, window)
+    pump(qapp)
+    day_bridge.nextDay()
+    settled(qapp, window)
+    pump(qapp)
     scroller = qml(day_item(root), "dayScroller")
     row = int(bridge_of(window).property("dayHourRow"))
     content_y = float(scroller.property("contentY"))
     view_h = float(scroller.property("height"))
+    assert view_h < 600, view_h
     assert abs((14 * row - content_y) - _opening_above(view_h, row)) < 2
 
 
