@@ -298,9 +298,9 @@ pub fn delete_block(input: &BlockDeleteInput) -> Result<Option<BlockDelete>, Eng
         let mut after = kept;
         after.extend(gone.into_iter().map(|mut item| {
             if input.scope == "occurrence" {
-                item["missed_days"] = item["days"].clone();
+                item["removed_days"] = item["days"].clone();
                 if let Some(fields) = item.as_object_mut() {
-                    fields.shift_remove("removed_days");
+                    fields.shift_remove("missed_days");
                 }
                 item
             } else {

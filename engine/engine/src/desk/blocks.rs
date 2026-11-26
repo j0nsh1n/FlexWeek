@@ -69,9 +69,9 @@ pub fn delete_block(
             if whole {
                 remove_for_week(block)
             } else {
-                block["missed_days"] = block["days"].clone();
+                block["removed_days"] = block["days"].clone();
                 if let Some(fields) = block.as_object_mut() {
-                    fields.shift_remove("removed_days");
+                    fields.shift_remove("missed_days");
                 }
                 block
             }

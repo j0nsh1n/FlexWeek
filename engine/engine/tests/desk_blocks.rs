@@ -190,7 +190,12 @@ fn this_day_only_on_the_last_day_of_a_standing_block_removes_it_not_misses_it() 
         let mut removed = last.clone();
         removed["removed_days"] = json!([3]);
         assert_eq!(
-            show(delete(std::slice::from_ref(&last), id, "occurrence", Some(3))),
+            show(delete(
+                std::slice::from_ref(&last),
+                id,
+                "occurrence",
+                Some(3)
+            )),
             Ok(json!({"label": "deleting School", "blocks": [removed], "lost": []})),
             "{id} one-day piece"
         );
