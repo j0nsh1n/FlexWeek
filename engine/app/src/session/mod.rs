@@ -12,6 +12,7 @@
 
 pub mod account;
 pub mod autosave;
+pub mod block_edits;
 pub mod changes;
 pub mod copies;
 mod drafts;

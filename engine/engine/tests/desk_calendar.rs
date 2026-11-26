@@ -208,7 +208,7 @@ fn test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or_
     assert_eq!(problem(1, h(22, 30), h(23, 30), None), None);
     assert_eq!(
         problem(1, h(23, 30), h(24, 30), None),
-        Some("That's outside the hours FlexWeek plans in, so it stayed where it was.")
+        Some("FlexWeek can't use that time, so the block stayed where it was.")
     );
     assert_eq!(
         problem(3, h(19, 0), h(20, 0), Some((3, h(19, 30)))),

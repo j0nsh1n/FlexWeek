@@ -96,13 +96,13 @@ class RemindersViewModelTest {
         Dispatchers.setMain(dispatcher)
         try {
             val core = object : FlexWeekCore by FakeFlexWeekCore() {
-                override fun unlink() { error("Could not unlink. Try again.") }
+                override fun unlink() { error("Couldn't unpair this computer. Try again.") }
             }
             val vm = RemindersViewModel(core, workerDispatcher = dispatcher)
             var pairingOffered = false
             vm.unpair { pairingOffered = true }
             assertFalse(pairingOffered)
-            assertEquals("Could not unlink. Try again.", vm.state.problem)
+            assertEquals("Couldn't unpair this computer. Try again.", vm.state.problem)
             assertFalse(vm.state.syncing)
         } finally {
             Dispatchers.resetMain()

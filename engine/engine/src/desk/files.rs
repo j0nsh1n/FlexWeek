@@ -142,7 +142,9 @@ fn refused(message: impl Into<String>) -> Value {
 /// whether it carries a homework list. `readable` is whether the text parsed; `data` what it parsed to.
 pub fn import_head(empty: bool, readable: bool, data: Option<&Value>) -> EngineResult<Value> {
     if empty {
-        return Ok(refused("Empty file."));
+        return Ok(refused(
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file.",
+        ));
     }
     let Some(data) = data.filter(|_| readable) else {
         return Ok(refused(NOT_WEEK_OR_DAY));
@@ -173,11 +175,13 @@ pub fn import_head(empty: bool, readable: bool, data: Option<&Value>) -> EngineR
         _ => None,
     };
     let Some(number) = number.filter(|found| *found >= 1) else {
-        return Ok(refused("Export has no version."));
+        return Ok(refused(
+            "Nothing imported: this file has no FlexWeek version.",
+        ));
     };
     if number > i128::from(EXPORT_VERSION) {
         return Ok(refused(format!(
-            "Export came from a newer FlexWeek (version {}).",
+            "Nothing imported: this file came from a newer FlexWeek (version {}). Update FlexWeek, then try again.",
             py_str(version)
         )));
     }
@@ -797,11 +801,14 @@ mod tests {
     #[test]
     fn a_refused_file_has_no_blocks_to_check() {
         let (head, blocks, homework) = import_start(true, false, None).unwrap();
-        assert_eq!(head["error"], "Empty file.");
+        assert_eq!(
+            head["error"],
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file."
+        );
         assert!(blocks.is_empty() && homework.is_empty());
         assert_eq!(
             import_finish(&head, &[], &[], None).unwrap()["error"],
-            "Empty file."
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file."
         );
     }
 

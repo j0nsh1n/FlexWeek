@@ -31,11 +31,11 @@ from desktop.tests.window_support import qapp  # noqa: F401
 
 
 def test_nothing_placed_says_nothing_placed_not_planned_zero() -> None:
-    assert plan_sentence(0, 1) == "Nothing placed. 1 with no time yet."
-    assert plan_sentence(0, 2) == "Nothing placed. 2 with no time yet."
-    assert plan_sentence(1, 1) == "Placed 1 homework block. 1 with no time yet."
-    assert plan_sentence(2, 1) == "Placed 2 homework blocks. 1 with no time yet."
-    assert plan_sentence(3, 0) == "Placed 3 homework blocks."
+    assert plan_sentence(0, 1) == "No homework was placed. 1 still needs a time."
+    assert plan_sentence(0, 2) == "No homework was placed. 2 still needs a time."
+    assert plan_sentence(1, 1) == "Placed 1 session. 1 still needs a time."
+    assert plan_sentence(2, 1) == "Placed 2 sessions. 1 still needs a time."
+    assert plan_sentence(3, 0) == "Placed 3 sessions."
 
 
 def test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone(

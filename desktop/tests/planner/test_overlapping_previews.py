@@ -27,7 +27,7 @@ SOCCER = {
     "duration_min": 90,
     "days": [0],
 }
-WARNING = "Soccer practice is at that time too. Both will show, one slightly over the other."
+WARNING = "Soccer practice is at that time too. Both will stay visible and overlap slightly."
 
 
 @pytest.fixture()

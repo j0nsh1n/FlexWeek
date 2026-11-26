@@ -11,7 +11,7 @@ use crate::core::{
     FfiError, FlexWeek, Preview, db_lock, engine_failure, failure, hex_preview, require_user,
 };
 
-const WEEK_OVER: &str = "This week is over, so nothing was planned. Plan this week or a later one.";
+const WEEK_OVER: &str = "That week is over. Open this week or a later one, then plan again.";
 const BUDGET_MS: f64 = flexweek_engine::solver::SOLVE_BUDGET_MS;
 
 fn assignment_object(views: Map<String, Value>) -> Value {
@@ -390,14 +390,14 @@ pub(crate) fn plan_week(
 pub(crate) fn accept_plan(week: &FlexWeek, preview_id: &str) -> Result<String, FfiError> {
     let user_id = require_user(week)?;
     if preview_id.is_empty() {
-        return Err(failure("preview was not found"));
+        return Err(failure("That plan preview is gone. Plan again."));
     }
     let preview = week
         .previews
         .lock()
         .map_err(failure)?
         .remove(preview_id)
-        .ok_or_else(|| failure("preview was not found"))?;
+        .ok_or_else(|| failure("That plan preview is gone. Plan again."))?;
     let payload = json!(["accept_plan", preview_id, preview.week_start]).to_string();
     let db = db_lock(week)?;
     let placed_ids = preview.placed_ids.clone();

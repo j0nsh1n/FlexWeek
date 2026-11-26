@@ -84,6 +84,7 @@ def test_a_failed_week_load_is_said_and_not_applied(
     session.week_blocks(dest, got.append)
     wait_until(
         qapp,
-        lambda: session.message == "Storage is unavailable. Keep your changes and try again shortly.",
+        lambda: session.message
+        == "FlexWeek can't open its saved data right now. Keep your changes and try again in a minute.",
     )
     assert got == []

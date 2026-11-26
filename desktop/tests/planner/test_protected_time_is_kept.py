@@ -46,10 +46,10 @@ def test_hours_the_engine_refuses_are_not_sent_and_the_status_line_says_what_to_
     for protected, work in refused:
         said.clear()
         assert session.save_availability(protected, "21:00", work) is False
-        assert said == ["Check the days and times of your study hours and protected time."]
+        assert said == ["Check the days and times in Study hours and Protected time."]
         assert not session.busy
         assert session.preferences == kept
     # Protected time alone is checked when Study hours are not sent.
     said.clear()
     assert session.save_availability([{**meal, "start": "18:07"}], "21:00") is False
-    assert said == ["Check the days and times of your study hours and protected time."]
+    assert said == ["Check the days and times in Study hours and Protected time."]

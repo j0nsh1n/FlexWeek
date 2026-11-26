@@ -652,7 +652,7 @@ fn a_refused_undo_reloads_the_saved_week_and_offers_undo_again() {
     );
     assert_eq!(
         TRAVEL_REFUSED,
-        "Undo did not go through. Your week was reloaded as it's saved."
+        "Undo didn't save. Your week was reloaded as it's saved."
     );
     // An ordinary save keeps its batch and draft; a conflict waits for Reload.
     assert_eq!(

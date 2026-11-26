@@ -98,7 +98,7 @@ def test_create_account_validates_then_shows_the_codes_then_setup(
     assert bridge.passwordHint == "At least 12 characters."
     fill(window, "new_student", "short")
     bridge.submit()
-    assert bridge.passwordProblem == "Add 7 more characters. Passwords need at least 12."
+    assert bridge.passwordProblem == "Add 7 more characters. Passwords need at least 12 characters."
     assert window.session.account is None
     fill(window, "new_student")
     bridge.submit()
@@ -167,7 +167,7 @@ def test_forgot_password_resets_with_a_recovery_code(
     bridge.setRecoveryCode(codes[0])
     bridge.setNewPassword("short")
     bridge.submit()
-    assert bridge.newPasswordProblem == "Add 7 more characters. Passwords need at least 12."
+    assert bridge.newPasswordProblem == "Add 7 more characters. Passwords need at least 12 characters."
     bridge.setNewPassword(OTHER_PASSWORD)
     bridge.submit()
     wait_until(qapp, lambda: bridge.phase == "app")

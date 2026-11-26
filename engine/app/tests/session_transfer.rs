@@ -63,10 +63,15 @@ fn another_weeks_file_is_refused_with_words_naming_that_week() {
 
 #[test]
 fn a_file_the_reader_refused_says_its_own_words() {
-    let file = json!({"error": "Empty file."});
+    let file = json!({"error": "Nothing imported: the file is empty. Choose a FlexWeek week or day file."});
     let none = json!([]);
     let said = import_week_decision(&file, &context(&none, &json!({}), None)).unwrap();
-    assert_eq!(said, ImportDecision::Say("Empty file.".into()));
+    assert_eq!(
+        said,
+        ImportDecision::Say(
+            "Nothing imported: the file is empty. Choose a FlexWeek week or day file.".into()
+        )
+    );
 }
 
 #[test]
@@ -203,7 +208,7 @@ fn the_restore_point_list_holds_at_most_twenty() {
 fn a_restore_needs_the_preview_of_that_point() {
     let preview = json!({"id": "p1", "state_token": "t"});
     assert_eq!(restore_apply_guard(true, Some(&preview), "p1"), None);
-    let words = Some("Preview the restore point first.");
+    let words = Some("Preview the saved copy first.");
     assert_eq!(restore_apply_guard(true, None, "p1"), words);
     assert_eq!(restore_apply_guard(true, Some(&preview), "p2"), words);
     assert_eq!(restore_apply_guard(false, Some(&preview), "p1"), words);

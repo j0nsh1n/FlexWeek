@@ -12,7 +12,7 @@ from desktop.tests.grid_support import WEDNESDAY, hold_clock
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
 
-PLACED = "Placed 1 homework block."
+PLACED = "Placed 1 session."
 
 
 def add_essay(qapp: QApplication, window: NativeWindow) -> None:
