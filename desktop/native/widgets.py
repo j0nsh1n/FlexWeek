@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from flexweek_engine import parse_due  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     QEvent,
     QObject,
@@ -21,7 +22,6 @@ from PySide6.QtWidgets import (
 )
 
 from backend import clock as wall_clock
-from backend.models import parse_due
 from desktop.native.fonts import time_font
 
 

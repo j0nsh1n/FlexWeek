@@ -1,6 +1,6 @@
 """Alarms in Material: the add and edit sheet's draft, the list rows Settings shows, and the screen an
 alarm rings on. The rules are the Widgets Alerts card's: at most 20 alarms, at least one day, a Spotify
-link that backend.models accepts, a blank name is "Alarm"."""
+link that the engine accepts, a blank name is "Alarm"."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
+from flexweek_engine import valid_spotify_url  # type: ignore[import-untyped]
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from backend.models import valid_spotify_url
 from desktop.native.calendar import DAY_FULL, DAYS
 from desktop.native.remind import ALARM_SNOOZE_MIN
 from desktop.native.settings_copy import ring_days

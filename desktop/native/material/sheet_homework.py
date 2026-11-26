@@ -7,16 +7,15 @@ same answer in either surface. Saving goes through NativeSession in the bridge.
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ValidationError
+import flexweek_engine  # type: ignore[import-untyped]
+from flexweek_engine import ESTIMATE_MAX_MIN, parse_due, unplanned_minutes
 
-from backend.assignments import unplanned_minutes
-from backend.availability import spread_sessions
-from backend.models import ESTIMATE_MAX_MIN, Assignment, parse_due
 from backend.slots import SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import (
     CATEGORIES,
@@ -37,8 +36,8 @@ from desktop.native.sheet_rules import (
     ESTIMATE_LONG,
     ESTIMATE_SHORT,
     SLOT_HINT,
-    _homework_problem,
     first_day_changed,
+    homework_sheet_problem,
     moved_across_months,
     moved_day_names,
     moved_days_note,
@@ -362,15 +361,16 @@ class HomeworkDraft:
         ahead = str(getattr(self.session, "selected_day", "") or "")
         start = max(self.today, ahead)
         from_date = min(start, parse_due(due)[0].isoformat())
-        sessions, _off_grid = spread_sessions(
-            estimate_min=self.estimate(),
-            focus_minutes=focus,
-            done_min=done,
-            planned_min=0,
-            due=due,
-            session_min=session_min,
-            from_date=from_date,
+        sessions_json, _off_grid = flexweek_engine.spread_sessions(
+            self.estimate(),
+            focus,
+            done,
+            0,
+            due,
+            session_min,
+            from_date,
         )
+        sessions = json.loads(sessions_json)
         return session_min, from_date, sessions
 
     def spread_requested(self) -> bool:
@@ -555,16 +555,10 @@ class HomeworkDraft:
         )
         if self._when_changed():
             made["fixed_at"] = fixed
-        try:
-            Assignment.model_validate(
-                {key: value for key, value in made.items() if key in Assignment.model_fields}
-            )
-        except ValueError as error:
-            message = _homework_problem(error)
-            path: tuple[str, ...] = ()
-            if isinstance(error, ValidationError) and error.errors():
-                path = tuple(str(part) for part in error.errors()[0].get("loc") or ())
-            if path and path[0] == "title":
+        checked = homework_sheet_problem(made)
+        if checked is not None:
+            field, message = checked
+            if field == "title":
                 self.title_problem = message
                 self._show_step(0)
             else:

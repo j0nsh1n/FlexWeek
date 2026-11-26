@@ -15,6 +15,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from flexweek_engine import valid_spotify_url  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     Property,
     QAbstractListModel,
@@ -29,7 +30,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import QApplication
 
-from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.account_copy import (
     CREATE_HEADING,
