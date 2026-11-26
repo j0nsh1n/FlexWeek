@@ -14,7 +14,7 @@ from backend.tests.fake_clock import CLOCK
 from desktop.native.controller import NativeSession
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.logic_support import essay, fail_once, place_on_monday, settled
+from desktop.tests.logic_support import essay, fail_once, place_on_monday, settled, week_after
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
@@ -61,6 +61,29 @@ def test_finished_after_a_focus_session_finishes_the_homework_where_it_was(
     settled(qapp, session)
     session.reload()
     settled(qapp, session)
+    assert session.assignments["essay"]["completed"] is True
+    block = session.blocks[0]
+    assert (block["completed"], block["completed_day"], block["start"]) == (True, 0, "16:00")
+
+
+def test_mark_finished_from_another_week_finishes_with_one_press(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The timer's week is not the one on screen. One Mark finished opens that week and finishes
+    the homework there, the same way a press on that week would."""
+    session = window.session
+    session.add_homework(essay(session))
+    place_on_monday(qapp, session)
+    start_focus_on_first_block(session)
+    tick_focus_after_half_an_hour(qapp, session)
+    assert session.focus["phase"] == "ended"
+    timer_week = session.focus["weekStart"]
+    session.load_week(week_after(timer_week))
+    settled(qapp, session)
+    assert session.week_start == week_after(timer_week)
+    session.finish_focused_homework()
+    settled(qapp, session)
+    assert session.week_start == timer_week
     assert session.assignments["essay"]["completed"] is True
     block = session.blocks[0]
     assert (block["completed"], block["completed_day"], block["start"]) == (True, 0, "16:00")

@@ -262,3 +262,191 @@ def drop_missing(state: dict | None, week_start: str, blocks: list[dict], announ
 def rebase_state(state: dict | None, first_weekday: int) -> dict | None:
     """The timer in the week from the new first day, keeping its date; None when it has no week."""
     return _decide("rebase", focus=state, first_weekday=first_weekday)["state"]
+
+
+def scheduled_blocks_of(blocks: list[dict], trace: dict | None) -> list[dict]:
+    """Locked blocks and timed flexible ones, or each placed row laid over the block it names."""
+    shown: list[dict] = _decide("scheduled_blocks", blocks=blocks, trace=trace)
+    return shown
+
+
+def restore_decision(
+    saved: dict | None, *, assignments: dict, blocks: list[dict], prefs: dict | None, now_ms: int
+) -> dict:
+    """What a saved timer becomes: drop, active, advance_work, or paused_work."""
+    decision: dict = _decide(
+        "restore_decision",
+        saved=saved,
+        assignments=assignments,
+        blocks=blocks,
+        prefs=prefs,
+        now_ms=now_ms,
+    )
+    return decision
+
+
+def focus_spotify_decision(prefs: dict | None, link: str) -> dict:
+    """skip, say (no link), or open with the link."""
+    decision: dict = _decide("focus_spotify_decision", prefs=prefs, link=link)
+    return decision
+
+
+def focus_spotify_open_failed() -> str:
+    return str(_decide("focus_spotify_open_failed"))
+
+
+def start_allowed(signed_in: bool, busy: bool, focus_busy: bool) -> bool:
+    return bool(_decide("start_allowed", signed_in=signed_in, busy=busy, focus_busy=focus_busy))
+
+
+def toggle_pause_decision(state: dict | None, *, focus_busy: bool, busy: bool, now_ms: int) -> dict:
+    decision: dict = _decide(
+        "toggle_pause_decision", focus=state, focus_busy=focus_busy, busy=busy, now_ms=now_ms
+    )
+    return decision
+
+
+def end_early_decision(state: dict | None, week_start: str, prefs: dict | None, now_ms: int) -> dict:
+    decision: dict = _decide(
+        "end_early_decision", focus=state, week_start=week_start, prefs=prefs, now_ms=now_ms
+    )
+    return decision
+
+
+def credit_enqueue_decision(
+    state: dict | None, *, prefs: dict | None, minutes: int | None, finished: bool, busy: bool
+) -> dict:
+    decision: dict = _decide(
+        "credit_enqueue_decision",
+        focus=state,
+        prefs=prefs,
+        minutes=minutes,
+        finished=finished,
+        busy=busy,
+    )
+    return decision
+
+
+def apply_credit_blocks(blocks: list[dict], to: str, updated: dict) -> dict:
+    applied: dict = _decide("apply_credit_blocks", blocks=blocks, to=to, updated=updated)
+    return applied
+
+
+def apply_auto_complete_blocks(blocks: list[dict], done: dict | None) -> dict:
+    applied: dict = _decide("apply_auto_complete_blocks", blocks=blocks, done=done)
+    return applied
+
+
+def split_held(
+    notices: list[dict], state: dict | None, prefs: dict | None, material_owns: bool
+) -> dict:
+    split: dict = _decide(
+        "split_held", notices=notices, focus=state, prefs=prefs, material_owns=material_owns
+    )
+    return split
+
+
+def release_held(held: list[dict], state: dict | None, prefs: dict | None, material_owns: bool) -> bool:
+    return bool(
+        _decide("release_held", held=held, focus=state, prefs=prefs, material_owns=material_owns)
+    )
+
+
+def finish_focused_plan(
+    state: dict | None,
+    *,
+    busy: bool,
+    focus_busy: bool,
+    week_start: str,
+    blocks: list[dict],
+    assignments: dict,
+) -> dict:
+    plan: dict = _decide(
+        "finish_focused_plan",
+        focus=state,
+        busy=busy,
+        focus_busy=focus_busy,
+        week_start=week_start,
+        blocks=blocks,
+        assignments=assignments,
+    )
+    return plan
+
+
+def finish_after_load(
+    *,
+    waiting: bool,
+    pending: str | None,
+    load_ok: bool,
+    state: dict | None,
+    busy: bool,
+    focus_busy: bool,
+    week_start: str,
+    blocks: list[dict],
+    assignments: dict,
+) -> dict:
+    plan: dict = _decide(
+        "finish_after_load",
+        waiting=waiting,
+        pending=pending,
+        load_ok=load_ok,
+        focus=state,
+        busy=busy,
+        focus_busy=focus_busy,
+        week_start=week_start,
+        blocks=blocks,
+        assignments=assignments,
+    )
+    return plan
+
+
+def finish_intent_on_request(*, waiting: bool, pending: str | None, requested: str | None) -> str:
+    return str(
+        _decide(
+            "finish_intent_on_request", waiting=waiting, pending=pending, requested=requested
+        )
+    )
+
+
+def restart_finished_plan(
+    state: dict | None, *, busy: bool, focus_busy: bool, prefs: dict | None, now_ms: int
+) -> dict:
+    plan: dict = _decide(
+        "restart_finished_plan",
+        focus=state,
+        busy=busy,
+        focus_busy=focus_busy,
+        prefs=prefs,
+        now_ms=now_ms,
+    )
+    return plan
+
+
+def add_focus_time_plan(
+    state: dict | None,
+    *,
+    busy: bool,
+    focus_busy: bool,
+    assignments: dict,
+    minutes: int,
+    prefs: dict | None,
+    now_ms: int,
+) -> dict:
+    plan: dict = _decide(
+        "add_focus_time_plan",
+        focus=state,
+        busy=busy,
+        focus_busy=focus_busy,
+        assignments=assignments,
+        minutes=minutes,
+        prefs=prefs,
+        now_ms=now_ms,
+    )
+    return plan
+
+
+def take_break_plan(state: dict | None, *, focus_busy: bool, prefs: dict | None, now_ms: int) -> dict:
+    plan: dict = _decide(
+        "take_break_plan", focus=state, focus_busy=focus_busy, prefs=prefs, now_ms=now_ms
+    )
+    return plan
