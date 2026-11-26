@@ -82,6 +82,10 @@ list, all shipped).
   session's frame in Rust (#161, merged a9deb612); the window's requests go through it (#163), its busy state and
   status line are Rust's (#164), and so are when the week saves itself and saving before leaving (#167), and
   signing in, up and out (#165); the window's block and homework checks are the engine's (#168, #169, 2026-11-24).
+- Status (2026-11-26): P4 groups 2 (saving and the week state, #188, #190), 3 (undo rules), 4 (homework and block
+  edits, copies: #185, #186, #189) and 5 (Plan, Running late and previews, Unfinished counts: #194-#196) are merged,
+  with the first slices of groups 6-9 (focus, reminders and Spotify, preferences, restore and files: #181, #184).
+  Left in P4: the rest of groups 6-9, then pydantic's adapters; controller.py is about 4,000 lines.
   P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
@@ -209,8 +213,9 @@ Full wording is in this file's git history (before 2026-11-06).
 ### Gripes from the 2.0.0 developer builds (Jonathan, 2026-11-25)
 - J26 Deleting School "This week only" left it on the Week screen, marked missed on every day. Fix: the deleted
   days are kept as removed days, gone from Week, Day, My day, Month and the planner; days marked "I missed it" stay
-  missed (Jonathan picked "Gone, but missed days stay"). Branch `fix/school-week-delete`.
-- J27 Sign out is only in the menu; Manage account, which Settings says holds sign out, has none. Open.
+  missed (Jonathan picked "Gone, but missed days stay"; "This day only" removes too). Done 2026-11-26 (#191).
+- J27 Sign out is only in the menu; Manage account, which Settings says holds sign out, has none. Done 2026-11-26
+  (#192): a Sign out row in Settings > This computer ("Somewhere a bit more obvious in the settings menu").
 
 ## Later
 - Left for after 1.0.0: a camera scan of the pairing code, a restore copy of

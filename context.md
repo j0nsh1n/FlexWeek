@@ -1,8 +1,12 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-25)
-- Local branch `feat/wording-pass` contains the PR #187 review fixes, with neutral Plan counts, corrected stale
-  expectations and the remaining desktop, Rust and Android wording corrections. Nothing has been pushed.
+## Current State (2026-11-26)
+- 2026-11-26: all of P4 group 5 is merged (#194 5C Unfinished counts, #195 5B Running late and previews, #196 5A
+  Plan), with groups 2-4 before it (#185, #186, #188-#190), the first slices of groups 3 and 6-9 (#181) and
+  slice 7B, Spotify (#184). Also merged today: #191 (School deleted "this week",
+  or its last day "this day", goes into `removed_days`, not `missed_days`), #192 (Sign out row in Settings > This computer;
+  signing out from Settings resets Settings to the week), #193 (an update saves the week before it installs) and #197
+  (CI installs the pinned Rust 1.98.1 with rustfmt and clippy before cargo runs). `controller.py` is about 4,000 lines.
 - Material 3 desktop redesign ("2.0 richer", branch `feat/design-2-richer`, PR #182) updates all main Material
   screens: 5-step tonal surfaces in `theme.py` (`B3A3`), `M3Palette` semantic surfaces/corners/scrim/shadow tokens,
   Week Option A (elevated calendar card, tonal homework drawer, category icons), Day Option B (full-height timeline
@@ -12,7 +16,7 @@
   sync` section, centered A+C `PairingDialog`), Sign in Option B (animated 5-scene QML showcase pausing on hover
   and static under Reduce motion/Off), Setup (top stepper, 2x2 choice grids, pinned footer), and Update (centered
   B+C hybrid pop-up). Proposed `spec.md` updates are staged for approval outside git.
-- `origin/main` is `ead664a7`. Latest release: v1.5.0, published 2026-11-20 from `0effa56f` (PR #141). The 2.0.0 Rust
+- `origin/main` is `9f5d5b1d`. Latest release: v1.5.0, published 2026-11-20 from `0effa56f` (PR #141). The 2.0.0 Rust
   overhaul is under way on main and is available in developer builds only.
 - P0 (#142), P1 (#143-#152) and the P2 server removal (#154-#156) are merged. The window asks the Rust service in its
   own process. `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the
@@ -28,10 +32,6 @@
   `flexweek_engine.NativeCore`; the window still owns Qt callbacks, kept-session files, setup answers and week loading.
   Blocks, homework (#168) and study/protected hours (#178) are checked by the engine. The hours refusal is "Check the
   days and times of your study hours and protected time."
-- PR #181 is **in progress**, not merged on `origin/main`. Branch `feat/p4-history-reminders-transfer` (head `f014162d` on 2026-11-25)
-  adds undo-step rules in `engine/engine/src/desk/history.rs`, reminder-card and alarm-queue decisions, focus-timer
-  decisions, the setup queue and preference bodies, and restore/import/export decisions in Rust. The window retains Qt,
-  file and request work.
 - CI moved to Depot on 2026-11-24 (#153). `.depot/workflows/verify.yml` runs `engine`, `verify-engine`,
   `verify-python`, `desktop`, `screens`, `rig`, `mutate` and `mutate-python`; mutation jobs run on pull requests and
   by hand. GitHub Actions keeps CodeQL and `.github/workflows/release-windows.yml`; #177 skips Windows installer builds
@@ -119,15 +119,15 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-25: `feat/wording-pass` has six local commits fixing every must-fix review item on PR #187 and the two
-  extra stale Plan expectations found by the final sweep. Changed Python passes Ruff, `cargo fmt --all --check` passes,
-  and the pure Plan and phone-status tests pass. Window-backed tests could not start with the supplied older engine
-  (`SpotifyCore` missing); Rust and Android tests were not run under the task's limits. Next: coordinator review and push.
-- 2026-11-25: branch `docs/2026-11-25-refresh` (PR #183) updates the README, desktop and architecture guides, Material and
-  Android notes, release checklist, engine maps and fwtest CI table. It records Depot CI, current P4 and the in-progress
-  #181, plus the icon, feedback form, kept-sign-in and pairing fixes. Older migration contracts are labelled historical;
-  release notes were not changed. No builds or tests were run for this docs-only pass. Next: coordinator review and
-  publishing.
+- 2026-11-26: every PR from #180 to #197 is merged. Run log:
+  `~/.flexweek-ui-harness/scratch/afk-2026-11-25/run.md`. Next: plan the rest of P4 (groups 6-9 after their first
+  slices, then pydantic's adapters). Follow-ups: a split long task can take a 99-block week past 100 before the save
+  refuses it (solver); an older phone app may drop `removed_days` when it re-saves a week; release-windows.yml and the
+  Linux build container still install `stable` Rust. Three helper copies wait on Jonathan before deletion:
+  `slice/2d-week-state` (t3-cff31743, superseded by #188), t3-1a3042f1 (2 unreviewed changed files) and
+  t3-89c650a9 (one file, saved as review-school/sonnet-sheet-block.patch). `scratch/wt-design-pics` stays on purpose: its only
+  change is the uncommitted one-off picture workflow (`.depot/workflows/pictures-oneoff.yml`) used for
+  before/after picture runs (`depot ci run --workflow` from a copy of the branch).
 - 2026-11-24 (after the AFK run): #165, #166, #172-#176 merged; CI moved to Depot (#153); the hours windows are
   checked by the engine with a plain refusal (branch feat/p4-hours-windows). Next: group 2's save core with group 3
   (undo); Jonathan's picks from the Gemini redesign mockups (`~/.flexweek-ui-harness/scratch/design-2.0-richer/`).
@@ -154,10 +154,4 @@ preview. Recorded `operation_id` values make a retried write return the first re
   it does not run `cargo fmt --check`, which CI runs in engine and tools/fwtest.
   Next: Jonathan's answers, then P2's pydantic step or P4; P3's next slice (door setup steps for seeded data,
   more Week files, the CI step).
-- 2026-11-22: 2.0.0 P1's work is merged (main 7cdd8e16, #148-#151). #148, #149 and #151 had a Grok 4.7 PASS; #150's
-  route test went four Grok rounds and Jonathan chose to merge it with the last fix unreviewed (all 14 named
-  bypasses caught). Jonathan marked P1 complete once only Python-only tests were left; the two backend
-  `regress184` files, missed at first, were ported in #152.
-  Next: P2 (no server), per plan.md section 7; spec.md lines it makes untrue are fixed in its PRs (approved
-  2026-11-22). Logs: `~/.flexweek-ui-harness/scratch/rust-2.0.0/p1-twins/plan.md`, `.../p1-finish/plan.md`.
 - 2026-11-20, branch `feat/material-only` (PR #141): released as v1.5.0 (see Current State).
