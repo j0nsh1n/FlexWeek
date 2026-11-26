@@ -749,7 +749,7 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
 - CI: Depot CI runs the GitHub Actions workflow format on its own runners, in
   parallel (moved there from GitHub Actions on 2026-11-24). `.depot/workflows/verify.yml`
   is the source gate (mypy, not pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
-  `screens`, `rig`, `mutate` and `mutate-python`. `screens` runs the screen tests
+  `screens`, `rig`, `mutate`, `mutate-python` and `android` (the phone app's unit tests). `screens` runs the screen tests
   written in Rust (`engine/testkit/tests`) against the Python app through the
   test door. `rig` runs once for Material Day and once
   for Material Week with a real pointer on a hidden display (Xvfb, Openbox,
