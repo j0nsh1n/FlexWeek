@@ -18,18 +18,14 @@ from backend import clock as wall_clock
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     blocks_by_weekday,
-    date_for_day,
     day_in_week,
     hand_move,
     is_series,
     local_stamp,
     monday_of,
-    month_anchor_date,
-    month_for_view,
     one_day_note,
     repeat_changes,
     routine_on_week,
-    shifted_month,
     stored_weeks_of,
     week_start_on,
 )
@@ -179,6 +175,47 @@ def _draft_field(name: str, *, writable: bool = False) -> property:
     return property(read, write if writable else None)
 
 
+class _MonthCache(dict):
+    """clear() and item writes reach the Rust cache: sign-out and the month tests call them on the
+    object this property returns, and the settings preview reads it as a dict."""
+
+    def __init__(self, session: NativeSession) -> None:
+        self._session = session
+        dict.__init__(self, session._views.cache_mapping())
+
+    def clear(self) -> None:
+        dict.clear(self)
+        self._session._views.clear_cache()
+
+    def __setitem__(self, key: tuple, value: dict) -> None:
+        dict.__setitem__(self, key, value)
+        self._session._views.insert_cache(str(key[0]), str(key[1]), value)
+
+    def __delitem__(self, key: tuple) -> None:
+        dict.__delitem__(self, key)
+        self._session._views.remove_cache(str(key[0]), str(key[1]))
+
+
+class _MonthPrefetch(set):
+    """clear(), add and discard reach the in-flight set: a save's tests call clear() on it."""
+
+    def __init__(self, session: NativeSession) -> None:
+        self._session = session
+        set.__init__(self, session._views.prefetch_members())
+
+    def clear(self) -> None:
+        set.clear(self)
+        self._session._views.clear_prefetch()
+
+    def add(self, key: tuple) -> None:
+        set.add(self, key)
+        self._session._views.add_prefetch(str(key[0]), str(key[1]))
+
+    def discard(self, key: tuple) -> None:
+        set.discard(self, key)
+        self._session._views.discard_prefetch(str(key[0]), str(key[1]))
+
+
 class NativeSession(QObject):
     account_changed = Signal(object)
     recovery_codes = Signal(list)
@@ -221,27 +258,7 @@ class NativeSession(QObject):
         self._fixture_draft_values: dict[str, Any] = {}
         self._draft_versions: dict[str, int] = {}
         self._draft_command("clear", week_start=current_week_start())
-        self.planner_view = "week"
-        self.selected_day = wall_clock.today().isoformat()
-        self.day_data: dict | None = None
-        self.selected_month: str | None = None
-        self.month_data: dict | None = None
-        # The day weeks start on, on screen (0 Monday to 6 Sunday). It is kept on this computer, so the
-        # window tells the session; stored weeks stay keyed by their Monday whatever it is.
-        self.first_weekday = 0
-        # The first day changed while a change was being saved: the week from it opens once it lands.
-        self._refollow_week = False
-        # The type a drag on the hours makes, once one is picked under Add. Until then a block made by
-        # dragging has none: it used to be School, and an hour of Club counted as school.
-        self.armed_category: str | None = None
-        self.selected_block_id: str | None = None
-        self.selected_occurrence_day: int | None = None
-        self._day_ticket = 0
-        self._month_ticket = 0
-        self._month_cache: dict[tuple[str, str], dict] = {}
-        self._month_gen = 0
-        self._month_data_gen = 0
-        self._month_prefetching: set[tuple[str, str]] = set()
+        self._views = flexweek_engine.ViewState(wall_clock.today().isoformat())
         # New homework to give a time once its save lands, when the student plans as they add.
         self._plan_after_save: set[str] = set()
         # Sessions to plan once the open week is read again: a save wrote them through the stored
@@ -578,6 +595,130 @@ class NativeSession(QObject):
         self._reminder_blocks = []
         self._reminder_trace = None
 
+    @property
+    def planner_view(self) -> str:
+        return self._views.planner_view()
+
+    @planner_view.setter
+    def planner_view(self, value: str) -> None:
+        self._views.set_planner_view(value)
+
+    @property
+    def selected_day(self) -> str:
+        return self._views.selected_day()
+
+    @selected_day.setter
+    def selected_day(self, value: str) -> None:
+        self._views.set_selected_day(value)
+
+    @property
+    def day_data(self) -> dict | None:
+        return self._views.day_data()
+
+    @day_data.setter
+    def day_data(self, value: dict | None) -> None:
+        self._views.set_day_data(value)
+
+    @property
+    def selected_month(self) -> str | None:
+        return self._views.selected_month()
+
+    @selected_month.setter
+    def selected_month(self, value: str | None) -> None:
+        self._views.set_selected_month(value)
+
+    @property
+    def month_data(self) -> dict | None:
+        return self._views.month_data()
+
+    @month_data.setter
+    def month_data(self, value: dict | None) -> None:
+        self._views.set_month_data(value)
+
+    @property
+    def first_weekday(self) -> int:
+        return self._views.first_weekday()
+
+    @first_weekday.setter
+    def first_weekday(self, value: int) -> None:
+        self._views.set_first_weekday(value)
+
+    @property
+    def _refollow_week(self) -> bool:
+        return self._views.refollow_week()
+
+    @_refollow_week.setter
+    def _refollow_week(self, value: bool) -> None:
+        self._views.set_refollow_week(value)
+
+    @property
+    def armed_category(self) -> str | None:
+        return self._views.armed_category()
+
+    @armed_category.setter
+    def armed_category(self, value: str | None) -> None:
+        self._views.set_armed_category(value)
+
+    @property
+    def selected_block_id(self) -> str | None:
+        return self._views.selected_block_id()
+
+    @selected_block_id.setter
+    def selected_block_id(self, value: str | None) -> None:
+        self._views.set_selected_block_id(value)
+
+    @property
+    def selected_occurrence_day(self) -> int | None:
+        return self._views.selected_occurrence_day()
+
+    @selected_occurrence_day.setter
+    def selected_occurrence_day(self, value: int | None) -> None:
+        self._views.set_selected_occurrence_day(value)
+
+    @property
+    def _day_ticket(self) -> int:
+        return self._views.day_ticket()
+
+    @_day_ticket.setter
+    def _day_ticket(self, value: int) -> None:
+        self._views.set_day_ticket(value)
+
+    @property
+    def _month_ticket(self) -> int:
+        return self._views.month_ticket()
+
+    @_month_ticket.setter
+    def _month_ticket(self, value: int) -> None:
+        self._views.set_month_ticket(value)
+
+    @property
+    def _month_gen(self) -> int:
+        return self._views.month_gen()
+
+    @_month_gen.setter
+    def _month_gen(self, value: int) -> None:
+        self._views.set_month_gen(value)
+
+    @property
+    def _month_data_gen(self) -> int:
+        return self._views.month_data_gen()
+
+    @_month_data_gen.setter
+    def _month_data_gen(self, value: int) -> None:
+        self._views.set_month_data_gen(value)
+
+    @property
+    def _month_cache(self) -> dict:
+        return _MonthCache(self)
+
+    @_month_cache.setter
+    def _month_cache(self, value: dict) -> None:
+        self._views.replace_cache(value)
+
+    @property
+    def _month_prefetching(self) -> set:
+        return _MonthPrefetch(self)
+
     def arm_category(self, category: str) -> None:
         self.armed_category = category
 
@@ -591,24 +732,12 @@ class NativeSession(QObject):
 
     def today_column(self, iso_day: str) -> int | None:
         """Which day of the open week `iso_day` is (0 its first day), or None when it is not in it."""
-        try:
-            day = day_in_week(iso_day, self.week_start)
-        except ValueError:
-            return None
-        return day if 0 <= day <= 6 else None
+        return self._views.column_of(iso_day, self.week_start)
 
     def _ensure_selected_day(self) -> None:
         # A day of the open week stays, also when that week still starts on the day weeks started on
         # before the first day changed: the new week is opened from it.
-        if self.today_column(self.selected_day) is not None:
-            return
-        try:
-            # The same weekday in the open week.
-            weekday = day_in_week(self.selected_day, self.shown_week_of(self.selected_day))
-        except ValueError:
-            self.selected_day = self.week_start
-            return
-        self.selected_day = date_for_day(self.week_start, weekday)
+        self._views.ensure_selected_day(self.week_start)
 
     def _held(self) -> bool:
         return self._draft_command("meta")["held"]
@@ -628,110 +757,28 @@ class NativeSession(QObject):
         return self._draft_command("leaving_poll", poll_ms=poll_ms)
 
     def _refresh_view(self) -> None:
-        if self.planner_view == "day":
-            self._ensure_selected_day()
-            self._fetch_day()
-        elif self.planner_view == "month" and self.selected_month:
-            self._fetch_month()
+        self._view_act(self._views.refresh(self._view_world()))
 
     def set_view(self, view: str) -> None:
-        if view not in {"day", "week", "month"} or self.account is None:
-            return
-        if view == "month":
-            self.open_month()
-            return
-        if self.planner_view == "month":
-            self._leave_month(view)
-            return
-        self.planner_view = view
-        self._refresh_view()
-        self.week_changed.emit()
+        self._view_act(self._views.set_view(view, self._view_world()))
 
     def open_day(self, iso_day: str) -> None:
-        if self.account is None:
-            return
-        try:
-            date.fromisoformat(iso_day)
-        except ValueError:
-            return
-        shown = self.shown_week_of(iso_day)
-        self.selected_day = iso_day
-        self.planner_view = "day"
-        self.day_data = None
-        if shown != self.week_start:
-            self.load_week(shown)
-            return
-        self._fetch_day()
-        self.week_changed.emit()
+        self._view_act(self._views.open_day(iso_day, self._view_world()))
 
     def today_iso(self) -> str:
         return datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
 
     def open_month(self, month: str | None = None) -> None:
-        if self.account is None:
-            return
-        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
-        anchor = self.selected_day if self.planner_view == "day" else (
-            today if self.today_column(today) is not None else date_for_day(self.week_start, 3)
-        )
-        self.selected_day = anchor
-        self.selected_month = month or month_for_view(anchor)
-        self.planner_view = "month"
-        self.month_data = None
-        self._fetch_month()
-        self.week_changed.emit()
+        self._view_act(self._views.open_month(month, self._view_world()))
 
     def shift_month(self, amount: int) -> None:
-        if self.planner_view != "month" or not self.selected_month:
-            return
-        nxt = shifted_month(self.selected_month, amount)
-        if nxt is None:
-            return
-        self.selected_month = nxt
-        self.month_data = None
-        self._fetch_month()
-        self.week_changed.emit()
-
-    def _leave_month(self, view: str) -> None:
-        if not self.selected_month:
-            self.planner_view = view
-            self.week_changed.emit()
-            return
-        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
-        anchor = self.selected_day if self.selected_day[:7] == self.selected_month else (
-            month_anchor_date(self.selected_month, today)
-        )
-        shown = self.shown_week_of(anchor)
-        self.selected_day = anchor
-        self.planner_view = view
-        if shown != self.week_start:
-            self.load_week(shown)
-            return
-        self._refresh_view()
-        self.week_changed.emit()
+        self._view_act(self._views.shift_month(amount, self._view_world()))
 
     def follow_first_weekday(self, first_weekday: int) -> None:
         """A new first day of the week: the month's rows change, so what was kept is asked for again,
         and the open week becomes the one from that day holding the selected day. Changes not yet
         saved are saved first, in the week they were made in."""
-        follow = json.loads(
-            flexweek_engine.session_follow_first_weekday(
-                self.first_weekday, first_weekday, self.account is not None
-            )
-        )
-        self.first_weekday = first_weekday
-        self._month_cache.clear()
-        self._month_gen += 1
-        if self.account is None:
-            self._draft_command("set_week_start", week_start=self.shown_week_of(self.selected_day))
-        elif follow["refollow"]:
-            if follow["rebase_focus"]:
-                self._rebase_focus()
-            self._refollow_week = True
-            self._follow_week()
-        if self.planner_view == "month":
-            self._fetch_month()
-        self.week_changed.emit()
+        self._view_act(self._views.follow_first_weekday(first_weekday, self._view_world()))
 
     def _rebase_focus(self) -> None:
         """The focus timer names its week and day: keep its date, in the week from the new first day."""
@@ -744,102 +791,99 @@ class NativeSession(QObject):
     def _follow_week(self) -> None:
         """Open the week from the chosen first day once nothing is held; a save still going on calls
         this again when it lands."""
-        if not self._refollow_week or self.account is None or self.busy or self._held():
-            return
-        self._refollow_week = False
-        anchor = self.selected_day if self.today_column(self.selected_day) is not None else self.week_start
-        target = self.shown_week_of(anchor)
-        if target != self.week_start:
-            self.selected_day = anchor
-            self.load_week(target)
+        self._view_act(self._views.follow_week(self._view_world()))
 
     def _fetch_day(self) -> None:
-        if self.account is None or self.planner_view != "day":
-            return
-        asked = self.selected_day
-        self._day_ticket += 1
-        token = self._day_ticket
-
-        def ok(data: dict) -> None:
-            if token != self._day_ticket or self.planner_view != "day" or self.selected_day != asked:
-                return
-            self.day_data = data
-            self.week_changed.emit()
-
-        def err(_error: ApiError) -> None:
-            if token != self._day_ticket:
-                return
-            self.week_changed.emit()
-
-        self.client.request("GET", f"/api/day?date={asked}", None, ok, err)
+        self._view_act(self._views.fetch_day(self._view_world()))
 
     def _fetch_month(self) -> None:
-        if self.account is None or self.planner_view != "month" or not self.selected_month:
-            return
-        asked = self.selected_month
-        self._month_ticket += 1
-        token = self._month_ticket
-        gen = self._month_gen
-        key = (str(self.account["id"]), asked)
-        cached = None if self._held() or self.parked_unsaved_week() else self._month_cache.get(key)
-        if cached is not None:
-            # Shown at once, then asked for again: another week may have changed since it was kept.
-            self.month_data = cached
-            self._month_data_gen = gen
-            self.week_changed.emit()
-
-        def ok(data: dict) -> None:
-            if (
-                token != self._month_ticket
-                or self.planner_view != "month"
-                or self.selected_month != asked
-                or gen != self._month_gen
-            ):
-                return
-            self.month_data = data
-            self._month_data_gen = gen
-            self._month_cache[key] = data
-            self.week_changed.emit()
-
-        def err(error: ApiError) -> None:
-            if token != self._month_ticket or gen != self._month_gen:
-                return
-            self._say(error.message)
-            self.week_changed.emit()
-
-        self.client.request("GET", self._month_path(asked), None, ok, err)
+        self._view_act(self._views.fetch_month(self._view_world()))
 
     def _month_path(self, month: str) -> str:
-        # A Monday start asks as it always did; the server's first day is Monday when none is named.
-        first = f"&first_day={self.first_weekday}" if self.first_weekday else ""
-        return f"/api/month?month={month}{first}"
+        return str(self._views.month_path(month))
 
     def _prefetch_open_week_month(self) -> None:
         """Warm the month most likely to be opened without holding up the week."""
-        if self.account is None:
-            return
-        owner = str(self.account["id"])
-        asked = month_for_view(date_for_day(self.week_start, 3))
-        key = (owner, asked)
-        if key in self._month_cache or key in self._month_prefetching:
-            return
-        self._month_prefetching.add(key)
-        gen = self._month_gen
+        self._view_act(self._views.prefetch(self._view_world()))
+
+    def _invalidate_months(self) -> None:
+        self._views.invalidate_months()
+
+    def _view_world(self) -> str:
+        account = self.account
+        return json.dumps(
+            {
+                "signed_in": account is not None,
+                "account_id": None if account is None else str(account["id"]),
+                "week_start": self.week_start,
+                "today": self.today_iso(),
+                "busy": self.busy,
+                "held": self._held(),
+                "parked": bool(self.parked_unsaved_week()),
+            }
+        )
+
+    def _view_act(self, effect: str) -> None:
+        decided = json.loads(effect)
+        if decided["set_week_start"] is not None:
+            self._draft_command("set_week_start", week_start=decided["set_week_start"])
+        if decided["rebase_focus"]:
+            self._rebase_focus()
+        if decided["load_week"] is not None:
+            self.load_week(decided["load_week"])
+        if decided["emit_before_request"]:
+            self.week_changed.emit()
+        if decided["request"] is not None:
+            self._view_request(decided["request"])
+        if decided["emit"]:
+            self.week_changed.emit()
+
+    def _view_request(self, request: dict) -> None:
+        kind = str(request["kind"])
+        token = int(request["token"])
+        asked = str(request["asked"])
+        generation = int(request["gen"])
+        owner = str(request["owner"])
 
         def ok(data: dict) -> None:
-            self._month_prefetching.discard(key)
-            if (
-                self.account is not None
-                and str(self.account["id"]) == owner
-                and data.get("month") == asked
-                and gen == self._month_gen
-            ):
-                self._month_cache[key] = data
+            self._view_answered(kind, token, asked, generation, owner, data, None)
 
-        def err(_error: ApiError) -> None:
-            self._month_prefetching.discard(key)
+        def err(error: ApiError) -> None:
+            self._view_answered(kind, token, asked, generation, owner, None, error.message)
 
-        self.client.request("GET", self._month_path(asked), None, ok, err)
+        self.client.request(request["method"], request["path"], None, ok, err)
+
+    def _view_answered(
+        self,
+        kind: str,
+        token: int,
+        asked: str,
+        generation: int,
+        owner: str,
+        data: dict | None,
+        error: str | None,
+    ) -> None:
+        account = self.account
+        answer = json.loads(
+            self._views.view_reply(
+                json.dumps(
+                    {
+                        "kind": kind,
+                        "token": token,
+                        "asked": asked,
+                        "gen": generation,
+                        "owner": owner,
+                        "account_id": None if account is None else str(account["id"]),
+                        "data": data,
+                        "error": error,
+                    }
+                )
+            )
+        )
+        if answer["say"] is not None:
+            self._say(answer["say"])
+        if answer["emit"]:
+            self.week_changed.emit()
 
     def _keep_session(self) -> None:
         if self.kept is None:
@@ -1838,8 +1882,7 @@ class NativeSession(QObject):
                 self.message = answer["words"]
             else:
                 self._say(answer["words"])
-            self._month_cache.clear()
-            self._month_gen += 1
+            self._invalidate_months()
             spread_next, self._spread_after_save = self._spread_after_save, None
             if spread_next is not None:
                 QTimer.singleShot(0, lambda: self.preview_spread(*spread_next, then=self.confirm_spread))
