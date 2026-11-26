@@ -505,7 +505,7 @@ pub fn merge_imported_blocks(
             };
             fields.insert("id".into(), split_id.clone());
             fields.insert("days".into(), json!([day]));
-            crate::standing::keep_removed_days(fields);
+            fields.shift_remove("removed_days");
             let mut missed = Vec::new();
             for item in iterate(&list_or_empty(fields.get("missed_days")))? {
                 if eq(&item, day) {

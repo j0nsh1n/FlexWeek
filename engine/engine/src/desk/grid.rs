@@ -343,7 +343,7 @@ pub fn apply_block_edit(
             fields.insert("id".into(), made.clone());
             fields.insert("days".into(), json!([day]));
             fields.insert("missed_days".into(), Value::Array(missed));
-            crate::standing::keep_removed_days(fields);
+            fields.shift_remove("removed_days");
         }
         let mut out = Vec::new();
         for item in split {

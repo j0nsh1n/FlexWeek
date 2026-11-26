@@ -551,6 +551,12 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     if occurrence && args.day.is_none() {
         return Err("an occurrence edit needs the day".into());
     }
+    if occurrence
+        && let Some(day) = args.day
+        && flexweek_engine::standing::removed_on(&original, &Value::from(day))
+    {
+        return Err(NOT_IN_WEEK.into());
+    }
     let held_start = original["start"].as_str().unwrap_or("").to_string();
     let held_length = original["duration_min"].as_i64().unwrap_or(0);
     let start = args.start.clone().unwrap_or_else(|| held_start.clone());

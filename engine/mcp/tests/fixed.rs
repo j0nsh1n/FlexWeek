@@ -1994,9 +1994,17 @@ fn an_occurrence_edit_on_a_removed_day_is_refused() {
             "block_id": "school", "scope": "occurrence", "day": 0, "start": "09:00"}),
         2,
     );
-    assert_ne!(body_of(&refused)["ok"], json!(true), "got {refused}");
+    assert_eq!(
+        tool_error_text(&refused),
+        Some("That block is not in this week, so nothing changed."),
+        "got {refused}"
+    );
     let (blocks, revision) = stored(&world, WEEK);
     assert_eq!(revision, 4, "nothing was saved");
     assert_eq!(by_id(&blocks, "school")["removed_days"], json!([0]));
-    assert_eq!(blocks.as_array().map(Vec::len), Some(1), "no one-day block was made");
+    assert_eq!(
+        blocks.as_array().map(Vec::len),
+        Some(1),
+        "no one-day block was made"
+    );
 }
