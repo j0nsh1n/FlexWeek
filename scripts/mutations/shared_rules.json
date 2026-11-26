@@ -114,15 +114,15 @@
  {
   "file": "desktop/native/material/sheet_block.py",
   "name": "a series does not say changes apply to every selected day",
-  "old": "                and len(self.original.get(\"days\") or []) > 1\n",
-  "new": "                and len(self.original.get(\"days\") or []) > 5\n",
+  "old": "                and len(self._active_days()) > 1\n",
+  "new": "                and len(self._active_days()) > 5\n",
   "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_series_opened_for_all_its_days_says_changes_apply_to_every_selected_day"
  },
  {
   "file": "desktop/native/material/sheet_block.py",
   "name": "a one-day block says changes apply to every selected day",
-  "old": "                and len(self.original.get(\"days\") or []) > 1\n",
-  "new": "                and len(self.original.get(\"days\") or []) > 0\n",
+  "old": "                and len(self._active_days()) > 1\n",
+  "new": "                and len(self._active_days()) > 0\n",
   "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_one_day_block_does_not_say_changes_apply_to_every_selected_day"
  },
  {
