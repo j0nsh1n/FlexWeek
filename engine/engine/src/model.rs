@@ -140,6 +140,16 @@ pub fn parse_due(value: &str) -> EngineResult<(NaiveDate, i64)> {
     Ok((day, hour * 60 + minute))
 }
 
+/// A session clock reading as `parse_due` reads the stamp `YYYY-MM-DDTHH:MM`: 23:59 is the end of the
+/// day. The date is any real date, so the last week of 2099 still has a clock in January 2100.
+pub fn clock_moment(date: &str, hour: i64, minute: i64) -> EngineResult<(NaiveDate, i64)> {
+    let day = from_isoformat(date)?;
+    if (hour, minute) == (23, 59) {
+        return Ok((day, END_OF_DAY_MIN));
+    }
+    Ok((day, hour * 60 + minute))
+}
+
 pub fn due_is_timed(value: &str) -> bool {
     naive_stamp()
         .captures(value)
