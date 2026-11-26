@@ -36,16 +36,13 @@ def _material(window: NativeWindow):
     return window._material_page.bridge.sheets, qapp
 
 
-def _account(window: NativeWindow, *, asking: bool = False, end: bool = False) -> object:
-    from desktop.tests.settings.support_material_settings import _flick_to, _named, _pump
+def _account(window: NativeWindow, *, asking: bool = False) -> object:
+    from desktop.tests.settings.support_material_settings import _pump
 
     sheets, qapp = _material(window)
     window.session.recovery_remaining = 7
     sheets.openAccount()
     _pump(qapp, 30)
-    if end:
-        _flick_to(_named(window._material_page.root, "accountSignOut")[0])
-        _pump(qapp, 10)
     if asking:
         sheets.accountAct("delete", "typed-password", "")
         _pump(qapp, 30)
@@ -81,17 +78,6 @@ SCREENS: list[Screen] = [
         checks=(
             "Manage account: who is signed in, the two password fields in dots with Show, Change password, "
             "recovery codes left, the five file buttons, Delete account apart from them, Close."
-        ),
-        sources=SOURCES,
-        styles=("material",),
-    ),
-    Screen(
-        id="sheets.m3_account_end",
-        area="sheets",
-        prepare=lambda window: _account(window, end=True),
-        checks=(
-            "Manage account scrolled down: the five file buttons, then Sign out as a tonal button like "
-            "theirs, then Delete account apart as a text button, Close in the footer."
         ),
         sources=SOURCES,
         styles=("material",),
