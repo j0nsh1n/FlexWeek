@@ -15,15 +15,11 @@ import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
-from backend.models import parse_due
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     blocks_by_weekday,
     date_for_day,
     day_in_week,
-    days_through,
-    due_day_in_week,
-    first_plannable_day,
     hand_move,
     is_series,
     local_stamp,
@@ -85,32 +81,21 @@ from desktop.native.remind import (
 )
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
-    available_homework_minutes,
     capacity_problem,
     clear_stale_pins,
     clipboard_fingerprint,
-    copied_homework_block,
-    done_minutes,
-    left_over_items,
-    missed_session_ids,
-    plan_start,
     proposals_from_clipboard,
     restore_point_label,
     routine_rows,
     routine_source_blocks,
     routine_template,
     settle_placements,
-    time_still_needed,
-    time_still_needed_parts,
-    uncovered_homework_minutes,
     week_label,
-    without_missed_times,
 )
 from desktop.native.weekmodel import (
     WeekModel,
     build_week,
     homework_time_sentence,
-    length_label,
     moved_words,
 )
 
@@ -2231,109 +2216,95 @@ class NativeSession(QObject):
         self._fresh_plan = False
         return self.trace
 
+    def _clock_now(self) -> dict[str, Any]:
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        return {
+            "today": clock.date().isoformat(),
+            "hour": clock.hour,
+            "minute": clock.minute,
+            "second": clock.second,
+            "microsecond": clock.microsecond,
+        }
+
+    def _homework_counts(
+        self,
+        blocks: list[dict] | None = None,
+        assignments: dict[str, dict] | None = None,
+    ) -> dict[str, Any]:
+        return json.loads(
+            flexweek_engine.session_homework_counts(
+                json.dumps(
+                    {
+                        "week_start": self.week_start,
+                        "first_weekday": self.first_weekday,
+                        "blocks": self.blocks if blocks is None else blocks,
+                        "assignments": self.assignments if assignments is None else assignments,
+                        "assignments_basis": self._assignments_basis,
+                        "now": self._clock_now(),
+                    }
+                )
+            )
+        )
+
     def done_minutes_for(self, assignment_id: str | None) -> int:
         """Minutes of this homework's sessions ticked done, in every saved week and this week as it stands:
         with its focus minutes, the larger of the two is its done time."""
-        known = self.assignments.get(assignment_id or "")
         # A homework not saved yet has done nothing.
-        return done_minutes(known, self._open_week(), self._assignments_basis) if known is not None else 0
+        return int(
+            self._homework_counts()["per_assignment"]
+            .get(assignment_id or "", {})
+            .get("done_sessions_min", 0)
+        )
+
+    def homework_counts(self) -> dict[str, Any]:
+        """One engine count, for a caller that reads several of its parts at the same clock reading."""
+        return self._homework_counts()
+
+    def homework_minutes(self) -> dict[str, dict[str, Any]]:
+        """Every homework's counts from one engine call, for lists that would otherwise ask once per row."""
+        return self._homework_counts()["per_assignment"]
 
     def remaining_for(self, assignment_id: str) -> int:
-        return available_homework_minutes(
-            self.assignments.get(assignment_id),
-            self._open_week(),
-            self._assignments_basis,
+        return int(
+            self._homework_counts()["per_assignment"]
+            .get(assignment_id, {})
+            .get("remaining_min", 0)
         )
 
     def homework_time_needed(self) -> list[dict]:
         """Homework that needs a time. A session whose time has passed unfinished needs one again. In a week
         that is over, the minutes of its missed sessions are also given as `missed_min`, and those of its
         pinned sessions that passed unfinished as `pinned_min`."""
-        week = self._open_week()
-        needed = time_still_needed(self.assignments, week, self.week_start, self._assignments_basis)
-        missed = self._missed_minutes(week)
-        pinned = self._pinned_past_minutes(week)
-        for item in needed:
-            if missed.get(item["assignment_id"]):
-                item["missed_min"] = missed[item["assignment_id"]]
-            if pinned.get(item["assignment_id"]):
-                item["pinned_min"] = min(
-                    pinned[item["assignment_id"]], item["minutes"] - item.get("missed_min", 0)
-                )
-        return needed
-
-    def _pinned_past_minutes(self, week: list[dict]) -> dict[str, int]:
-        """Each homework's minutes in pinned sessions that passed unfinished, in a week that is over: the
-        open week leaves them out, and no plan moves them, so they are said as pinned in the past."""
-        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
-        if not self.week_start or self.shown_week_of(today) <= self.week_start:
-            return {}
-        kept = {block["id"] for block in week}
-        pinned: dict[str, int] = {}
-        for block in self.blocks:
-            homework = block.get("assignment_id")
-            if homework and block.get("start") and block["id"] not in kept:
-                pinned[homework] = pinned.get(homework, 0) + int(block.get("duration_min") or 0)
-        return pinned
-
-    def _missed_minutes(self, week: list[dict]) -> dict[str, int]:
-        """Each homework's minutes in missed sessions, by homework, in a week that is over and in no other:
-        their make-up time is planned from this week, so the week that is over says them as missed rather
-        than as still needing a time there. `week` is `_open_week()`, where a missed session has no time."""
-        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
-        if not self.week_start or self.shown_week_of(today) <= self.week_start:
-            return {}
-        had_time = {block["id"] for block in self.blocks if block.get("start")}
-        missed: dict[str, int] = {}
-        for block in week:
-            homework = block.get("assignment_id")
-            if homework and block["id"] in had_time and not block.get("start"):
-                missed[homework] = missed.get(homework, 0) + int(block.get("duration_min") or 0)
-        return missed
+        return self._homework_counts()["needed"]
 
     def _open_week(self, blocks: list[dict] | None = None) -> list[dict]:
         """The week every count of minutes still needed reads: each missed session as one with no time."""
-        clock = datetime.fromtimestamp(self.now_ms() / 1000)
-        return without_missed_times(
-            self.blocks if blocks is None else blocks,
-            self.assignments, self.week_start, self._assignments_basis, clock,
-        )
+        return self._homework_counts(blocks=blocks)["open_week"]
 
     def missed_block_ids(self) -> frozenset[str]:
         """The sessions every look calls missed: the planner's own answer, read at the clock now."""
-        clock = datetime.fromtimestamp(self.now_ms() / 1000)
-        return missed_session_ids(
-            self.blocks, self.assignments, self.week_start, self._assignments_basis, clock
-        )
+        return frozenset(self._homework_counts()["missed_block_ids"])
 
     def _time_split(self, blocks: list[dict] | None = None) -> list[dict]:
-        return time_still_needed_parts(
-            self.assignments, self._open_week(blocks), self.week_start, self._assignments_basis
-        )
+        return self._homework_counts(blocks=blocks)["parts"]
 
     def plan_can_place(self) -> bool:
         """Whether pressing Plan has something to place: a session waiting for a time (a missed one is read
         as waiting), or minutes no session holds that make a whole quarter hour."""
-        return any(
-            item["waiting_min"] or self.remaining_for(item["assignment_id"]) > 0
-            for item in self._time_split()
-        )
+        return bool(self._homework_counts()["plan_can_place"])
 
     def homework_remainders(self) -> list[tuple[str, int, str]]:
         """Homework with minutes that no session holds, by title, those minutes alone and its id: the drawer
         lists them under the cards, which already show the sessions that wait. In a week that is over a
         pinned session that passed is said as such, not as minutes with no time."""
-        pinned = self._pinned_past_minutes(self._open_week())
-        return [
-            (item["title"], item["uncovered_min"] - held, item["assignment_id"])
-            for item in self._time_split()
-            if item["uncovered_min"] > (held := pinned.get(item["assignment_id"], 0))
-        ]
+        return [tuple(row) for row in self._homework_counts()["remainders"]]
 
     def minutes_left_for(self, assignment_id: str) -> int:
         """Minutes of this homework that no session holds. `remaining_for` is what Plan can place of them."""
-        return uncovered_homework_minutes(
-            self.assignments.get(assignment_id), self._open_week(), self._assignments_basis
+        return int(
+            self._homework_counts()["per_assignment"]
+            .get(assignment_id, {})
+            .get("uncovered_min", 0)
         )
 
     def built_week(self) -> WeekModel:
@@ -2436,7 +2407,11 @@ class NativeSession(QObject):
         if ready["words"] is not None:
             self._say(ready["words"])
             return None
-        available = {item_id: self.minutes_left_for(item_id) for item_id in self.assignments}
+        # No homework, nothing to count.
+        minutes = self.homework_minutes() if self.assignments else {}
+        available = {
+            item_id: int(minutes.get(item_id, {}).get("uncovered_min", 0)) for item_id in self.assignments
+        }
         return proposals_from_clipboard(
             self.clipboard["items"],
             kind=self.clipboard["kind"],
@@ -2682,31 +2657,35 @@ class NativeSession(QObject):
             destination=week_start,
         )
 
-    def unfinished(self) -> list[dict]:
-        moment = datetime.fromtimestamp(self.now_ms() / 1000)
-        today_week = self.shown_week_of(moment.date().isoformat())
-        # Left from last week shows on the week on screen that holds today.
-        here = self.week_start == today_week
-        # The stored week holding that week's first days, as saved, to tell its earlier days apart.
-        first_part = self._stored_parts[0]["blocks"] if here and len(self._stored_parts) == 2 else []
-        items = left_over_items(
-            self.assignments,
-            self.saved_weeks,
-            today_week,
-            moment.isoformat(timespec="minutes"),
-            self._open_week(),
-            self._assignments_basis,
-            first_part,
+    def _unfinished_args(self, *, only_left_from_last_week: bool = False) -> str:
+        return json.dumps(
+            {
+                "week_start": self.week_start,
+                "first_weekday": self.first_weekday,
+                "blocks": self.blocks,
+                "assignments": self.assignments,
+                "assignments_basis": self._assignments_basis,
+                "saved_weeks": self.saved_weeks,
+                "stored_parts": self._stored_parts,
+                "now": self._clock_now(),
+                "only_left_from_last_week": only_left_from_last_week,
+            }
         )
-        return [item for item in items if here or item.get("left_over_state") == "overdue"]
+
+    def unfinished(self) -> list[dict]:
+        return json.loads(flexweek_engine.session_unfinished_items(self._unfinished_args()))
 
     def _overdue_assignment_ids(self, assignments: dict[str, dict] | None = None) -> set[str]:
-        now = datetime.fromtimestamp(self.now_ms() / 1000)
-        moment = (now.date(), now.hour * 60 + now.minute)
-        return {
-            key for key, item in (self.assignments if assignments is None else assignments).items()
-            if item.get("due") and not item.get("completed") and parse_due(item["due"]) <= moment
-        }
+        chosen = self.assignments
+        if assignments is not None:
+            chosen = assignments
+        return set(
+            json.loads(
+                flexweek_engine.session_overdue_assignment_ids(
+                    json.dumps({"assignments": chosen, "now": self._clock_now()})
+                )
+            )
+        )
 
     def consume_unfinished(self) -> list[dict]:
         items = self.unfinished()
@@ -2715,103 +2694,70 @@ class NativeSession(QObject):
         self._seen_unfinished.add(self.week_start)
         return items
 
-    def _too_short_to_plan(self, item: dict | None, assignment_id: str) -> str:
-        """Said when Plan has nothing to place because what is left does not fill a quarter hour."""
-        left = self.minutes_left_for(assignment_id)
-        if item is None or left <= 0:
-            return ""
-        title = item.get("title") or "This homework"
-        return f"{title} has {length_label(left)} left. Plan needs at least 15 minutes."
-
     def plan_unfinished(self, assignment_id: str) -> list[dict] | None:
-        item = self.assignments.get(assignment_id)
-        minutes = self.remaining_for(assignment_id)
-        if item is None or minutes < 15:
-            short = self._too_short_to_plan(item, assignment_id)
-            self._say(short or "There's no time left to plan for this homework.")
+        result = json.loads(
+            flexweek_engine.session_unfinished_preview(
+                json.dumps(
+                    {
+                        "week_start": self.week_start,
+                        "blocks": self.blocks,
+                        "assignments": self.assignments,
+                        "assignments_basis": self._assignments_basis,
+                        "assignment_id": assignment_id,
+                        "now": self._clock_now(),
+                        "plannable_today": wall_clock.today().isoformat(),
+                        "block_id": str(uuid4()),
+                    }
+                )
+            )
+        )
+        if "say" in result:
+            self._say(result["say"])
             return None
-        due_day = due_day_in_week(item.get("due"), self.week_start)
-        days = days_through(due_day, first_plannable_day(self.week_start))
-        block = copied_homework_block(item, days[0] if days else 0, minutes, str(uuid4()))
-        block["days"] = days or [0]
-        return [
-            {
-                "week_start": self.week_start,
-                "day": block["days"][0],
-                "fixed": False,
-                "block": block,
-                "group_id": block["id"],
-                "checked": True,
-                "invalid": "",
-                "original_duration": minutes,
-            }
-        ]
+        return result["rows"]
 
     def left_unfinished(self) -> list[dict]:
         """Homework whose deadline passed or whose saved session was left in an earlier week."""
-        return [item for item in self.unfinished() if item.get("left_over_state") == "left_from_last_week"]
+        return json.loads(
+            flexweek_engine.session_unfinished_items(
+                self._unfinished_args(only_left_from_last_week=True)
+            )
+        )
 
     def plan_left(self, assignment_ids: list[str]) -> None:
         """"Plan into this week": each one gets a session in this week for the time it has left, and Plan
         finds those times as it does any homework's. The time left in the earlier week stays where it was."""
         if self.busy or self.conflict or self.pending_save is not None:
             return
-        now = datetime.fromtimestamp(self.now_ms() / 1000)
-        start = plan_start(self.week_start, now)
-        if start is not None and start[0] > 6:
-            self._say(WEEK_OVER)
-            return
-        first_day = start[0] if start else 0
-        overdue = self._overdue_assignment_ids()
-        # The line counts a missed session as time with no time, so Plan takes it as it takes a waiting
-        # one. The same engine answer the counts read: a pinned session never reads as missed here.
-        timeless = {block["id"] for block in self._open_week() if not block.get("start")}
-        missed = {block["id"] for block in self.blocks if block.get("start") and block["id"] in timeless}
-        # A pinned session that passed stays where the student put it: its minutes get a new session.
-        pinned_past = {block["id"] for block in self.blocks if block.get("pinned")} & self.missed_block_ids()
-        made: set[str] = set()
-        targets: set[str] = set()
-        late_targets: set[str] = set()
-        short = ""
-        added: list[dict] = []
-        for assignment_id in assignment_ids:
-            item = self.assignments.get(assignment_id)
-            if item is None or item.get("completed"):
-                continue
-            late = assignment_id in overdue
-            for block in self.blocks:
-                if (
-                    block.get("assignment_id") != assignment_id
-                    or block.get("completed")
-                    or block["id"] in pinned_past
-                ):
-                    continue
-                if block.get("start") and not late and block["id"] not in missed:
-                    continue
-                targets.add(block["id"])
-                if late:
-                    late_targets.add(block["id"])
-            minutes = self.remaining_for(assignment_id)
-            if minutes < 15:
-                short = short or self._too_short_to_plan(item, assignment_id)
-                continue
-            days = list(range(first_day, 7)) if late else days_through(
-                due_day_in_week(item.get("due"), self.week_start), first_day
+        ids = list(assignment_ids)
+        plan = json.loads(
+            flexweek_engine.session_plan_unfinished(
+                json.dumps(
+                    {
+                        "week_start": self.week_start,
+                        "blocks": self.blocks,
+                        "assignments": self.assignments,
+                        "assignments_basis": self._assignments_basis,
+                        "assignment_ids": ids,
+                        "now": self._clock_now(),
+                        "new_ids": [str(uuid4()) for _ in ids],
+                    }
+                )
             )
-            block = copied_homework_block(item, days[0] if days else 0, minutes, str(uuid4()))
-            block["days"] = days or [0]
-            added.append(block)
-            made.add(block["id"])
-            targets.add(block["id"])
-            if late:
-                late_targets.add(block["id"])
-        if not targets:
-            self._say(short or "There's no time left to plan for this homework.")
+        )
+        if "say" in plan:
+            self._say(plan["say"])
             return
         dirty_before = self.dirty
+        made = set(plan["made"])
         if made:
-            self._touch("planning unfinished homework", blocks=[*self.blocks, *added])
-        self.solve(only=targets, _overdue=late_targets, _new_left=made, _dirty_before=dirty_before)
+            self._touch("planning unfinished homework", blocks=plan["blocks"])
+        self.solve(
+            only=set(plan["targets"]),
+            _overdue=set(plan["overdue_targets"]),
+            _new_left=made,
+            _dirty_before=dirty_before,
+        )
 
     def did_these(self, assignment_ids: list[str]) -> None:
         """"Mark as finished": the student finished them after all, as one Undo step."""
