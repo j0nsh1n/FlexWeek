@@ -140,11 +140,11 @@ fn deleting_any_piece_of_school_deletes_school() {
         .unwrap()
         .blocks
     };
-    // This week only: every piece stays, missed on each of its days.
+    // Each piece records its removed days so the standing week cannot fill it in.
     let this_week = delete("school@20261111", false);
     assert_eq!(this_week.len(), 2, "{this_week:?}");
     for block in &this_week {
-        assert_eq!(block["missed_days"], block["days"], "{block}");
+        assert_eq!(block["removed_days"], block["days"], "{block}");
     }
     // This week and later: every piece goes.
     assert!(delete("school@20261111", true).is_empty());

@@ -788,7 +788,7 @@ fn school_day_off_skips_or_deletes_one_day_this_week() {
 }
 
 #[test]
-fn school_deleted_this_week_stays_missed_and_every_week_stops_it() {
+fn school_deleted_this_week_keeps_removed_days_and_every_week_stops_it() {
     let world = signed_in("school-delete");
     school_stands(&world);
     let mut server = boot(&world);
@@ -801,9 +801,9 @@ fn school_deleted_this_week_stays_missed_and_every_week_stops_it() {
     assert_eq!(body_of(&this_week)["ok"], json!(true), "got {this_week}");
     let week = seen(&mut server, WEEK, 3);
     assert_eq!(
-        by_id(&week, "school")["missed_days"],
+        by_id(&week, "school")["removed_days"],
         json!([0, 1, 2, 3, 4]),
-        "this week keeps school missed on every day, or the standing week brings it back, got {week}"
+        "this week records each removed School day so the standing week cannot fill it in, got {week}"
     );
     let next = seen(&mut server, NEXT, 4);
     assert_eq!(

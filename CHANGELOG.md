@@ -30,6 +30,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The FLEXWEEK_ORIGIN and FLEXWEEK_DESKTOP_ORIGIN settings, which pointed the app at a hosted FlexWeek server. The app always uses the data saved on this computer.
 
 ### Fixed
+- Deleting School or another weekly fixed time for this week frees up those days in the calendar and planner. Days marked missed stay marked missed, and Undo brings the deleted days back.
 - Plan notices count sessions without calling every Study task homework. Setup's Spotify test says only that FlexWeek opened the link, phone contact stays "Last seen on", and the Delete retry, task-splitting, unfinished-drawer, saved-copy, sign-in and assistant date wording matches what each action does.
 - Settings > Alerts: the reminder notes now say "if the track doesn't play" and "until it's handled", in the app's usual wording.
 

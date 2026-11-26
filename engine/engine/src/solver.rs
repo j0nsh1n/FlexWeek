@@ -123,6 +123,7 @@ pub struct TimeBlock {
     pub completed: bool,
     pub completed_day: Option<i64>,
     pub missed_days: Vec<i64>,
+    pub removed_days: Vec<i64>,
     pub pinned: bool,
     pub prefer_earliest: bool,
     /// Solve-only. A session of a homework saved In one go: Split long tasks never cuts it in two.
@@ -150,6 +151,7 @@ impl Default for TimeBlock {
             completed: false,
             completed_day: None,
             missed_days: vec![],
+            removed_days: vec![],
             pinned: false,
             prefer_earliest: false,
             keep_whole: false,
@@ -302,12 +304,13 @@ fn active_locked(blocks: &[TimeBlock]) -> Vec<TimeBlock> {
             .days
             .iter()
             .copied()
-            .filter(|day| !block.missed_days.contains(day))
+            .filter(|day| !block.missed_days.contains(day) && !block.removed_days.contains(day))
             .collect();
         if !days.is_empty() {
             let mut copy = block.clone();
             copy.days = days;
             copy.missed_days = vec![];
+            copy.removed_days.clear();
             active.push(copy);
         }
     }
@@ -1474,6 +1477,7 @@ const BLOCK_FIELDS: &[&str] = &[
     "completed",
     "completed_day",
     "missed_days",
+    "removed_days",
     "pinned",
     "prefer_earliest",
     "keep_whole",
@@ -1519,6 +1523,7 @@ pub fn block_from_value(value: &Value) -> EngineResult<TimeBlock> {
             .unwrap_or(false),
         completed_day: obj.get("completed_day").and_then(Value::as_i64),
         missed_days: i64_list(obj.get("missed_days")),
+        removed_days: i64_list(obj.get("removed_days")),
         pinned: obj.get("pinned").and_then(Value::as_bool).unwrap_or(false),
         prefer_earliest: obj
             .get("prefer_earliest")
@@ -1565,6 +1570,12 @@ pub fn block_to_value(block: &TimeBlock) -> Value {
         map.insert(
             "missed_days".into(),
             Value::Array(block.missed_days.iter().copied().map(Value::from).collect()),
+        );
+    }
+    if !block.removed_days.is_empty() {
+        map.insert(
+            "removed_days".into(),
+            Value::from(block.removed_days.clone()),
         );
     }
     if block.pinned {

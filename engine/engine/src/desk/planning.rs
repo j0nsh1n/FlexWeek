@@ -1106,7 +1106,9 @@ pub fn settle_placements_after_deadline(
         let end = start + span;
         if eq(get(block, "kind")?.unwrap_or(null()), &json!("locked")) {
             for day in iterate(&list_field(block, "days")?)? {
-                if !contains(&list_field(block, "missed_days")?, &day)? {
+                if !crate::standing::removed_on(block, &day)
+                    && !contains(&list_field(block, "missed_days")?, &day)?
+                {
                     taken[taken_slot(&day)?].push((
                         start,
                         end,
@@ -1264,7 +1266,9 @@ pub fn occurrence_days(block: &Value) -> EngineResult<Vec<Value>> {
         }
     }
     let source = or_default(Some(block), json!({}));
-    list_of(&or_default(get(&source, "days")?, json!([])))
+    let mut days = list_of(&or_default(get(&source, "days")?, json!([])))?;
+    days.retain(|day| !crate::standing::removed_on(block, day));
+    Ok(days)
 }
 
 fn too_many_minutes() -> EngineError {
@@ -1340,6 +1344,7 @@ fn has_free_study_slot(
                     .and_then(Value::as_i64)
                     .unwrap_or(0);
                 days.is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)))
+                    && !crate::standing::removed_on(block, &Value::from(day))
                     && slot < block_start + duration
                     && block_start < slot + SLOT_MIN
             });

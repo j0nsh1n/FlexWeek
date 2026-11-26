@@ -398,6 +398,8 @@ class BlockDraft:
             return None
         if self.scope == "occurrence" and self.series_days is not None:
             made["days"] = sorted(self.series_days)
+        if "removed_days" in made:
+            made["removed_days"] = [day for day in made["removed_days"] if day in made["days"]]
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(made)])
         except ValidationError as error:
@@ -465,6 +467,7 @@ class BlockDraft:
         if base is None:
             body = deepcopy(made)
             body.pop("missed_days", None)
+            body.pop("removed_days", None)
             body["days"] = self._week_to_monday(self.days)
             body["id"] = WEEKLY_PREFIX + (str(made["id"]) if self.existing else str(uuid4()))
         else:

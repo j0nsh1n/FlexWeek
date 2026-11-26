@@ -475,6 +475,9 @@ pub fn build_week(
         let span = to_int(&or_default(get(&block, "duration_min")?, json!(0)))?;
         let end = (start + span).min(i128::from(END_OF_DAY));
         for day in iterate(&days)? {
+            if crate::standing::removed_on(&original, &day) {
+                continue;
+            }
             let block_id = subscript(&original, "id")?.clone();
             let title = or_default(get(&block, "title")?, json!("Untitled"));
             let category = or_default(

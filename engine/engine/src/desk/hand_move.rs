@@ -183,15 +183,16 @@ pub fn hand_move(
         });
     }
     if is_series_checked(block)? {
-        let origin = if contains(
-            &get(block, "days")?.cloned().unwrap_or(json!([])),
-            &json!(drop.from_day),
-        )? {
+        let days = get(block, "days")?.cloned().unwrap_or(json!([]));
+        let on_day = |day| {
+            let day = json!(day);
+            Ok::<_, crate::EngineError>(
+                contains(&days, &day)? && !crate::standing::removed_on(block, &day),
+            )
+        };
+        let origin = if on_day(drop.from_day)? {
             drop.from_day
-        } else if contains(
-            &get(block, "days")?.cloned().unwrap_or(json!([])),
-            &json!(drop.to_day),
-        )? {
+        } else if on_day(drop.to_day)? {
             drop.to_day
         } else {
             return refused(NOT_ON_DAY);

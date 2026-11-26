@@ -1775,7 +1775,7 @@ class NativeSession(QObject):
         label: str | None = None,
     ) -> None:
         """Delete a block. School or an activity from Setup stands in every week, so taking it out of
-        this week alone keeps it here missed on every day, or the standing week would bring it back;
+        this week alone keeps a saved copy with the removed days so it doesn't repeat into this week;
         `every_week` takes it out of the standing week too. `label` names the Undo step when the delete
         is part of a larger change."""
         raw = flexweek_engine.block_delete_json(
@@ -2955,7 +2955,7 @@ class NativeSession(QObject):
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None or block.get("kind") != "locked" or day not in (block.get("days") or []):
             return
-        if day in (block.get("missed_days") or []):
+        if day in (block.get("missed_days") or []) or day in (block.get("removed_days") or []):
             self.save()
             return
         ticket = self._begin()

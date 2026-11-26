@@ -38,6 +38,7 @@ pub struct TimeBlock {
     pub completed: bool,
     pub completed_day: Option<i64>,
     pub missed_days: Vec<i64>,
+    pub removed_days: Vec<i64>,
     /// The last day a weekly repeat stands (#118), `YYYY-MM-DD`; none means it has no end.
     pub until: Option<String>,
     pub spotify_url: Option<String>,
@@ -131,6 +132,7 @@ pub fn time_block(value: &Value) -> Result<TimeBlock, String> {
         completed: bool_default(map, "completed", false)?,
         completed_day: opt_int(map, "completed_day", Some(0), Some(6))?,
         missed_days: missed_days_of(map)?,
+        removed_days: removed_days_of(map)?,
         until: until_of(map)?,
         spotify_url: spotify_of(map)?,
         focus_sessions: int_default(map, "focus_sessions", 0, None, Some(0), Some(9999))?,
@@ -268,6 +270,9 @@ impl TimeBlock {
         if !self.missed_days.is_empty() {
             put_ints(&mut map, "missed_days", &self.missed_days);
         }
+        if !self.removed_days.is_empty() {
+            put_ints(&mut map, "removed_days", &self.removed_days);
+        }
         put_some_str(&mut map, "spotify_url", &self.spotify_url);
         if self.focus_sessions != 0 {
             put_i64(&mut map, "focus_sessions", self.focus_sessions);
@@ -396,6 +401,28 @@ fn block_state(block: &TimeBlock) -> Result<(), String> {
     {
         return Err("missed days must be occurrences of the block".into());
     }
+    if !block.removed_days.is_empty() {
+        if block.kind != "locked"
+            || block.start.is_none()
+            || !crate::desk::grid::is_standing_id(&block.id)
+        {
+            return Err("only standing fixed times can have removed days".into());
+        }
+        if block
+            .removed_days
+            .iter()
+            .any(|day| !block.days.contains(day))
+        {
+            return Err("removed days must be occurrences of the block".into());
+        }
+        if block
+            .removed_days
+            .iter()
+            .any(|day| block.missed_days.contains(day))
+        {
+            return Err("a day cannot be both removed and missed".into());
+        }
+    }
     if let Some(day) = block.completed_day
         && (block.kind != "flexible"
             || !block.completed
@@ -519,6 +546,26 @@ fn missed_days_of(map: &Map<String, Value>) -> Result<Vec<i64>, String> {
     };
     if days.iter().any(|day| !(0..=6).contains(day)) || has_dup(&days) {
         return Err("missed_days must be unique values in 0..6".into());
+    }
+    Ok(days)
+}
+
+fn removed_days_of(map: &Map<String, Value>) -> Result<Vec<i64>, String> {
+    let Some(value) = map.get("removed_days") else {
+        return Ok(Vec::new());
+    };
+    let invalid = || "removed_days must be unique integers in 0..6".to_string();
+    let values = value.as_array().ok_or_else(invalid)?;
+    let days = values
+        .iter()
+        .map(|day| {
+            day.as_i64()
+                .filter(|day| (0..=6).contains(day))
+                .ok_or_else(invalid)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if has_dup(&days) {
+        return Err(invalid());
     }
     Ok(days)
 }

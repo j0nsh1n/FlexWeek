@@ -1,6 +1,6 @@
 //! `desktop/native/controller.py` `delete_block` (1750-1771) and
-//! `grid.rs` `delete_occurrence`. School or a Setup activity taken out of this week alone stays
-//! in it missed on every day, or the standing week would bring it back; every week takes it out.
+//! `grid.rs` `delete_occurrence`. School or a Setup activity taken out of this week keeps a copy
+//! with its removed days, or the standing week would bring it back.
 
 use flexweek_engine::desk::blocks::{BlockDeletion, delete_block, mark_block_done, until_problem};
 use serde_json::{Map, Value, json};
@@ -139,7 +139,7 @@ fn a_homework_session_is_removed_whole() {
 /// controller.py:1763-1768. School, the old sport card, and a Setup activity taken out of this week
 /// stay in it missed on every day they were on; taken out of every week they are gone.
 #[test]
-fn school_and_activities_this_week_stay_missed_and_every_week_go() {
+fn school_and_activities_this_week_keep_removed_days_and_every_week_go() {
     let ids = setup_ids();
     assert!(!ids.is_empty(), "the setup ids are listed");
     for id in ids {
@@ -151,11 +151,11 @@ fn school_and_activities_this_week_stay_missed_and_every_week_go() {
             "days": [0, 3],
             "start": "08:30"
         });
-        let mut missed = block.clone();
-        missed["missed_days"] = json!([0, 3]);
+        let mut removed = block.clone();
+        removed["removed_days"] = json!([0, 3]);
         assert_eq!(
             show(delete(std::slice::from_ref(&block), id, "series", None)),
-            Ok(json!({"label": "deleting School", "blocks": [missed], "lost": []})),
+            Ok(json!({"label": "deleting School", "blocks": [removed], "lost": []})),
             "{id} this week"
         );
         assert_eq!(

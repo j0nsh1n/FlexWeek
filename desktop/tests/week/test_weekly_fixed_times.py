@@ -298,7 +298,7 @@ def test_delete_this_week_only_keeps_later_weeks_and_this_week_and_later_takes_t
     assert sheets.ask["cards"][1]["line"].endswith("Undo also takes back anything changed after it.")
     sheets.answer("week")
     _settled(qapp, week)
-    assert all(b.get("missed_days") == b["days"] for b in _guitar(week)), "gone from this week"
+    assert _guitar(week) and all(b.get("removed_days") == b["days"] for b in _guitar(week))
     _go(qapp, week, 1)
     assert _starts(week) == [("17:00", [FRIDAY])]
     sheets.askDeleteBlock(repeat["id"], -1)

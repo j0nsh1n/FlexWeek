@@ -128,4 +128,24 @@ mod tests {
         assert_eq!(monday[0]["color"], "#398ad6");
         assert!(monday[0].get("title").is_none());
     }
+
+    #[test]
+    fn phone_week_and_today_leave_out_removed_school_days() {
+        let (week, _) = open_test("removed-school");
+        save_week(
+            &week,
+            "2026-10-12",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0,1],"removed_days":[0],
+                 "start":"08:00","duration_min":60,"category":"class"}
+            ]),
+        );
+        let shape: Value =
+            serde_json::from_str(&week.week_shape("2026-10-12".into()).unwrap()).unwrap();
+        assert_eq!(shape["days"][0]["segments"], json!([]));
+        assert_eq!(shape["days"][1]["segments"][0]["category"], "class");
+        let today: Value =
+            serde_json::from_str(&week.today("2026-10-12".into(), 420).unwrap()).unwrap();
+        assert_eq!(today["workload"]["scheduled_min"], 0);
+    }
 }
