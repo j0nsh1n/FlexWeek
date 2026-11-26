@@ -35,3 +35,13 @@ def test_a_developer_build_release_skips_the_windows_installers() -> None:
     job = WINDOWS.read_text(encoding="utf-8").split("\n  windows:\n", 1)[1].split("\n    steps:\n", 1)[0]
     conditions = re.findall(r"(?m)^    if: (.+)$", job)
     assert conditions == ["github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')"]
+
+
+def test_depot_runs_the_phone_unit_tests() -> None:
+    """Nothing ran the phone tests in CI until 2026-11-25, so two that failed in the evening stayed red on
+    main."""
+    verify = (ROOT / ".depot/workflows/verify.yml").read_text(encoding="utf-8")
+    assert "android" in _jobs(verify)
+    job = verify.split("\n  android:\n", 1)[1]
+    step = r"(?m)^        working-directory: android\n        run: \./gradlew --no-daemon testDebugUnitTest$"
+    assert re.search(step, job)

@@ -551,3 +551,39 @@ jobs:
           FLEXWEEK_SILENT: "1"
           FWTEST_ENGINE_REBUILD: "off"
         run: fwtest mutate --shard ${{ matrix.shard }}/6 "$RUNNER_TEMP"/python-mutations/*.json
+
+  android:
+    # The phone app's unit tests (android/app/src/test), on every push and pull request. Nothing
+    # ran them in CI before 2026-11-25, which is how two tests that fail in the evening stayed red
+    # on main. The Gradle build first builds the engine's phone library with cargo-ndk.
+    runs-on: depot-ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools ndk;30.0.16248370'
+      - name: Install Rust for the phone targets and cargo-ndk
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install cargo-ndk --version 4.1.2 --locked
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+      - name: Fetch the engine's crates
+        # The phone build scripts run cargo offline (scripts/android/*.sh).
+        working-directory: engine
+        run: cargo fetch --locked
+      - name: Phone unit tests
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: android-test-report
+          path: android/app/build/reports/tests/testDebugUnitTest
+          retention-days: 14
