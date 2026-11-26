@@ -1909,24 +1909,41 @@ class NativeWindow(QObject):
             self.session._say(why)
 
     def _on_update_ready(self, path: str) -> None:
-        """The download is verified and on disk. Putting it in place replaces the running app, so
-        the app is closed either way: on Windows the installer takes over, and on Linux the files
-        under it have just been swapped."""
-        problem = apply_update(path)
-        if problem is not None:
+        """The download is verified and on disk. What is unsaved is saved first. Only then is the
+        update put in place, which replaces the running app, so the app closes: on Windows the
+        installer takes over, and on Linux the files under it have just been swapped. A save that
+        fails or takes too long installs nothing and leaves the app open."""
+
+        def install() -> None:
+            problem = apply_update(path)
+            if problem is not None:
+                if (sheet := self._update_sheet()) is not None:
+                    sheet.update_problem(problem + " Open the release page to update by hand.")
+                elif (row := self._draw_error_update_row()) is not None:
+                    row[0].setText(problem + " Open the release page to update by hand.")
+                    row[1].setEnabled(True)
+                return
             if (sheet := self._update_sheet()) is not None:
-                sheet.update_problem(problem + " Open the release page to update by hand.")
+                sheet.update_done()
+            installed = "Update installed. FlexWeek will close so the new version can start."
+            if (row := self._draw_error_update_row()) is not None:
+                row[0].setText(installed)
+            self.session._say(installed)
+            QTimer.singleShot(UPDATE_QUIT_MS, self.quit_app)
+
+        def stayed() -> None:
+            # The sheet and the draw-error row were left on "Downloading…", with Update now off.
+            # The same words as the close path are already said; put them there too, and turn the
+            # button back on, so the student can try the update again.
+            words = self.session.message
+            if (sheet := self._update_sheet()) is not None:
+                sheet.update_problem(words)
             elif (row := self._draw_error_update_row()) is not None:
-                row[0].setText(problem + " Open the release page to update by hand.")
+                row[0].setText(words)
                 row[1].setEnabled(True)
-            return
-        if (sheet := self._update_sheet()) is not None:
-            sheet.update_done()
-        installed = "Update installed. FlexWeek will close so the new version can start."
-        if (row := self._draw_error_update_row()) is not None:
-            row[0].setText(installed)
-        self.session._say(installed)
-        QTimer.singleShot(UPDATE_QUIT_MS, self.quit_app)
+
+        if self._save_before_leaving(install, again="update again", stayed=stayed):
+            install()
 
     def _no_update(self) -> None:
         if self._update_asked:
@@ -2184,13 +2201,21 @@ class NativeWindow(QObject):
             self._tray_icon.hide()
         QApplication.quit()
 
-    def _save_before_leaving(self, leave: Callable[[], None], *, again: str = "close FlexWeek again") -> bool:
+    def _save_before_leaving(
+        self,
+        leave: Callable[[], None],
+        *,
+        again: str = "close FlexWeek again",
+        stayed: Callable[[], None] | None = None,
+    ) -> bool:
         """Leave once what is unsaved has reached the server. Returns True when there was nothing to
         wait for and `leave` has not been called; otherwise it saves in the background and calls
         `leave` when done, or stays open and says so when the save fails or takes too long.
 
         `again` is the action named in that sentence. Closing says to close again. Signing out says
-        to sign out again, so the two paths do not tell the student to do the other one.
+        to sign out again, and updating says to update again, so one path does not tell the student
+        to do another. `stayed`, when given, runs once the window has stayed open and the student
+        has been told.
         """
         session = self.session
         if self._leaving is not None:
@@ -2213,6 +2238,8 @@ class NativeWindow(QObject):
                 stop()
                 session._say(answer["words"])
                 self.restore_window()
+                if stayed is not None:
+                    stayed()
             elif step == "save":
                 session.save()
             elif step == "load":
