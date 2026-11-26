@@ -24,6 +24,7 @@ mod session_changes;
 mod session_copies;
 mod session_focus;
 mod session_homework_edits;
+mod session_plan;
 mod session_plan_previews;
 mod session_preferences;
 mod session_reminders;
@@ -378,6 +379,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     session_preferences::add(m)?;
     session_focus::add(m)?;
     session_spotify::add(m)?;
+    session_plan::add(m)?;
     session_plan_previews::add(m)?;
     db::add(m)?;
     desk::add(m)?;
