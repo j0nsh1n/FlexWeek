@@ -285,16 +285,16 @@ fn share_minutes(share: &Map<String, Value>, key: &str) -> Result<i64, String> {
     }
 }
 
-/// The trace's `placed` rows, each checked for the fields the plan reads.
-fn placed_rows(trace: &Value) -> Result<&[Value], String> {
-    let rows: &[Value] = match trace.get("placed") {
+/// One trace row list (`placed` or `unplaced`), each row checked for the fields the plan reads.
+fn trace_rows<'a>(trace: &'a Value, key: &str) -> Result<&'a [Value], String> {
+    let rows: &[Value] = match trace.get(key) {
         None | Some(Value::Null) => return Ok(&[]),
         Some(Value::Array(items)) => items.as_slice(),
-        Some(_) => return Err("trace placed must be a list".to_string()),
+        Some(_) => return Err(format!("trace {key} must be a list")),
     };
     for row in rows {
         if !row.is_object() {
-            return Err("each placed row must be an object".to_string());
+            return Err(format!("each {key} row must be an object"));
         }
         opt_text(row, "id")?;
         opt_text(row, "kind")?;
@@ -309,6 +309,11 @@ fn placed_rows(trace: &Value) -> Result<&[Value], String> {
         first_day_of(row)?;
     }
     Ok(rows)
+}
+
+/// The trace's `placed` rows, each checked for the fields the plan reads.
+fn placed_rows(trace: &Value) -> Result<&[Value], String> {
+    trace_rows(trace, "placed")
 }
 
 /// Where the first homework a plan gave a time is, by day and then minute.
@@ -718,6 +723,7 @@ pub fn apply_plan_answer(
         .as_object()
         .ok_or_else(|| "trace must be an object".to_string())?;
     let raw_placed = placed_rows(input.trace)?;
+    trace_rows(input.trace, "unplaced")?;
     let explanations: &[Value] = match trace_obj.get("explanations") {
         None | Some(Value::Null) => &[],
         Some(Value::Array(items)) => items.as_slice(),

@@ -936,7 +936,10 @@ fn auto_split_inflates_for_solve_uses_preinflation_work_lengths_and_keeps_siblin
     assert_eq!(answer.plan_open, 0);
     assert_eq!(answer.plan_first, Some((1, 15 * 60 + 30)));
     assert_eq!(answer.split_count, 1);
-    assert_eq!(answer.split_note, " Split 1 into focus sessions and breaks.");
+    assert_eq!(
+        answer.split_note,
+        " Split 1 into focus sessions and breaks."
+    );
     assert_eq!(
         answer.placed_note,
         "Placed 2 sessions. Split 1 into focus sessions and breaks."
@@ -1614,4 +1617,36 @@ fn an_impossible_clock_is_refused_even_when_plan_is_busy_or_blocked() {
         prepare_plan(input).unwrap(),
         PlanPreparation::Blocked { .. }
     ));
+}
+
+#[test]
+fn an_unplaced_duration_outside_one_week_of_minutes_is_refused() {
+    let now = clock("2026-09-24", 19, 0);
+    for id in ["b-sheet", "unknown-row"] {
+        for bad in [i64::MIN, -1, 10_081, i64::MAX] {
+            let trace = json!({
+                "placed": [],
+                "unplaced": [{"id": id, "duration_min": bad}],
+                "explanations": [],
+            });
+            let err = answer_for(&trace, &[], now).unwrap_err();
+            assert!(
+                err.contains("duration_min must be 0 to 10080"),
+                "expected duration_min range error for {id} {bad}, got: {err}"
+            );
+        }
+    }
+    // Missing, null, and valid durations in unplaced keep working.
+    for fine in [
+        json!({"id": "b-sheet"}),
+        json!({"id": "b-sheet", "duration_min": null}),
+        json!({"id": "b-sheet", "duration_min": 30}),
+    ] {
+        let trace = json!({
+            "placed": [],
+            "unplaced": [fine],
+            "explanations": [],
+        });
+        assert!(answer_for(&trace, &[], now).is_ok());
+    }
 }
