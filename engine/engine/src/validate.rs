@@ -403,7 +403,7 @@ fn block_state(block: &TimeBlock) -> Result<(), String> {
     }
     if !block.removed_days.is_empty() {
         if block.kind != "locked"
-            || block.start.is_none()
+            || block.start.as_deref().unwrap_or("").is_empty()
             || !crate::desk::grid::is_standing_id(&block.id)
         {
             return Err("only standing fixed times can have removed days".into());

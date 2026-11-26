@@ -762,7 +762,10 @@ fn a_miss_on_a_day_the_block_was_removed_from_is_refused_not_recorded() {
         &real_clock(),
         PlanRules::default(),
     );
-    assert!(result.is_err(), "Monday is gone from this week, so it cannot be missed");
+    assert!(
+        result.is_err(),
+        "Monday is gone from this week, so it cannot be missed"
+    );
     let result = reschedule_after_miss(
         &[school],
         "school",

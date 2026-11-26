@@ -1342,7 +1342,11 @@ pub fn reschedule_after_miss(
     let mut found = false;
     for block in blocks {
         let mut copy = block.clone();
-        if copy.id == missed_block_id && copy.kind == "locked" && copy.days.contains(&missed_day) {
+        if copy.id == missed_block_id
+            && copy.kind == "locked"
+            && copy.days.contains(&missed_day)
+            && !copy.removed_days.contains(&missed_day)
+        {
             found = true;
             if !copy.missed_days.contains(&missed_day) {
                 copy.missed_days.push(missed_day);

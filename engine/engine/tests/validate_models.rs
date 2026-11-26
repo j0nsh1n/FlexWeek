@@ -774,5 +774,8 @@ fn removed_days_need_a_real_start_not_an_empty_one() {
     });
     assert!(time_block(&school).is_err(), "an empty start is no start");
     let with_start = with(school, "start", json!("08:00"));
-    assert!(time_block(&with_start).is_ok(), "the same block with a start is fine");
+    assert!(
+        time_block(&with_start).is_ok(),
+        "the same block with a start is fine"
+    );
 }
