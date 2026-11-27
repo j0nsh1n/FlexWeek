@@ -1,12 +1,12 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-26)
-- 2026-11-26: all of P4 group 5 is merged (#194 5C Unfinished counts, #195 5B Running late and previews, #196 5A
-  Plan), with groups 2-4 before it (#185, #186, #188-#190), the first slices of groups 3 and 6-9 (#181) and
-  slice 7B, Spotify (#184). Also merged today: #191 (School deleted "this week",
-  or its last day "this day", goes into `removed_days`, not `missed_days`), #192 (Sign out row in Settings > This computer;
-  signing out from Settings resets Settings to the week), #193 (an update saves the week before it installs) and #197
-  (CI installs the pinned Rust 1.98.1 with rustfmt and clippy before cargo runs). `controller.py` is about 4,000 lines.
+- 2026-11-26: P4 is complete (#185-#210). The session's decisions live in `engine/app/src/session/*` behind guarded
+  `flexweek_engine` bindings; `desktop/native/controller.py` forwards and keeps only Qt, request, file and clock glue,
+  enforced by `backend/tests/test_controller_holds_no_session_logic.py` (stay list with reasons). Pydantic,
+  `backend/models.py` and 10 dead adapters are gone (#209); `backend/` keeps clock, slots, weeks, comfort, storage.
+  A running focus timer is kept per account in `<kept>.focus.json` beside the kept sign-in (#208). Also today:
+  #191 removed_days, #192 Sign out in Settings, #193 save before update, #197 CI pins Rust.
 - Material 3 desktop redesign ("2.0 richer", branch `feat/design-2-richer`, PR #182) updates all main Material
   screens: 5-step tonal surfaces in `theme.py` (`B3A3`), `M3Palette` semantic surfaces/corners/scrim/shadow tokens,
   Week Option A (elevated calendar card, tonal homework drawer, category icons), Day Option B (full-height timeline
@@ -119,9 +119,12 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-26 (late): P4 done (#199-#210). Run sheet `~/.flexweek-ui-harness/scratch/p4-rest/run.md` (plan.md, DRAFT.md,
+  slices/, review/). Next: P5 (each screen's logic in Rust) per the 2.0.0 plan. P4 follow-ups: a timer saved before the
+  first weekday changed while signed out is not rebased on restore; a Settings change still queued when signing out is
+  dropped; the open-app focus arithmetic and a few request-pipe comparisons stay on the controller's stay list.
 - 2026-11-26: every PR from #180 to #197 is merged. Run log:
-  `~/.flexweek-ui-harness/scratch/afk-2026-11-25/run.md`. Next: plan the rest of P4 (groups 6-9 after their first
-  slices, then pydantic's adapters). Follow-ups: a split long task can take a 99-block week past 100 before the save
+  `~/.flexweek-ui-harness/scratch/afk-2026-11-25/run.md`. Follow-ups: a split long task can take a 99-block week past 100 before the save
   refuses it (solver); an older phone app may drop `removed_days` when it re-saves a week; release-windows.yml and the
   Linux build container still install `stable` Rust. Three helper copies wait on Jonathan before deletion:
   `slice/2d-week-state` (t3-cff31743, superseded by #188), t3-1a3042f1 (2 unreviewed changed files) and

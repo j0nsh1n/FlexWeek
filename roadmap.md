@@ -82,15 +82,12 @@ list, all shipped).
   session's frame in Rust (#161, merged a9deb612); the window's requests go through it (#163), its busy state and
   status line are Rust's (#164), and so are when the week saves itself and saving before leaving (#167), and
   signing in, up and out (#165); the window's block and homework checks are the engine's (#168, #169, 2026-11-24).
-- Status (2026-11-26): P4 groups 2 (saving and the week state, #188, #190), 3 (undo rules), 4 (homework and block
-  edits, copies: #185, #186, #189) and 5 (Plan, Running late and previews, Unfinished counts: #194-#196) are merged,
-  with the first slices of groups 6-9 (focus, reminders and Spotify, preferences, restore and files: #181, #184).
-  Left in P4: only 6C (#208) and these controller decisions: delete_homework, start_focus, solve,
-  tick_focus, import_week_file, and the entry guards (place_block, load_week, save, retry_save,
-  plan_left, confirm_spread, copy_block, finish_focused_homework). Pydantic and the adapters nothing
-  imports any more are removed with the closing slice; controller.py stays a forwarder plus the Qt,
-  request, file and clock methods its lock test names.
-  P5-P8 [ ] planned.
+- Status (2026-11-26): P4 [x] done 2026-11-26. Groups 2-5 (#185-#196), the first slices of 3 and 6-9 (#181, #184),
+  then P1 sheet checks (#199), 4D routines (#200), 10A views (#201), 6B focus (#202), 4E copies (#203), 7C alerts
+  (#204), 8B preferences (#205), 9B restore and import (#206), 5D plan flow (#207), 6C the focus timer kept on disk
+  (#208), P2 pydantic and the dead backend adapters gone (#209), and the last controller decisions (#210).
+  controller.py forwards to the Rust session; a test fails on new logic there outside its commented stay list
+  (Qt, the request pipe, files, the clock). P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
