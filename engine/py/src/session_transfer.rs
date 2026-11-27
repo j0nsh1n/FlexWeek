@@ -2,8 +2,12 @@
 //! Python window, with JSON text across. The window keeps the requests and applies what is decided.
 
 use flexweek_app::session::transfer::{
-    ImportContext, create_restore_key, import_key, import_week_decision, restore_apply_guard,
-    restore_key, restore_points_after_create, transfer_blocked,
+    ImportContext, create_restore_key, finish_apply_import_err, finish_apply_import_ok,
+    finish_apply_restore_err, finish_apply_restore_ok, finish_create_restore,
+    finish_preview_import, import_key, import_week_decision, prepare_apply_import,
+    prepare_apply_restore, prepare_create_restore, prepare_export_account, prepare_preview_import,
+    prepare_preview_restore, restore_apply_guard, restore_key, restore_points_after_create,
+    restore_points_from_reply, transfer_blocked,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -14,6 +18,21 @@ use crate::{guard, raise};
 
 fn read(text: &str) -> PyResult<Value> {
     serde_json::from_str(text).map_err(|error| PyValueError::new_err(error.to_string()))
+}
+
+fn read_named(text: &str, what: &str) -> PyResult<Value> {
+    serde_json::from_str(text).map_err(|error| PyValueError::new_err(format!("{what}: {error}")))
+}
+
+fn read_list(text: &str, what: &str) -> PyResult<Vec<Value>> {
+    match read_named(text, what)? {
+        Value::Array(items) => Ok(items),
+        _ => Err(PyValueError::new_err(format!("{what} must be a list"))),
+    }
+}
+
+fn read_optional(text: Option<&str>, what: &str) -> PyResult<Option<Value>> {
+    text.map(|value| read_named(value, what)).transpose()
 }
 
 /// The restore point list (JSON list) after `point` (JSON) was made, as JSON.
@@ -100,6 +119,170 @@ fn import_week_decision_json(
     })
 }
 
+/// The listed restore points (JSON list) from a fetch reply.
+#[pyfunction]
+fn session_restore_points_from_reply(data: &str) -> PyResult<String> {
+    guard(|| {
+        let data = read_named(data, "restore points reply")?;
+        let points = restore_points_from_reply(&data).map_err(raise)?;
+        Ok(Value::Array(points).to_string())
+    })
+}
+
+/// Whether a restore point can be made, and the POST when it can. The body has no attempt id yet.
+#[pyfunction]
+#[pyo3(signature = (signed_in, account_id, label))]
+fn session_prepare_create_restore(
+    signed_in: bool,
+    account_id: Option<i64>,
+    label: &str,
+) -> PyResult<String> {
+    guard(|| {
+        Ok(prepare_create_restore(signed_in, account_id, label)
+            .map_err(raise)?
+            .to_json()
+            .to_string())
+    })
+}
+
+/// The list and the sentence after a restore point was made. `requested_label` is what was typed.
+#[pyfunction]
+fn session_finish_create_restore(
+    current: &str,
+    reply: &str,
+    requested_label: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let current = read_list(current, "restore points")?;
+        let reply = read_named(reply, "restore point reply")?;
+        Ok(finish_create_restore(&current, &reply, requested_label)
+            .map_err(raise)?
+            .to_json()
+            .to_string())
+    })
+}
+
+/// The GET for one point's preview, or nothing when signed out.
+#[pyfunction]
+fn session_prepare_preview_restore(signed_in: bool, point_id: &str) -> PyResult<String> {
+    guard(|| {
+        Ok(prepare_preview_restore(signed_in, point_id)
+            .to_json()
+            .to_string())
+    })
+}
+
+/// Whether this point may be put back, and the POST when it may. `preview` is JSON, or None.
+#[pyfunction]
+#[pyo3(signature = (signed_in, account_id, preview, point_id))]
+fn session_prepare_apply_restore(
+    signed_in: bool,
+    account_id: Option<i64>,
+    preview: Option<&str>,
+    point_id: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let preview = read_optional(preview, "restore preview")?;
+        Ok(
+            prepare_apply_restore(signed_in, account_id, preview.as_ref(), point_id)
+                .map_err(raise)?
+                .to_json()
+                .to_string(),
+        )
+    })
+}
+
+/// What a successful restore does to the window.
+#[pyfunction]
+fn session_finish_apply_restore_ok() -> PyResult<String> {
+    guard(|| Ok(finish_apply_restore_ok().to_string()))
+}
+
+/// Whether a failed restore drops the preview. Only status 409 does.
+#[pyfunction]
+fn session_finish_apply_restore_err(status: i64) -> PyResult<String> {
+    guard(|| Ok(finish_apply_restore_err(status).to_string()))
+}
+
+/// The export POST, or the sentence that waits for unsaved work.
+#[pyfunction]
+fn session_prepare_export_account(
+    signed_in: bool,
+    dirty: bool,
+    dirty_assignment_count: usize,
+    password: &str,
+) -> PyResult<String> {
+    guard(|| {
+        Ok(
+            prepare_export_account(signed_in, dirty, dirty_assignment_count, password)
+                .to_json()
+                .to_string(),
+        )
+    })
+}
+
+/// The import-preview POST, or the sentence that waits for unsaved work. `snapshot` is JSON.
+#[pyfunction]
+fn session_prepare_preview_import(
+    signed_in: bool,
+    dirty: bool,
+    dirty_assignment_count: usize,
+    snapshot: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let snapshot = read_named(snapshot, "import snapshot")?;
+        Ok(
+            prepare_preview_import(signed_in, dirty, dirty_assignment_count, &snapshot)
+                .to_json()
+                .to_string(),
+        )
+    })
+}
+
+/// The preview the window keeps. `snapshot` and `data` are JSON.
+#[pyfunction]
+fn session_finish_preview_import(snapshot: &str, data: &str) -> PyResult<String> {
+    guard(|| {
+        let snapshot = read_named(snapshot, "import snapshot")?;
+        let data = read_named(data, "import preview")?;
+        Ok(finish_preview_import(&snapshot, &data)
+            .map_err(raise)?
+            .to_string())
+    })
+}
+
+/// Whether the shown import may be applied. `preview` is JSON, or None. The body has no attempt id yet.
+#[pyfunction]
+#[pyo3(signature = (account_id, preview, dirty, dirty_assignment_count))]
+fn session_prepare_apply_import(
+    account_id: Option<i64>,
+    preview: Option<&str>,
+    dirty: bool,
+    dirty_assignment_count: usize,
+) -> PyResult<String> {
+    guard(|| {
+        let preview = read_optional(preview, "import preview")?;
+        Ok(
+            prepare_apply_import(account_id, preview.as_ref(), dirty, dirty_assignment_count)
+                .map_err(raise)?
+                .to_json()
+                .to_string(),
+        )
+    })
+}
+
+/// What a successful import does to the window.
+#[pyfunction]
+fn session_finish_apply_import_ok() -> PyResult<String> {
+    guard(|| Ok(finish_apply_import_ok().to_string()))
+}
+
+/// Whether a failed import drops the preview. Only status 409 does.
+#[pyfunction]
+fn session_finish_apply_import_err(status: i64) -> PyResult<String> {
+    guard(|| Ok(finish_apply_import_err(status).to_string()))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -109,7 +292,20 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         create_restore_operation_key,
         restore_operation_key,
         import_operation_key,
-        import_week_decision_json
+        import_week_decision_json,
+        session_restore_points_from_reply,
+        session_prepare_create_restore,
+        session_finish_create_restore,
+        session_prepare_preview_restore,
+        session_prepare_apply_restore,
+        session_finish_apply_restore_ok,
+        session_finish_apply_restore_err,
+        session_prepare_export_account,
+        session_prepare_preview_import,
+        session_finish_preview_import,
+        session_prepare_apply_import,
+        session_finish_apply_import_ok,
+        session_finish_apply_import_err
     );
     Ok(())
 }
