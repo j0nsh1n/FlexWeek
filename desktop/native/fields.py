@@ -5,9 +5,9 @@ notice, and the screen-reader announcement."""
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     QObject,
     QStandardPaths,
@@ -21,10 +21,6 @@ from PySide6.QtWidgets import QWidget
 
 # The quick lengths under a homework's time, in minutes (5.2 A of 0.17.2).
 QUICK_LENGTHS = (15, 30, 45, 60, 90)
-END_OF_DAY = 24 * 60
-# "15:15", "1515", "3:15 pm", "3:15pm", "315p": an hour, minutes with or without the colon, and a
-# half of the day. Minutes are optional only where `whole` is not asked for.
-WRITTEN_TIME = re.compile(r"(\d{1,2})(?::?(\d{2}))?\s*(?:([ap])\.?(?:m\.?)?)?")
 
 # The days the week can start on, Monday first: a name's place is its weekday number (0 Monday to
 # 6 Sunday), as a block's `days` count them.
@@ -58,13 +54,13 @@ def week_starts_on() -> str:
     try:
         value = json.loads(_week_starts_file().read_text(encoding="utf-8")).get("week_starts_on")
     except (OSError, ValueError, AttributeError):
-        return "monday"
-    return value if value in WEEK_STARTS else "monday"
+        value = None
+    return str(flexweek_engine.hours_accepted_week_start(value))
 
 
 def week_start_day() -> int:
     """The week's first day as the engine counts days: 0 Monday to 6 Sunday."""
-    return WEEK_STARTS.index(week_starts_on())
+    return int(flexweek_engine.hours_week_start_day(week_starts_on()))
 
 
 def save_week_starts_on(value: str) -> None:
@@ -82,22 +78,7 @@ def read_clock(text: str, *, end: bool = False, whole: bool = True) -> int | Non
     """The minute of the day `text` writes, or None when it writes no time. The same on either clock:
     "3:15 pm" is 15:15 on the 24-hour one too. An end of the day, 24:00 or 00:00, is 1440, and only an
     end box takes it. `whole` asks for the minutes to be written; an hour alone is "3 pm" or "15"."""
-    found = WRITTEN_TIME.fullmatch(text.strip().lower())
-    if found is None or (whole and found[2] is None):
-        return None
-    hour, minute, half = int(found[1]), int(found[2] or 0), found[3]
-    if minute > 59:
-        return None
-    if half:
-        if not 1 <= hour <= 12:
-            return None
-        hour = hour % 12 + (12 if half == "p" else 0)
-    minutes = hour * 60 + minute
-    if minutes == END_OF_DAY:
-        return END_OF_DAY if end else None
-    if hour > 23:
-        return None
-    return END_OF_DAY if end and minutes == 0 else minutes
+    return flexweek_engine.hours_read_clock(text, end, whole)
 
 
 def announce(widget: QWidget, words: str, *, assertive: bool = False) -> None:
