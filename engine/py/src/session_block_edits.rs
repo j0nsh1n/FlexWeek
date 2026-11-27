@@ -4,7 +4,8 @@
 
 use flexweek_app::session::block_edits::{
     BlockDeleteInput, BlockEditInput, HandMoveInput, RepeatEditInput, apply_block_edit,
-    apply_hand_move, delete_block, repeat_edit, setup_standing,
+    apply_hand_move, delete_block, delete_selected_plan, has_block, place_block_words, repeat_edit,
+    resume_pending, setup_standing, unpin_label,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -180,6 +181,106 @@ fn setup_standing_json(repeats: &str, blocks: &str) -> PyResult<String> {
     })
 }
 
+/// Whether `block_id` exists in `blocks` (JSON list).
+#[pyfunction]
+fn has_block_json(blocks: &str, block_id: &str) -> PyResult<bool> {
+    guard(|| {
+        let blocks = objects(read(blocks)?, "blocks")?;
+        has_block(&Value::Array(blocks), block_id).map_err(raise)
+    })
+}
+
+/// The words `place_block` emits after a hand move succeeds, or None when `block_id` is absent.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (blocks, block_id, from_day, day, start, end, week_start))]
+fn place_block_words_json(
+    blocks: &str,
+    block_id: &str,
+    from_day: i64,
+    day: i64,
+    start: i64,
+    end: i64,
+    week_start: &str,
+) -> PyResult<Option<String>> {
+    guard(|| {
+        let blocks = objects(read(blocks)?, "blocks")?;
+        place_block_words(
+            &Value::Array(blocks),
+            block_id,
+            from_day,
+            day,
+            start,
+            end,
+            week_start,
+        )
+        .map_err(raise)
+    })
+}
+
+/// What `_resume_pending` schedules once idle: `{"place": [...] | null, "flush_setup": bool}`.
+#[pyfunction]
+#[pyo3(signature = (busy, hand_waiting, has_setup_prefs, has_setup_work_windows, has_setup_week))]
+fn resume_pending_json(
+    busy: bool,
+    hand_waiting: &str,
+    has_setup_prefs: bool,
+    has_setup_work_windows: bool,
+    has_setup_week: bool,
+) -> PyResult<String> {
+    guard(|| {
+        let waiting = match read(hand_waiting)? {
+            Value::Null => None,
+            Value::Array(items) if items.len() == 5 => Some(Value::Array(items)),
+            _ => {
+                return Err(PyTypeError::new_err(
+                    "hand_waiting is a 5-item list or null",
+                ));
+            }
+        };
+        let decision = resume_pending(
+            busy,
+            waiting.as_ref(),
+            has_setup_prefs,
+            has_setup_work_windows,
+            has_setup_week,
+        );
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// What `delete_selected` deletes, as JSON `{"block_id", "scope", "day"}`, or None.
+#[pyfunction]
+#[pyo3(signature = (blocks, selected_block_id, selected_occurrence_day))]
+fn delete_selected_plan_json(
+    blocks: &str,
+    selected_block_id: Option<&str>,
+    selected_occurrence_day: Option<i64>,
+) -> PyResult<Option<String>> {
+    guard(|| {
+        let blocks = objects(read(blocks)?, "blocks")?;
+        let plan = delete_selected_plan(
+            &Value::Array(blocks),
+            selected_block_id,
+            selected_occurrence_day,
+        )
+        .map_err(raise)?;
+        Ok(plan.map(|decision| decision.to_json().to_string()))
+    })
+}
+
+/// The Undo step label for `unpin_assignment`: `"unpinning <title>"` (or `"unpinning homework"`).
+#[pyfunction]
+fn unpin_label_json(assignments: &str, assignment_id: &str) -> PyResult<String> {
+    guard(|| {
+        let assignments = read(assignments)?;
+        if !assignments.is_object() {
+            return Err(PyTypeError::new_err("the assignments are an object"));
+        }
+        unpin_label(&assignments, assignment_id).map_err(raise)
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -187,7 +288,12 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         block_hand_json,
         block_delete_json,
         repeat_edit_json,
-        setup_standing_json
+        setup_standing_json,
+        has_block_json,
+        place_block_words_json,
+        resume_pending_json,
+        delete_selected_plan_json,
+        unpin_label_json,
     );
     Ok(())
 }
