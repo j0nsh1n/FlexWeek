@@ -463,18 +463,20 @@ def store_material(path: Path, material: dict[str, Any]) -> None:
     """Put `material` on the look file and leave every other key where it was."""
     try:
         existing = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):
         existing = None
     text = str(flexweek_engine.views_look_merge_material(existing, json.dumps(material)))
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    # Python's own writer, as before: the spaces, escaped non-ASCII and number spelling a student's
+    # file already has, so a save does not rewrite the bytes of keys it did not touch.
+    path.write_text(json.dumps(json.loads(text)) + "\n", encoding="utf-8")
 
 
 def kept_material(path: Path) -> dict[str, Any] | None:
     """The material object already in the look file, so a later save of the widgets look keeps it."""
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):
         return None
     found = flexweek_engine.views_look_extract_kept_material(text)
     if found is None:
