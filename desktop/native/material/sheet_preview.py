@@ -11,6 +11,8 @@ from typing import Any
 
 import flexweek_engine  # type: ignore[import-untyped]
 
+NONE_CHOSEN = "Select at least one item before saving."
+
 
 def beside_words(clash: str) -> str:
     """What a time says when another block is already there: it is allowed, and both are drawn."""

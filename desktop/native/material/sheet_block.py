@@ -64,6 +64,10 @@ class BlockDraft:
         return self._state["original"]
 
     @property
+    def category(self) -> str | None:
+        return self._state["category"]
+
+    @property
     def days(self) -> list:
         return self._state["days"]
 
