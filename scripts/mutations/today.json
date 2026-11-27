@@ -56,11 +56,11 @@
   "test": "cargo:flexweek-engine:desk_words_on_screen:test_the_next_line_says_min_like_every_design"
  },
  {
-  "file": "desktop/native/client.py",
+  "file": "engine/app/src/views/copy.rs",
   "name": "sign-in says what went wrong before asking",
-  "old": "    if not password:\n        return SIGN_IN_NO_PASSWORD\n",
+  "old": "    if password.is_empty() {\n        return Ok(SIGN_IN_NO_PASSWORD.to_string());\n    }\n",
   "new": "",
-  "test": "desktop/tests/account/test_material_sign_in_and_create_account.py::test_empty_fields_say_what_is_missing_before_asking_the_server"
+  "test": "cargo:flexweek-app:views_copy:an_empty_password_is_named_before_the_server"
  },
  {
   "file": "engine/app/src/session/week.rs",
