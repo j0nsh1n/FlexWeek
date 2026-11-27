@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtWidgets import QApplication
 
+from backend.tests.pydantic_loaded import pydantic_loaded
 from desktop.native.devices import SyncHost
 from desktop.native.listening import listening_sockets
 from desktop.native.window import NativeWindow
@@ -80,12 +81,8 @@ def test_signing_up_and_saving_with_phone_sync_set_up_opens_no_network_port(
         sync.stop()
 
 
-def pydantic_loaded() -> list[str]:
-    return sorted(name for name in sys.modules if name == "pydantic" or name.startswith("pydantic."))
-
-
 def test_starting_the_window_does_not_import_pydantic(qapp: QApplication, database: Path) -> None:
-    """The window starts the way the app does, and pydantic is not among the modules that loaded."""
+    """The window starts the way the app does, and neither pydantic nor pydantic_core loaded."""
     assert pydantic_loaded() == []
     sync = SyncHost(database)
     sync.start_if_paired()
