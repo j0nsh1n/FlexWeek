@@ -2,7 +2,7 @@
 
 ## Current State (2026-11-26)
 - 2026-11-26: P4 is complete (#185-#210). The session's decisions live in `engine/app/src/session/*` behind guarded
-  `flexweek_engine` bindings; `desktop/native/controller.py` forwards and keeps only Qt, request, file and clock glue,
+  `flexweek_engine` bindings; `desktop/native/controller.py` forwards and keeps only Qt, request, file, clock and host glue (and the Spotify opener),
   enforced by `backend/tests/test_controller_holds_no_session_logic.py` (stay list with reasons). Pydantic,
   `backend/models.py` and 10 dead adapters are gone (#209); `backend/` keeps clock, slots, weeks, comfort, storage.
   A running focus timer is kept per account in `<kept>.focus.json` beside the kept sign-in (#208). Also today:
@@ -16,16 +16,16 @@
   sync` section, centered A+C `PairingDialog`), Sign in Option B (animated 5-scene QML showcase pausing on hover
   and static under Reduce motion/Off), Setup (top stepper, 2x2 choice grids, pinned footer), and Update (centered
   B+C hybrid pop-up). Proposed `spec.md` updates are staged for approval outside git.
-- `origin/main` is `9f5d5b1d`. Latest release: v1.5.0, published 2026-11-20 from `0effa56f` (PR #141). The 2.0.0 Rust
+- `origin/main` is `b5ad62a0` (#210). Latest release: v1.5.0, published 2026-11-20 from `0effa56f` (PR #141). The 2.0.0 Rust
   overhaul is under way on main and is available in developer builds only.
 - P0 (#142), P1 (#143-#152) and the P2 server removal (#154-#156) are merged. The window asks the Rust service in its
   own process. `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the
-  hosted-server settings are not read. With no phone paired, the app opens no network port. P4's closing slice
-  removes pydantic and the adapters nothing imports any more.
+  hosted-server settings are not read. With no phone paired, the app opens no network port. Pydantic and the adapters
+  nothing imported were removed in P4 (#209).
 - P3 is done (#158, #160): the test-only door (`desktop/tests/door.py`, `door_app.py`) and `flexweek-testkit::door`
   drive the Python app from Rust screen tests. CI's `screens` job runs them. fwtest's flaky rerun still covers pytest
   only.
-- P4 is in progress. On main, `flexweek-app::session` owns the request frame and its four workers, epochs, the 30 s
+- P4 is done (2026-11-26; see the first bullet). On main, `flexweek-app::session` owns the request frame and its four workers, epochs, the 30 s
   limit, expiry and error words (#161, #163), busy/latest-ticket/status state (#164), autosave and leaving decisions
   (#167), and account flows including sign-in, registration, recovery, resume, sign-out, password and recovery-code
   changes and account deletion (#165, #166). `desktop/native/client.py` is a shell over

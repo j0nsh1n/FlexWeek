@@ -82,8 +82,8 @@ list, all shipped).
   session's frame in Rust (#161, merged a9deb612); the window's requests go through it (#163), its busy state and
   status line are Rust's (#164), and so are when the week saves itself and saving before leaving (#167), and
   signing in, up and out (#165); the window's block and homework checks are the engine's (#168, #169, 2026-11-24).
-- Status (2026-11-26): P4 [x] done 2026-11-26. Groups 2-5 (#185-#196), the first slices of 3 and 6-9 (#181, #184),
-  then P1 sheet checks (#199), 4D routines (#200), 10A views (#201), 6B focus (#202), 4E copies (#203), 7C alerts
+- Status (2026-11-26): P4 [x] done 2026-11-26. Groups 2-5 (#185, #186, #188-#190, #194-#196), the first slices of 3 and
+  6-9 (#181), slice 7B Spotify (#184), then P1 sheet checks (#199), 4D routines (#200), 10A views (#201), 6B focus (#202), 4E copies (#203), 7C alerts
   (#204), 8B preferences (#205), 9B restore and import (#206), 5D plan flow (#207), 6C the focus timer kept on disk
   (#208), P2 pydantic and the dead backend adapters gone (#209), and the last controller decisions (#210).
   controller.py forwards to the Rust session; a test fails on new logic there outside its commented stay list
@@ -113,7 +113,7 @@ are on main (PRs #67-#83). In order:
 - Status: [ ] v1.3.0 built and shipped on every platform (2026-11-10); spec.md against CI not re-checked since.
 
 ### R2 — Correctness
-- Two quick settings saves can overwrite each other (save_preferences).
+- Two quick settings saves can overwrite each other (save_preferences). Fixed 2026-11-26 (#205): saves queue.
 - The phone does not receive same-day `notices`.
 - Material memory growth (1.9 GB after 49 min on the tarball): measure, then fix or close.
 - The autostart entry is only rewritten when the switch changes; no check at startup.
