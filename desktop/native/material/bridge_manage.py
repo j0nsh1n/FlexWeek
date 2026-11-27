@@ -12,67 +12,31 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtWidgets import QFileDialog
 
-from desktop.native.account_copy import (
-    DELETE_ACCOUNT_QUESTION,
-    READ_FAILED,
-    READ_WEEK_FAILED,
-    REPLACE_WEEK_QUESTION,
-)
-from desktop.native.files import EXPORT_FORMAT, parse_import_payload
-from desktop.native.reuse import week_label
-from desktop.native.settings_copy import (
-    ACCOUNT_CODES_NOTE,
-    ACCOUNT_DATA_NOTE,
-    ACCOUNT_PASSWORD_NOTE,
-    recovery_status,
-    restore_parts,
-    restore_row,
-    restore_summary,
-    transfer_summary,
-)
+from desktop.native.account_copy import READ_FAILED, READ_WEEK_FAILED
+from desktop.native.calendar import iso_of
+from desktop.native.files import parse_import_payload
 
-NO_LOCATION = "FlexWeek can't find where saved copies are stored."
+NO_LOCATION = str(flexweek_engine.VIEW_MANAGE_NO_LOCATION)
 # The files the Account sheet moves in and out, in the order the Widgets dialog lists them.
-DATA_ACTIONS = (
-    ("exportAccount", "export", "Export backup file"),
-    ("importAccount", "import", "Import backup file"),
-    ("exportWeek", "week", "Export week"),
-    ("exportDay", "day", "Export day"),
-    ("importFile", "import-week", "Import week or day file"),
-)
+DATA_ACTIONS: tuple[tuple[str, str, str], ...] = flexweek_engine.VIEW_MANAGE_DATA_ACTIONS
 # What Material says for the Widgets dialog's "Choose a saved copy."
-RESTORE_FIRST = "Choose a copy."
-RESTORE_QUESTION = {
-    "id": "restore-copy",
-    "title": "Restore",
-    "body": "Restore this copy? FlexWeek saves a copy of your current weeks and homework first.",
-    "answers": [
-        {"id": "not", "label": "Not now", "kind": "text", "default": True},
-        {"id": "restore", "label": "Restore", "kind": "danger"},
-    ],
-}
+RESTORE_FIRST = str(flexweek_engine.VIEW_MANAGE_RESTORE_FIRST)
+RESTORE_QUESTION: dict[str, Any] = json.loads(flexweek_engine.VIEW_MANAGE_RESTORE_QUESTION_JSON)
+_DAY_EXPORT_FILENAME = str(flexweek_engine.VIEW_MANAGE_DAY_EXPORT_FILENAME)
+_SELECT_DAY_FIRST = str(flexweek_engine.VIEW_MANAGE_SELECT_DAY_FIRST)
 
 
 def _where(storage: dict | None) -> str:
     """Where the week is saved: always this computer, since the hosted server is gone (D4)."""
-    return "this computer"
+    return str(flexweek_engine.views_manage_where(json.dumps(storage)))
 
 
 def account_form(storage: dict | None, remaining: int | None) -> dict[str, Any]:
     """Manage account: who is signed in, the password, the recovery codes and the files."""
-    return {
-        "heading": "Manage account",
-        "info": f"Signed in as {(storage or {}).get('username') or ''}. "
-        f"Your week is saved on {_where(storage)}, under this account.",
-        "passwordNote": ACCOUNT_PASSWORD_NOTE,
-        "codesNote": ACCOUNT_CODES_NOTE,
-        "codesStatus": recovery_status(remaining),
-        "codesProblem": remaining == 0,
-        "dataNote": ACCOUNT_DATA_NOTE,
-        "files": [{"name": name, "id": action, "label": label} for name, action, label in DATA_ACTIONS],
-    }
+    return json.loads(flexweek_engine.views_account_form(json.dumps(storage), json.dumps(remaining)))
 
 
 def restore_form(
@@ -80,61 +44,23 @@ def restore_form(
 ) -> dict[str, Any]:
     """Restore points: the saved copies with their times, a name for a new one, and what the previewed one
     would change."""
-    return {
-        "heading": "Saved copies",
-        "where": (storage or {}).get("label") or NO_LOCATION,
-        "label": label,
-        "points": [
-            {
-                "id": str(point.get("id")),
-                "title": restore_parts(point)[0],
-                "detail": restore_parts(point)[1],
-                "text": restore_row(point),
-            }
-            for point in points
-        ],
-        "selected": selected,
-        "summary": restore_summary(preview) if preview and preview.get("id") == selected else "",
-        "note": note,
-    }
+    return json.loads(
+        flexweek_engine.views_restore_form(
+            json.dumps(points), json.dumps(preview), json.dumps(storage), selected, label, note
+        )
+    )
 
 
 def delete_question(name: str, storage: dict | None) -> dict[str, Any]:
-    return {
-        "id": "delete-account",
-        "title": "Delete account",
-        "body": DELETE_ACCOUNT_QUESTION.format(name=name, where=_where(storage)),
-        "answers": [
-            {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
-            {"id": "delete", "label": f"Delete {name}", "kind": "danger"},
-        ],
-    }
+    return json.loads(flexweek_engine.views_delete_question(name, json.dumps(storage)))
 
 
 def import_question(preview: dict) -> dict[str, Any]:
-    source = str(preview.get("source_username") or "another account")
-    return {
-        "id": "import-account",
-        "title": "Import backup file?",
-        "body": f"From {source}'s backup: {transfer_summary(preview)}\n"
-        "FlexWeek saves a copy of your current weeks and homework first, so you can go back.",
-        "answers": [
-            {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
-            {"id": "import", "label": "Import", "kind": "filled"},
-        ],
-    }
+    return json.loads(flexweek_engine.views_import_question(json.dumps(preview)))
 
 
 def replace_week_question(week: str) -> dict[str, Any]:
-    return {
-        "id": "replace-week",
-        "title": "Replace week",
-        "body": REPLACE_WEEK_QUESTION.format(week=week),
-        "answers": [
-            {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
-            {"id": "replace", "label": "Replace week", "kind": "danger"},
-        ],
-    }
+    return json.loads(flexweek_engine.views_replace_week_question(week))
 
 
 class AccountActions:
@@ -162,11 +88,12 @@ class AccountActions:
         self._session.replace_recovery_codes(password)
 
     def delete(self, password: str) -> None:
-        name = (self._session.account or {}).get("username") or "this account"
-        self._ask(
-            delete_question(name, self._session.storage_info),
-            {"delete": lambda: self._deleted(password)},
+        question = json.loads(
+            flexweek_engine.views_account_delete_question(
+                json.dumps(self._session.account), json.dumps(self._session.storage_info)
+            )
         )
+        self._ask(question, {"delete": lambda: self._deleted(password)})
 
     def _deleted(self, password: str) -> None:
         """Delete was asked for over the open sheet. It closes, then the account goes."""
@@ -181,14 +108,15 @@ class AccountActions:
         if not path:
             return
         try:
-            snapshot = json.loads(Path(path).read_text())
-        except (OSError, UnicodeDecodeError, ValueError):
+            raw = Path(path).read_text()
+        except (OSError, UnicodeDecodeError):
             self._session._say(READ_FAILED)
             return
-        if not isinstance(snapshot, dict):
-            self._session._say(READ_FAILED)
+        snapshot_json, error = flexweek_engine.views_parse_backup_json(raw)
+        if error is not None:
+            self._session._say(error)
             return
-        self._session.preview_account_import(snapshot, self._confirm_transfer)
+        self._session.preview_account_import(json.loads(snapshot_json), self._confirm_transfer)
 
     def _confirm_transfer(self) -> None:
         preview = self._session.transfer_preview
@@ -197,14 +125,15 @@ class AccountActions:
         self._ask(import_question(preview), {"import": self._session.apply_account_import})
 
     def export_week(self) -> None:
-        self._window._write_json("flexweek-" + self._session.week_start + ".json", self._session.week_file())
+        name = str(flexweek_engine.views_week_export_filename(self._session.week_start))
+        self._window._write_json(name, self._session.week_file())
 
     def export_day(self) -> None:
         destination = self._session.paste_destination()
         if destination is None:
-            self._session._say("Select a day first.")
+            self._session._say(_SELECT_DAY_FIRST)
             return
-        self._window._write_json("flexweek-day.json", self._session.day_file(destination[0]))
+        self._window._write_json(_DAY_EXPORT_FILENAME, self._session.day_file(destination[0]))
 
     def import_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(None, "Import week or day", "", "JSON (*.json)")
@@ -216,13 +145,18 @@ class AccountActions:
             self._session._say(READ_WEEK_FAILED)
             return
         parsed = parse_import_payload(raw)
-        if parsed.get("error"):
-            self._session._say(parsed["error"])
+        error, question_json = flexweek_engine.views_decide_week_import(
+            json.dumps(parsed),
+            bool(self._session.blocks),
+            self._session.week_start,
+            iso_of(self._window._today()),
+        )
+        if error is not None:
+            self._session._say(error)
             return
-        if parsed.get("format") == EXPORT_FORMAT and self._session.blocks:
-            week = week_label(self._session.week_start, self._window._today())
+        if question_json is not None:
             self._ask(
-                replace_week_question(week),
+                json.loads(question_json),
                 {"replace": lambda: self._session.import_week_file(raw, replace=True)},
             )
             return

@@ -54,6 +54,12 @@ LOCKED: dict[str, dict[str, str]] = {
         "store_material": "writes the look file with Python's JSON spelling",
     },
     "desktop/native/layout_choice.py": {},
+    "desktop/native/material/bridge_alarms.py": {},
+    "desktop/native/material/bridge_info.py": {},
+    "desktop/native/material/bridge_manage.py": {
+        "AccountActions.import_account": "opens the system file picker and reads the chosen backup file from disk",
+        "AccountActions.import_file": "opens the system file picker and reads the chosen week or day file from disk",
+    },
     "desktop/native/material/day_board.py": {},
     "desktop/native/material/bridge_day.py": {
         "_moment": "reads the session wall clock as local datetime for the engine",

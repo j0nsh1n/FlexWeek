@@ -8,6 +8,7 @@ pub mod day;
 pub mod focus;
 pub mod hours;
 pub mod look_file;
+pub mod manage_info_alarms;
 pub mod month;
 pub mod sheet_block;
 pub mod sheet_homework;

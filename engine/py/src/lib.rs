@@ -42,6 +42,7 @@ mod views_day;
 mod views_focus;
 mod views_hours;
 mod views_look_file;
+mod views_manage_info_alarms;
 mod views_month;
 mod views_sheet_block;
 mod views_sheet_homework;
@@ -410,6 +411,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     views_focus::add(m)?;
     views_hours::add(m)?;
     views_look_file::add(m)?;
+    views_manage_info_alarms::add(m)?;
     views_month::add(m)?;
     views_sheet_block::add(m)?;
     views_sheet_homework::add(m)?;
