@@ -3,8 +3,9 @@
 //! student reads. Expected values come from those rules and the desktop tests they keep green.
 
 use flexweek_app::session::block_edits::{
-    BlockDeleteInput, BlockEditInput, HandMoveInput, RepeatEditInput, apply_block_edit,
-    apply_hand_move, delete_block, repeat_edit, setup_standing,
+    BlockDeleteInput, BlockEditInput, DeleteSelectedPlan, HandMoveInput, RepeatEditInput,
+    ResumePending, apply_block_edit, apply_hand_move, delete_block, delete_selected_plan,
+    has_block, place_block_words, repeat_edit, resume_pending, setup_standing, unpin_label,
 };
 use flexweek_engine::desk::{grid::occupied_intervals, weekmodel::build_week};
 use serde_json::{Value, json};
@@ -582,4 +583,147 @@ fn setup_refuses_a_block_the_check_refuses() {
     let setup = json!([{"id": "school"}]);
     let repeats = json!([]);
     assert!(setup_standing(&setup, &repeats).is_err());
+}
+
+#[test]
+fn dragging_one_day_of_school_points_to_school_hours() {
+    // Material has School hours under Settings > Planning, so dragging one day of School tells the
+    // student to open School hours rather than run setup again.
+    let blocks = json!([school(vec![0, 1, 2, 3, 4], "08:00")]);
+    let words = place_block_words(&blocks, "school", 2, 2, 10 * 60, 12 * 60, WEEK)
+        .unwrap()
+        .expect("school is on the week");
+    assert_eq!(
+        words,
+        "Moved Wednesday's School to Wed 10:00. Only this Wednesday changed. To change every week, open School hours."
+    );
+}
+
+#[test]
+fn dragging_one_day_of_a_setup_activity_still_points_to_setup() {
+    let blocks = json!([activity("activity-1", vec![1, 3])]);
+    let words = place_block_words(&blocks, "activity-1", 3, 3, 17 * 60, 19 * 60, WEEK)
+        .unwrap()
+        .expect("activity is on the week");
+    assert_eq!(
+        words,
+        "Thursday's Job now ends at 19:00. Only this Thursday changed. To change every week, run setup again from Settings."
+    );
+}
+
+#[test]
+fn dragging_one_day_of_a_weekly_fixed_time_points_to_this_week_and_later() {
+    let blocks = json!([{
+        "id": "weekly-guitar", "title": "Guitar", "kind": "locked",
+        "duration_min": 60, "days": [1, 3], "start": "17:00", "category": "extra"
+    }]);
+    let words = place_block_words(&blocks, "weekly-guitar", 3, 4, 18 * 60, 19 * 60, WEEK)
+        .unwrap()
+        .expect("weekly block is on the week");
+    assert_eq!(
+        words,
+        "Moved Thursday's Guitar to Fri 18:00. Only this Thursday changed. To change every week, open it and choose This week and later."
+    );
+}
+
+#[test]
+fn placing_a_plain_or_unscheduled_block_uses_target_day_when_from_day_is_not_on_the_block() {
+    let blocks = json!([{
+        "id": "essay-1", "title": "Essay", "kind": "flexible",
+        "duration_min": 60, "days": [0, 1, 2], "assignment_id": "essay"
+    }]);
+    let words = place_block_words(&blocks, "essay-1", -1, 1, 16 * 60, 17 * 60, WEEK)
+        .unwrap()
+        .expect("essay is on the week");
+    assert_eq!(words, "Placed Essay on Tue 16:00.");
+    assert_eq!(
+        place_block_words(&blocks, "missing", 0, 1, 16 * 60, 17 * 60, WEEK).unwrap(),
+        None
+    );
+    assert!(has_block(&blocks, "essay-1").unwrap());
+    assert!(!has_block(&blocks, "missing").unwrap());
+}
+
+#[test]
+fn resume_pending_waits_while_busy_and_drains_when_idle() {
+    let waiting = json!(["soccer", 0, 1, 600, 660]);
+    assert_eq!(
+        resume_pending(true, Some(&waiting), true, true, true),
+        ResumePending {
+            place: None,
+            flush_setup: false,
+        }
+    );
+    assert_eq!(
+        resume_pending(false, Some(&waiting), false, false, false),
+        ResumePending {
+            place: Some(waiting.clone()),
+            flush_setup: false,
+        }
+    );
+    assert_eq!(
+        resume_pending(false, None, false, true, false),
+        ResumePending {
+            place: None,
+            flush_setup: true,
+        }
+    );
+    assert_eq!(
+        resume_pending(false, Some(&Value::Null), false, false, true),
+        ResumePending {
+            place: None,
+            flush_setup: true,
+        }
+    );
+}
+
+#[test]
+fn delete_selected_uses_occurrence_for_series_and_series_for_one_day() {
+    let blocks = json!([school(vec![0, 1, 2], "08:00"), activity("solo", vec![3])]);
+    assert_eq!(
+        delete_selected_plan(&blocks, Some("school"), Some(2)).unwrap(),
+        Some(DeleteSelectedPlan {
+            block_id: "school".to_string(),
+            scope: "occurrence",
+            day: Some(2),
+        })
+    );
+    assert_eq!(
+        delete_selected_plan(&blocks, Some("solo"), Some(3)).unwrap(),
+        Some(DeleteSelectedPlan {
+            block_id: "solo".to_string(),
+            scope: "series",
+            day: Some(3),
+        })
+    );
+    assert_eq!(delete_selected_plan(&blocks, None, Some(2)).unwrap(), None);
+    assert_eq!(
+        delete_selected_plan(&blocks, Some("missing"), Some(2)).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn unpin_label_names_the_homework_or_falls_back_to_homework() {
+    let assignments = json!({
+        "essay": {"id": "essay", "title": "History essay"},
+        "blank": {"id": "blank", "title": ""},
+        "null-row": Value::Null,
+    });
+    assert_eq!(
+        unpin_label(&assignments, "essay").unwrap(),
+        "unpinning History essay"
+    );
+    assert_eq!(
+        unpin_label(&assignments, "blank").unwrap(),
+        "unpinning homework"
+    );
+    assert_eq!(
+        unpin_label(&assignments, "null-row").unwrap(),
+        "unpinning homework"
+    );
+    assert_eq!(
+        unpin_label(&assignments, "missing").unwrap(),
+        "unpinning homework"
+    );
 }

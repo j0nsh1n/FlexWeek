@@ -4,15 +4,21 @@
 //! is decided here.
 
 use flexweek_app::session::copies::{
-    ClipboardBlock, CopyDay, DateProblemInput, PasteReady, PasteSelection, PreviewGroups,
-    Relocation, RelocationInput, clipboard_block, copy_day_items, copy_empty_words, date_problem,
-    fixed_copy_rows, paste_destination, paste_ready, preview_groups, relocate,
+    ClipboardBlock, CommitGroupsBatchInput, ConfirmPreviewInput, CopyDay, DateProblemInput,
+    MoveToDateBatchInput, MoveToDateInput, PasteReady, PasteSelection, PreviewGroups, Relocation,
+    RelocationInput, block_on_week, build_move_to_date_batch, clipboard_block, commit_groups_batch,
+    commit_groups_order, confirm_preview_plan, copy_day_items, copy_day_plan, copy_empty_words,
+    copy_selected_plan, date_problem, duplicate_selected_prepare, fixed_copy_rows,
+    move_to_date_needed, paste_destination, paste_proposals_build, paste_proposals_prepare,
+    paste_ready, prepare_move_to_date, preview_groups, previous_week_for_copy, relocate,
+    resolve_date_span,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
+use crate::desk::fresh_id;
 use crate::{guard, raise};
 
 fn read(text: &str) -> PyResult<Value> {
@@ -320,6 +326,407 @@ fn preview_groups_json(rows: &str, operation_id: &str) -> PyResult<String> {
     })
 }
 
+fn as_object<'a>(value: &'a Value, what: &str) -> PyResult<&'a Map<String, Value>> {
+    value
+        .as_object()
+        .ok_or_else(|| PyValueError::new_err(format!("{what} must be a JSON object")))
+}
+
+fn req<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<&'a Value> {
+    map.get(key)
+        .ok_or_else(|| PyValueError::new_err(format!("missing field {key:?}")))
+}
+
+fn req_bool(map: &Map<String, Value>, key: &str) -> PyResult<bool> {
+    req(map, key)?
+        .as_bool()
+        .ok_or_else(|| PyValueError::new_err(format!("{key} must be a boolean")))
+}
+
+fn req_str<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<&'a str> {
+    req(map, key)?
+        .as_str()
+        .ok_or_else(|| PyValueError::new_err(format!("{key} must be a string")))
+}
+
+fn opt_str<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<Option<&'a str>> {
+    match map.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_str()
+            .map(Some)
+            .ok_or_else(|| PyValueError::new_err(format!("{key} must be a string or null"))),
+    }
+}
+
+fn opt_i64(map: &Map<String, Value>, key: &str) -> PyResult<Option<i64>> {
+    match map.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_i64()
+            .map(Some)
+            .ok_or_else(|| PyValueError::new_err(format!("{key} must be an integer or null"))),
+    }
+}
+
+fn req_u32(map: &Map<String, Value>, key: &str) -> PyResult<u32> {
+    req(map, key)?
+        .as_u64()
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| PyValueError::new_err(format!("{key} must be a non-negative integer")))
+}
+
+fn req_array<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<&'a Vec<Value>> {
+    req(map, key)?
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err(format!("{key} must be a list")))
+}
+
+fn req_object_map<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<&'a Map<String, Value>> {
+    req(map, key)?
+        .as_object()
+        .ok_or_else(|| PyValueError::new_err(format!("{key} must be an object")))
+}
+
+fn opt_object_value<'a>(map: &'a Map<String, Value>, key: &str) -> PyResult<Option<&'a Value>> {
+    match map.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) if value.is_object() => Ok(Some(value)),
+        Some(_) => Err(PyValueError::new_err(format!(
+            "{key} must be an object or null"
+        ))),
+    }
+}
+
+/// Which week `copy_last_week_fixed_rows` reads, as JSON: `{"kind": "absent" | "say" | "ready", ...}`.
+#[pyfunction]
+fn session_previous_week_for_copy(
+    signed_in: bool,
+    week_start: &str,
+    first_weekday: u32,
+) -> PyResult<String> {
+    guard(|| {
+        Ok(previous_week_for_copy(signed_in, week_start, first_weekday)
+            .to_json()
+            .to_string())
+    })
+}
+
+/// Find `block_id` inside one local week state JSON (`{"blocks": [...]}` or null).
+#[pyfunction]
+fn session_block_on_week(state: &str, block_id: &str) -> PyResult<Option<String>> {
+    guard(|| {
+        let state = object_or_null(read(state)?, "the week state")?;
+        let found = block_on_week(state.as_ref(), block_id).map_err(raise)?;
+        Ok(found.map(|block| block.to_string()))
+    })
+}
+
+/// Resolve `(from_iso, to_iso)` against `first_weekday` into weeks and day indices, or None.
+#[pyfunction]
+fn session_resolve_date_span(
+    from_iso: &str,
+    to_iso: &str,
+    first_weekday: u32,
+) -> PyResult<Option<String>> {
+    guard(|| {
+        Ok(resolve_date_span(from_iso, to_iso, first_weekday)
+            .map(|span| span.to_json().to_string()))
+    })
+}
+
+/// Guard and key setup for `move_to_date`.
+#[pyfunction]
+fn session_prepare_move_to_date(payload: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(payload)?;
+        let map = as_object(&root, "move to date")?;
+        let input = MoveToDateInput {
+            account_id: opt_i64(map, "account_id")?,
+            conflict: req_bool(map, "conflict")?,
+            busy: req_bool(map, "busy")?,
+            pending_save: req_bool(map, "pending_save")?,
+            block_id: req_str(map, "block_id")?,
+            from_iso: req_str(map, "from_iso")?,
+            to_iso: req_str(map, "to_iso")?,
+            first_weekday: req_u32(map, "first_weekday")?,
+        };
+        Ok(prepare_move_to_date(&input).to_json().to_string())
+    })
+}
+
+/// Weeks `move_to_date` still needs to fetch, as JSON list.
+#[pyfunction]
+fn session_move_to_date_needed(
+    from_week: &str,
+    to_week: &str,
+    has_source: bool,
+    has_dest: bool,
+) -> PyResult<String> {
+    guard(|| {
+        let needed = move_to_date_needed(from_week, to_week, has_source, has_dest);
+        Ok(Value::Array(needed.into_iter().map(Value::String).collect()).to_string())
+    })
+}
+
+/// Build the `submit_batch` payload for `_commit_move_to_date`, or return refusal words.
+#[pyfunction]
+fn session_build_move_to_date_batch(py: Python<'_>, payload: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(payload)?;
+        let map = as_object(&root, "move to date batch")?;
+        let assignments = req(map, "assignments")?;
+        if !assignments.is_object() {
+            return Err(PyTypeError::new_err("the assignments are an object"));
+        }
+        let input = MoveToDateBatchInput {
+            block_id: req_str(map, "block_id")?,
+            from_iso: req_str(map, "from_iso")?,
+            to_iso: req_str(map, "to_iso")?,
+            from_week: req_str(map, "from_week")?,
+            to_week: req_str(map, "to_week")?,
+            source_local: opt_object_value(map, "source_local")?,
+            dest_local: opt_object_value(map, "dest_local")?,
+            fetched: req_object_map(map, "fetched")?,
+            assignments,
+            today_iso: req_str(map, "today_iso")?,
+            operation_id: req_str(map, "operation_id")?,
+            attempt_key: req_str(map, "attempt_key")?,
+        };
+        let new_id = fresh_id(py);
+        let decision = build_move_to_date_batch(&input, &new_id).map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// Copy the selected block into the clipboard, or refuse when nothing is selected.
+#[pyfunction]
+#[pyo3(signature = (signed_in, blocks, selected_block_id, selected_occurrence_day, scope, new_id))]
+fn session_copy_selected(
+    signed_in: bool,
+    blocks: &str,
+    selected_block_id: Option<&str>,
+    selected_occurrence_day: Option<i64>,
+    scope: &str,
+    new_id: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let blocks = Value::Array(objects(read(blocks)?, "blocks")?);
+        let decision = copy_selected_plan(
+            signed_in,
+            &blocks,
+            selected_block_id,
+            selected_occurrence_day,
+            scope,
+            new_id,
+        )
+        .map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// Copy one day's items into the clipboard, resolving destination when `day` is null.
+#[pyfunction]
+fn session_copy_day(py: Python<'_>, payload: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(payload)?;
+        let map = as_object(&root, "copy day")?;
+        let block_list = req_array(map, "blocks")?;
+        if block_list.iter().any(|item| !item.is_object()) {
+            return Err(PyTypeError::new_err("every one of the blocks is an object"));
+        }
+        let blocks = Value::Array(block_list.clone());
+        let trace = opt_object_value(map, "trace")?
+            .cloned()
+            .unwrap_or(Value::Null);
+        let sel = selection(
+            opt_str(map, "selected_block_id")?,
+            opt_i64(map, "selected_occurrence_day")?,
+            req_str(map, "planner_view")?,
+            req_u32(map, "first_weekday")?,
+            req_str(map, "selected_day")?,
+            req_str(map, "today_iso")?,
+        );
+        let mut ids = block_list.iter().map(|_| fresh_id(py));
+        let decision = copy_day_plan(
+            req_bool(map, "signed_in")?,
+            &blocks,
+            &trace,
+            opt_i64(map, "day")?,
+            &sel,
+            req_str(map, "week_start")?,
+            &mut ids,
+        )
+        .map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// Check sign-in, clipboard and paste destination for `paste_proposals`.
+#[pyfunction]
+fn session_paste_proposals_prepare(payload: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(payload)?;
+        let map = as_object(&root, "paste proposals prepare")?;
+        let block_list = req_array(map, "blocks")?;
+        if block_list.iter().any(|item| !item.is_object()) {
+            return Err(PyTypeError::new_err("every one of the blocks is an object"));
+        }
+        let blocks = Value::Array(block_list.clone());
+        let trace = opt_object_value(map, "trace")?
+            .cloned()
+            .unwrap_or(Value::Null);
+        let clipboard = opt_object_value(map, "clipboard")?;
+        let sel = selection(
+            opt_str(map, "selected_block_id")?,
+            opt_i64(map, "selected_occurrence_day")?,
+            req_str(map, "planner_view")?,
+            req_u32(map, "first_weekday")?,
+            req_str(map, "selected_day")?,
+            req_str(map, "today_iso")?,
+        );
+        let decision = paste_proposals_prepare(
+            req_bool(map, "signed_in")?,
+            clipboard,
+            opt_i64(map, "target_day")?,
+            opt_str(map, "target_start")?,
+            &blocks,
+            &trace,
+            &sel,
+            req_str(map, "week_start")?,
+            req_bool(map, "has_assignments")?,
+        )
+        .map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// Build paste/duplicate proposal rows from `clipboard` and homework uncovered minutes.
+#[pyfunction]
+#[pyo3(signature = (clipboard, week_start, target_day, target_start, assignments, minutes))]
+fn session_paste_proposals_build(
+    clipboard: &str,
+    week_start: &str,
+    target_day: i64,
+    target_start: Option<&str>,
+    assignments: &str,
+    minutes: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let clipboard = read(clipboard)?;
+        if !clipboard.is_object() {
+            return Err(PyTypeError::new_err("the clipboard is an object"));
+        }
+        let assignments = assignments_table(read(assignments)?)?;
+        let minutes = read(minutes)?;
+        if !minutes.is_object() {
+            return Err(PyTypeError::new_err("the homework minutes are an object"));
+        }
+        let rows = paste_proposals_build(
+            &clipboard,
+            week_start,
+            target_day,
+            target_start,
+            &assignments,
+            &minutes,
+        )
+        .map_err(raise)?;
+        Ok(Value::Array(rows).to_string())
+    })
+}
+
+/// Prepare a duplicate preview without touching the session's clipboard or announcing a copy.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (signed_in, blocks, selected_block_id, selected_occurrence_day, scope, new_id, has_assignments))]
+fn session_duplicate_selected_prepare(
+    signed_in: bool,
+    blocks: &str,
+    selected_block_id: Option<&str>,
+    selected_occurrence_day: Option<i64>,
+    scope: &str,
+    new_id: &str,
+    has_assignments: bool,
+) -> PyResult<String> {
+    guard(|| {
+        let blocks = Value::Array(objects(read(blocks)?, "blocks")?);
+        let decision = duplicate_selected_prepare(
+            signed_in,
+            &blocks,
+            selected_block_id,
+            selected_occurrence_day,
+            scope,
+            new_id,
+            has_assignments,
+        )
+        .map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// Decide single-week vs multi-week save for `confirm_preview`.
+#[pyfunction]
+fn session_confirm_preview_plan(payload: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(payload)?;
+        let map = as_object(&root, "confirm preview")?;
+        let rows = req(map, "rows")?;
+        let blocks = req(map, "blocks")?;
+        if !blocks.is_array() {
+            return Err(PyTypeError::new_err("blocks are a list"));
+        }
+        let input = ConfirmPreviewInput {
+            signed_in: req_bool(map, "signed_in")?,
+            conflict: req_bool(map, "conflict")?,
+            rows,
+            week_start: req_str(map, "week_start")?,
+            blocks,
+            today_iso: req_str(map, "today_iso")?,
+            operation_id: opt_str(map, "operation_id")?,
+            attempt_key: opt_str(map, "attempt_key")?,
+            attempts: req_object_map(map, "attempts")?,
+            fresh_operation_id: req_str(map, "fresh_operation_id")?,
+        };
+        let decision = confirm_preview_plan(&input).map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
+/// Remote weeks to GET in `_commit_groups` order (reversed non-open weeks).
+#[pyfunction]
+fn session_commit_groups_order(by_week: &str, week_start: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(by_week)?;
+        let map = as_object(&root, "by_week")?;
+        let order = commit_groups_order(map, week_start);
+        Ok(Value::Array(order.into_iter().map(Value::String).collect()).to_string())
+    })
+}
+
+/// Build the `submit_batch` payload for `_commit_groups`, checking block capacity per week.
+#[pyfunction]
+fn session_commit_groups_batch(payload: &str) -> PyResult<String> {
+    guard(|| {
+        let root = read(payload)?;
+        let map = as_object(&root, "commit groups batch")?;
+        let current_blocks = req_array(map, "current_blocks")?;
+        let input = CommitGroupsBatchInput {
+            by_week: req_object_map(map, "by_week")?,
+            week_start: req_str(map, "week_start")?,
+            current_blocks,
+            current_revision: req(map, "current_revision")?,
+            fetched: req_object_map(map, "fetched")?,
+            today_iso: req_str(map, "today_iso")?,
+            label: req_str(map, "label")?,
+            snapshot_label: opt_str(map, "snapshot_label")?,
+            operation_id: req_str(map, "operation_id")?,
+            said: opt_str(map, "said")?,
+        };
+        let decision = commit_groups_batch(&input).map_err(raise)?;
+        Ok(decision.to_json().to_string())
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -331,7 +738,21 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         paste_destination_json,
         clipboard_day_json,
         paste_ready_json,
-        preview_groups_json
+        preview_groups_json,
+        session_previous_week_for_copy,
+        session_block_on_week,
+        session_resolve_date_span,
+        session_prepare_move_to_date,
+        session_move_to_date_needed,
+        session_build_move_to_date_batch,
+        session_copy_selected,
+        session_copy_day,
+        session_paste_proposals_prepare,
+        session_paste_proposals_build,
+        session_duplicate_selected_prepare,
+        session_confirm_preview_plan,
+        session_commit_groups_order,
+        session_commit_groups_batch,
     );
     Ok(())
 }

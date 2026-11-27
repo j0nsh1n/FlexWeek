@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -17,12 +17,9 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from backend import clock as wall_clock
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
-    day_in_week,
     hand_move,
-    is_series,
     local_stamp,
     monday_of,
-    one_day_note,
     repeat_changes,
     stored_weeks_of,
     week_start_on,
@@ -74,10 +71,7 @@ from desktop.native.remind import (
     todays_starts,
 )
 from desktop.native.reuse import (
-    MAX_WEEK_BLOCKS,
-    capacity_problem,
     clear_stale_pins,
-    proposals_from_clipboard,
     settle_placements,
     week_label,
 )
@@ -85,7 +79,6 @@ from desktop.native.weekmodel import (
     WeekModel,
     build_week,
     homework_time_sentence,
-    moved_words,
 )
 
 WEEK_OVER = str(flexweek_engine.PLAN_WEEK_OVER)
@@ -1340,28 +1333,32 @@ class NativeSession(QObject):
         if self.busy:
             self._hand_waiting = (block_id, from_day, day, start, end)
             return
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None:
+        before = json.dumps(self.blocks)
+        if not flexweek_engine.has_block_json(before, block_id):
             return
         if not self.hand_move(block_id, from_day, day, start, end):
             return
-        origin = from_day if from_day in block["days"] else day
-        words = moved_words(block, origin, day, start, end, self.week_start)
-        # Material has no School hours, so its note points to Setup.
-        material = self.material_owns is not None and self.material_owns()
-        note = one_day_note(block, origin, not material, self.week_start)
-        if note:
-            words = f"{words} {note}"
+        words = flexweek_engine.place_block_words_json(
+            before, block_id, from_day, day, start, end, self.week_start
+        )
         self.save()
         self.hand_placed.emit(words)
 
     def _resume_pending(self, busy: bool) -> None:
-        if busy:
-            return
-        if self._hand_waiting is not None:
-            waiting, self._hand_waiting = self._hand_waiting, None
+        plan = json.loads(
+            flexweek_engine.resume_pending_json(
+                busy,
+                json.dumps(self._hand_waiting),
+                bool(self.setup_prefs),
+                self.setup_work_windows is not None,
+                bool(self.setup_week),
+            )
+        )
+        if plan["place"] is not None:
+            self._hand_waiting = None
+            waiting = tuple(plan["place"])
             QTimer.singleShot(0, lambda waiting=waiting: self.place_block(*waiting))
-        if self.setup_prefs or self.setup_work_windows is not None or self.setup_week:
+        if plan["flush_setup"]:
             # After this turn, so a save that just landed finishes putting its week in place first.
             QTimer.singleShot(0, self, self.flush_setup)
 
@@ -1499,17 +1496,20 @@ class NativeSession(QObject):
 
     def copy_last_week_fixed_rows(self, done: Callable[[list[dict] | None], None]) -> None:
         """Fixed times from last week for the empty-week copy sheet. Never parks a draft."""
-        nothing = "There's nothing to copy from last week yet."
-        if self.account is None:
+        decision = json.loads(
+            flexweek_engine.session_previous_week_for_copy(
+                self.account is not None, self.week_start, self.first_weekday
+            )
+        )
+        if decision["kind"] == "absent":
             done(None)
             return
-        try:
-            before = date.fromisoformat(self.week_start) - timedelta(days=7)
-            previous = self.shown_week_of(before.isoformat())
-        except ValueError:
-            self._say(nothing)
+        if decision["kind"] == "say":
+            self._say(decision["say"])
             done(None)
             return
+        previous = decision["week_start"]
+
         def offer(source: dict) -> None:
             rows = self._fixed_copy_rows(source)
             if not rows:
@@ -1531,7 +1531,7 @@ class NativeSession(QObject):
                 self._say(error.message)
                 done(None)
 
-        self.client.request("GET", f"/api/week?week_start={previous}", None, ok, fail)
+        self.client.request("GET", decision["path"], None, ok, fail)
 
     def date_problem(
         self,
@@ -1543,23 +1543,20 @@ class NativeSession(QObject):
         assignment_id: str | None = None,
     ) -> str | None:
         """Why this block cannot go on `to_iso`, in the same words as a hours drag, or None."""
-        try:
-            to_week = self.shown_week_of(to_iso)
-            from_week = self.shown_week_of(from_iso)
-            from_day = day_in_week(from_iso, from_week)
-            to_day = day_in_week(to_iso, to_week)
-        except ValueError:
+        raw = flexweek_engine.session_resolve_date_span(from_iso, to_iso, self.first_weekday)
+        if raw is None:
             return None
+        span = json.loads(raw)
         clock_now = clock_parts(self.now_ms())
         return flexweek_engine.date_problem_json(
             block_id,
             from_iso,
             to_iso,
-            from_week,
-            to_week,
-            from_day,
-            to_day,
-            json.dumps(self._block_on_week(block_id, from_week)),
+            span["from_week"],
+            span["to_week"],
+            span["from_day"],
+            span["to_day"],
+            json.dumps(self._block_on_week(block_id, span["from_week"])),
             start,
             duration_min,
             assignment_id,
@@ -1573,29 +1570,45 @@ class NativeSession(QObject):
         """Move a block to another calendar date. Same week keeps its time; another week is one save
         of both documents. A repeating block moves only the day it was dragged from. The open week
         does not change until the server accepts the write."""
-        if self.account is None or self.conflict or self.busy or self.pending_save is not None:
-            return False
-        try:
-            from_week = self.shown_week_of(from_iso)
-            to_week = self.shown_week_of(to_iso)
-        except ValueError:
-            return False
-        if from_iso == to_iso:
-            return True
+        account_id = None if self.account is None else self.account["id"]
+        plan = json.loads(
+            flexweek_engine.session_prepare_move_to_date(
+                json.dumps(
+                    {
+                        "account_id": account_id,
+                        "conflict": self.conflict,
+                        "busy": self.busy,
+                        "pending_save": self.pending_save is not None,
+                        "block_id": block_id,
+                        "from_iso": from_iso,
+                        "to_iso": to_iso,
+                        "first_weekday": self.first_weekday,
+                    }
+                )
+            )
+        )
+        if plan["kind"] == "stop":
+            return bool(plan["result"])
         problem = self.date_problem(block_id, from_iso, to_iso)
         if problem:
             self._say(problem)
             return False
-        key = f"move-to-date|{self.account['id']}|{block_id}|{from_iso}|{to_iso}"
+        from_week = plan["from_week"]
+        to_week = plan["to_week"]
+        key = plan["key"]
         operation_id = self._operation(key)
         source = self._week_local(from_week)
-        dest = source if to_week == from_week else self._week_local(to_week)
-        if source is not None and dest is not None:
+        dest = self._week_local(to_week)
+        needed = json.loads(
+            flexweek_engine.session_move_to_date_needed(
+                from_week, to_week, source is not None, dest is not None
+            )
+        )
+        if not needed:
             return self._commit_move_to_date(
                 block_id, from_iso, to_iso, from_week, to_week, source, dest, operation_id, key
             )
         ticket = self._begin()
-        needed = [week for week in dict.fromkeys((from_week, to_week)) if self._week_local(week) is None]
         fetched: dict[str, dict] = {}
 
         def fail(error: ApiError) -> None:
@@ -1606,21 +1619,18 @@ class NativeSession(QObject):
         def proceed() -> None:
             if not self._alive(ticket):
                 return
-            source_state = self._week_local(from_week) or fetched[from_week]
-            dest_state = (
-                source_state if to_week == from_week else (self._week_local(to_week) or fetched[to_week])
-            )
             launched = self._commit_move_to_date(
                 block_id,
                 from_iso,
                 to_iso,
                 from_week,
                 to_week,
-                source_state,
-                dest_state,
+                self._week_local(from_week),
+                self._week_local(to_week),
                 operation_id,
                 key,
                 ticket=ticket,
+                fetched=fetched,
             )
             if not launched and self._alive(ticket) and self.busy:
                 self._idle(ticket)
@@ -1657,12 +1667,8 @@ class NativeSession(QObject):
         }
 
     def _block_on_week(self, block_id: str, week_start: str) -> dict | None:
-        state = self._week_local(week_start)
-        if state is None:
-            return None
-        blocks = state["blocks"]
-        index = flexweek_engine.week_block_index([item["id"] for item in blocks], block_id)
-        return None if index is None else blocks[index]
+        raw = flexweek_engine.session_block_on_week(json.dumps(self._week_local(week_start)), block_id)
+        return None if raw is None else json.loads(raw)
 
     def _commit_move_to_date(
         self,
@@ -1671,58 +1677,42 @@ class NativeSession(QObject):
         to_iso: str,
         from_week: str,
         to_week: str,
-        source: dict,
-        dest: dict,
+        source: dict | None,
+        dest: dict | None,
         operation_id: str,
         attempt_key: str,
         ticket: int | None = None,
+        fetched: dict[str, dict] | None = None,
     ) -> bool:
-        from_day = day_in_week(from_iso, from_week)
-        to_day = day_in_week(to_iso, to_week)
         decision = json.loads(
-            flexweek_engine.relocate_json(
-                block_id,
-                from_day,
-                to_day,
-                from_week,
-                to_week,
-                json.dumps(source),
-                json.dumps(dest),
-                json.dumps(self.assignments),
-                week_label(to_week, self.today_iso()),
-                str(uuid4()),
+            flexweek_engine.session_build_move_to_date_batch(
+                json.dumps(
+                    {
+                        "block_id": block_id,
+                        "from_iso": from_iso,
+                        "to_iso": to_iso,
+                        "from_week": from_week,
+                        "to_week": to_week,
+                        "source_local": source,
+                        "dest_local": dest,
+                        "fetched": {} if fetched is None else fetched,
+                        "assignments": self.assignments,
+                        "today_iso": self.today_iso(),
+                        "operation_id": operation_id,
+                        "attempt_key": attempt_key,
+                    }
+                )
             )
         )
-        if decision["say"] is not None:
+        if decision["kind"] == "say":
             self._say(decision["say"])
             return False
-        source_after = decision["source_after"]
-        dest_after = decision["dest_after"]
-        writes = [_week_write(from_week, source_after, source["revision"])]
-        step_weeks = [
-            {
-                "week_start": from_week,
-                "before": deepcopy(source["blocks"]),
-                "after": deepcopy(source_after),
-            }
-        ]
-        if dest_after is not None:
-            writes.append(_week_write(to_week, dest_after, dest["revision"]))
-            step_weeks.append(
-                {
-                    "week_start": to_week,
-                    "before": deepcopy(dest["blocks"]),
-                    "after": deepcopy(dest_after),
-                }
-            )
-        title = decision["title"]
-        label = "moving " + title + " to another date"
         self._draft_command(
             "submit_batch",
-            pending_step={"label": label, "weeks": step_weeks, "assignments": [], "stale": False},
-            history_label=label,
-            move_attempt=attempt_key,
-            pending_save={"weeks": writes, "assignments": [], "operation_id": operation_id, "stay": True},
+            pending_step=decision["pending_step"],
+            history_label=decision["history_label"],
+            move_attempt=decision["move_attempt"],
+            pending_save=decision["pending_save"],
         )
         self._post_pending(ticket)
         return True
@@ -1769,9 +1759,8 @@ class NativeSession(QObject):
         unpinned = flexweek_engine.homework_unpin_json(json.dumps(self.blocks), assignment_id)
         if unpinned is None:
             return False
-        blocks = json.loads(unpinned)
-        title = (self.assignments.get(assignment_id) or {}).get("title") or "homework"
-        self._touch("unpinning " + title, blocks=blocks)
+        label = flexweek_engine.unpin_label_json(json.dumps(self.assignments), assignment_id)
+        self._touch(label, blocks=json.loads(unpinned))
         return True
 
     def delete_block(
@@ -1805,13 +1794,13 @@ class NativeSession(QObject):
         self._touch(decision["label"], blocks=decision["blocks"], repeats=decision["repeats"])
 
     def delete_selected(self) -> bool:
-        if self.selected_block_id is None:
+        raw = flexweek_engine.delete_selected_plan_json(
+            json.dumps(self.blocks), self.selected_block_id, self.selected_occurrence_day
+        )
+        if raw is None:
             return False
-        block = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)
-        if block is None:
-            return False
-        scope = "occurrence" if is_series(block) else "series"
-        self.delete_block(block["id"], scope=scope, day=self.selected_occurrence_day)
+        plan = json.loads(raw)
+        self.delete_block(plan["block_id"], scope=plan["scope"], day=plan["day"])
         return True
 
     def complete_homework(self, assignment_id: str, completed: bool = True) -> None:
@@ -2400,34 +2389,53 @@ class NativeSession(QObject):
         return True
 
     def copy_selected(self, scope: str = "auto") -> bool:
-        if not self.selected_block_id:
-            self._say("Select a block before copying it.")
-            return False
-        return self.copy_block(self.selected_block_id, self.selected_occurrence_day, scope)
-
-    def copy_day(self, day: int | None = None) -> bool:
-        if self.account is None:
-            return False
-        if day is None:
-            destination = self.paste_destination()
-            if destination is None:
-                self._say("Select a block or open Day view before copying a day from this week.")
-                return False
-            day = destination[0]
         decision = json.loads(
-            flexweek_engine.clipboard_day_json(
+            flexweek_engine.session_copy_selected(
+                self.account is not None,
                 json.dumps(self.blocks),
-                json.dumps(self.trace),
-                day,
-                self.week_start,
-                [str(uuid4()) for _ in self.blocks],
+                self.selected_block_id,
+                self.selected_occurrence_day,
+                scope,
+                str(uuid4()),
             )
         )
-        if decision["clipboard"] is None:
-            self._say(decision["words"])
+        if decision["kind"] == "say":
+            self._say(decision["say"])
+            return False
+        if decision["kind"] != "copied":
             return False
         self.clipboard = decision["clipboard"]
-        self._say(decision["words"])
+        self._say(decision["say"])
+        self.week_changed.emit()
+        return True
+
+    def copy_day(self, day: int | None = None) -> bool:
+        decision = json.loads(
+            flexweek_engine.session_copy_day(
+                json.dumps(
+                    {
+                        "signed_in": self.account is not None,
+                        "blocks": self.blocks,
+                        "trace": self.trace,
+                        "day": day,
+                        "selected_block_id": self.selected_block_id,
+                        "selected_occurrence_day": self.selected_occurrence_day,
+                        "planner_view": self.planner_view,
+                        "first_weekday": self.first_weekday,
+                        "selected_day": self.selected_day,
+                        "today_iso": wall_clock.today().isoformat(),
+                        "week_start": self.week_start,
+                    }
+                )
+            )
+        )
+        if decision["kind"] == "say":
+            self._say(decision["say"])
+            return False
+        if decision["kind"] != "copied":
+            return False
+        self.clipboard = decision["clipboard"]
+        self._say(decision["say"])
         self.week_changed.emit()
         return True
 
@@ -2438,56 +2446,76 @@ class NativeSession(QObject):
         *,
         today: date | None = None,
     ) -> list[dict] | None:
-        if self.account is None:
-            if self.clipboard is None:
-                self._say("Copy a block or day before pasting.")
-            return None
-        ready = json.loads(
-            flexweek_engine.paste_ready_json(
-                json.dumps(self.clipboard),
-                target_day,
-                target_start,
-                json.dumps(self.blocks),
-                json.dumps(self.trace),
-                self.selected_block_id,
-                self.selected_occurrence_day,
-                self.planner_view,
-                self.first_weekday,
-                self.selected_day,
-                (today or wall_clock.today()).isoformat(),
-                self.week_start,
+        today_iso = wall_clock.today().isoformat() if today is None else today.isoformat()
+        prep = json.loads(
+            flexweek_engine.session_paste_proposals_prepare(
+                json.dumps(
+                    {
+                        "signed_in": self.account is not None,
+                        "clipboard": self.clipboard,
+                        "target_day": target_day,
+                        "target_start": target_start,
+                        "blocks": self.blocks,
+                        "trace": self.trace,
+                        "selected_block_id": self.selected_block_id,
+                        "selected_occurrence_day": self.selected_occurrence_day,
+                        "planner_view": self.planner_view,
+                        "first_weekday": self.first_weekday,
+                        "selected_day": self.selected_day,
+                        "today_iso": today_iso,
+                        "week_start": self.week_start,
+                        "has_assignments": bool(self.assignments),
+                    }
+                )
             )
         )
-        if ready["words"] is not None:
-            self._say(ready["words"])
+        if prep["kind"] == "say":
+            self._say(prep["say"])
             return None
-        # No homework, nothing to count.
-        minutes = self.homework_minutes() if self.assignments else {}
-        available = {
-            item_id: int(minutes.get(item_id, {}).get("uncovered_min", 0)) for item_id in self.assignments
-        }
-        return proposals_from_clipboard(
-            self.clipboard["items"],
-            kind=self.clipboard["kind"],
-            week_start=self.week_start,
-            target_day=ready["day"],
-            target_start=ready["start"],
-            assignments=self.assignments,
-            available=available,
+        if prep["kind"] != "ready":
+            return None
+        minutes = self.homework_minutes() if prep["needs_minutes"] else {}
+        return json.loads(
+            flexweek_engine.session_paste_proposals_build(
+                json.dumps(self.clipboard),
+                self.week_start,
+                prep["day"],
+                prep["start"],
+                json.dumps(self.assignments),
+                json.dumps(minutes),
+            )
         )
 
     def duplicate_selected(self, scope: str = "auto") -> list[dict] | None:
-        source_id = self.selected_block_id
-        day = self.selected_occurrence_day
-        if source_id is None:
-            self._say("Select a block before duplicating it.")
+        prep = json.loads(
+            flexweek_engine.session_duplicate_selected_prepare(
+                self.account is not None,
+                json.dumps(self.blocks),
+                self.selected_block_id,
+                self.selected_occurrence_day,
+                scope,
+                str(uuid4()),
+                bool(self.assignments),
+            )
+        )
+        if prep["kind"] == "say":
+            self._say(prep["say"])
             return None
-        prior = deepcopy(self.clipboard)
-        # Nothing is left copied, so nothing says so.
-        if not self.copy_block(source_id, day, scope, say=False):
+        if prep["kind"] != "ready":
             return None
-        rows = self.paste_proposals(day if day is not None else 0, None)
-        self.clipboard = prior
+        if prep["announce"] is not None:
+            self._say(prep["announce"])
+        minutes = self.homework_minutes() if prep["needs_minutes"] else {}
+        rows = json.loads(
+            flexweek_engine.session_paste_proposals_build(
+                json.dumps(prep["clipboard"]),
+                self.week_start,
+                prep["target_day"],
+                None,
+                json.dumps(self.assignments),
+                json.dumps(minutes),
+            )
+        )
         self.week_changed.emit()
         return rows
 
@@ -2504,35 +2532,43 @@ class NativeSession(QObject):
         said: str | None = None,
     ) -> bool:
         """Add the checked rows. `said` is what the status line says once they are saved."""
-        if self.account is None or self.conflict:
+        decision = json.loads(
+            flexweek_engine.session_confirm_preview_plan(
+                json.dumps(
+                    {
+                        "signed_in": self.account is not None,
+                        "conflict": self.conflict,
+                        "rows": rows,
+                        "week_start": self.week_start,
+                        "blocks": self.blocks,
+                        "today_iso": self.today_iso(),
+                        "operation_id": operation_id,
+                        "attempt_key": attempt_key,
+                        "attempts": self.client.view("drafts.attempts"),
+                        "fresh_operation_id": str(uuid4()),
+                    }
+                )
+            )
+        )
+        if decision["kind"] == "absent":
             return False
-        # A refused selection must not reserve an attempt: the id is only kept once the rows are accepted.
-        held = self._draft_command("attempt", key=attempt_key)["id"] if attempt_key else None
-        op_id = operation_id or held or str(uuid4())
-        decision = json.loads(flexweek_engine.preview_groups_json(json.dumps(rows), op_id))
-        if decision["say"] is not None:
+        if decision["record_attempt"]:
+            self._draft_command("attempt", key=attempt_key, new=decision["op_id"])
+            self._draft_command("preview_attempt", key=attempt_key)
+        if decision["kind"] == "say":
             self._say(decision["say"])
             return False
-        by_week = decision["by_week"]
-        if attempt_key:
-            self._draft_command("attempt", key=attempt_key, new=op_id)
-            self._draft_command("preview_attempt", key=attempt_key)
-        if list(by_week) == [self.week_start]:
-            added = by_week[self.week_start]
-            week_words = week_label(self.week_start, self.today_iso())
-            problem = capacity_problem(len(self.blocks), len(added), week_words)
-            if problem:
-                self._say(problem)
-                return False
-            self._touch(label, blocks=[*self.blocks, *added])
-            self.save(snapshot_label=snapshot_label, operation_id=op_id, status=said)
+        if decision["kind"] == "single_week":
+            self._touch(label, blocks=decision["blocks"])
+            self.save(snapshot_label=snapshot_label, operation_id=decision["op_id"], status=said)
             return True
         self._commit_groups(
-            by_week,
+            decision["by_week"],
             label=label,
             snapshot_label=snapshot_label,
-            operation_id=op_id,
+            operation_id=decision["op_id"],
             said=said,
+            fetch_order=decision["fetch_order"],
         )
         return True
 
@@ -2544,8 +2580,13 @@ class NativeSession(QObject):
         snapshot_label: str | None,
         operation_id: str,
         said: str | None = None,
+        fetch_order: list[str] | None = None,
     ) -> None:
-        needed = [week for week in by_week if week != self.week_start]
+        pending = (
+            list(fetch_order)
+            if fetch_order is not None
+            else json.loads(flexweek_engine.session_commit_groups_order(json.dumps(by_week), self.week_start))
+        )
         ticket = self._begin()
         fetched: dict[str, dict] = {}
 
@@ -2555,38 +2596,43 @@ class NativeSession(QObject):
         def proceed() -> None:
             if not self._alive(ticket):
                 return
-            writes = []
-            current_after = None
-            for week, added in by_week.items():
-                if week == self.week_start:
-                    blocks = list(self.blocks) + added
-                    revision = self.revision
-                    current_after = blocks
-                else:
-                    data = fetched[week]
-                    blocks = list(data["blocks"]) + added
-                    revision = data["revision"]
-                if len(blocks) > MAX_WEEK_BLOCKS:
-                    if self._idle(ticket):
-                        week_words = week_label(week, self.today_iso())
-                        self._say(capacity_problem(len(blocks) - len(added), len(added), week_words))
-                    return
-                writes.append(_week_write(week, blocks, revision))
-            payload: dict = {"weeks": writes, "assignments": [], "operation_id": operation_id}
-            if snapshot_label:
-                payload["snapshot_label"] = snapshot_label
+            decision = json.loads(
+                flexweek_engine.session_commit_groups_batch(
+                    json.dumps(
+                        {
+                            "by_week": by_week,
+                            "week_start": self.week_start,
+                            "current_blocks": self.blocks,
+                            "current_revision": self.revision,
+                            "fetched": fetched,
+                            "today_iso": self.today_iso(),
+                            "label": label,
+                            "snapshot_label": snapshot_label,
+                            "operation_id": operation_id,
+                            "said": said,
+                        }
+                    )
+                )
+            )
+            if decision["kind"] == "say":
+                if self._idle(ticket):
+                    self._say(decision["say"])
+                return
             self._draft_command(
-                "submit_batch", pending_save=payload, blocks=current_after,
-                history_label=label if current_after is not None else None,
-                capture_step=current_after is not None, save_status=said,
+                "submit_batch",
+                pending_save=decision["pending_save"],
+                blocks=decision["blocks"],
+                history_label=decision["history_label"],
+                capture_step=decision["capture_step"],
+                save_status=decision["save_status"],
             )
             self._post_pending(ticket)
 
         def fetch_next() -> None:
-            if not needed:
+            if not pending:
                 proceed()
                 return
-            week = needed.pop()
+            week = pending.pop(0)
 
             def ok(data: dict) -> None:
                 if not self._alive(ticket):

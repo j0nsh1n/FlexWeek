@@ -7,11 +7,11 @@
 //! assignments up, writes what is decided here, then settles the week (`_touch`), saves, and keeps
 //! history and attempts — none of which move.
 
-use flexweek_engine::desk::{calendar, clipboard, grid, planning, reuse};
+use flexweek_engine::desk::{calendar, clipboard, datetext, grid, planning, reuse};
 use flexweek_engine::shown;
 use flexweek_engine::stored::{py_str, truthy, type_name};
-use flexweek_engine::{EngineError, ErrorKind};
-use serde_json::{Value, json};
+use flexweek_engine::{EngineError, ErrorKind, time};
+use serde_json::{Map, Value, json};
 
 /// What the empty-week copy sheet says when last week holds nothing worth copying.
 pub const NOTHING_TO_COPY: &str = "There's nothing to copy from last week yet.";
@@ -26,6 +26,13 @@ pub const NOT_ON_THAT_DATE: &str = "That block isn't on that date.";
 
 /// What choosing a day without a block on screen says.
 pub const SELECT_BEFORE_COPYING: &str = "Select a block before copying it.";
+
+/// What duplicating without a selected block says.
+pub const SELECT_BEFORE_DUPLICATING: &str = "Select a block before duplicating it.";
+
+/// What copying a day with nowhere chosen says.
+pub const CHOOSE_BEFORE_COPYING_DAY: &str =
+    "Select a block or open Day view before copying a day from this week.";
 
 /// What pasting with an empty clipboard says.
 pub const COPY_BEFORE_PASTING: &str = "Copy a block or day before pasting.";
@@ -926,5 +933,872 @@ pub fn preview_groups(all_rows: &Value, operation_id: &str) -> Result<PreviewGro
     }
     Ok(PreviewGroups::Groups {
         by_week: Value::Object(by_week),
+    })
+}
+
+/// Which week `copy_last_week_fixed_rows` reads, or why it stops.
+#[derive(Debug, PartialEq)]
+pub enum PreviousWeekCopy {
+    Absent,
+    Say(&'static str),
+    Ready { week_start: String, path: String },
+}
+
+impl PreviousWeekCopy {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Absent => json!({ "kind": "absent" }),
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Ready { week_start, path } => json!({
+                "kind": "ready",
+                "week_start": week_start,
+                "path": path,
+            }),
+        }
+    }
+}
+
+/// The shown week seven days before `week_start`, or `NOTHING_TO_COPY` when `week_start` is not a
+/// valid date. Signed-out sessions return `Absent`.
+pub fn previous_week_for_copy(
+    signed_in: bool,
+    week_start: &str,
+    first_weekday: u32,
+) -> PreviousWeekCopy {
+    if !signed_in {
+        return PreviousWeekCopy::Absent;
+    }
+    let Ok(before) = grid::date_for_day(week_start, &Value::from(-7)) else {
+        return PreviousWeekCopy::Say(NOTHING_TO_COPY);
+    };
+    let Ok(previous) = time::week_start_on(&before, first_weekday) else {
+        return PreviousWeekCopy::Say(NOTHING_TO_COPY);
+    };
+    PreviousWeekCopy::Ready {
+        path: format!("/api/week?week_start={previous}"),
+        week_start: previous,
+    }
+}
+
+/// Look up `block_id` inside one local week state (`{"blocks": [...]}`), or `None` when the week
+/// or the block is absent.
+pub fn block_on_week(state: Option<&Value>, block_id: &str) -> Result<Option<Value>, EngineError> {
+    let Some(state) = state.filter(|value| !value.is_null()) else {
+        return Ok(None);
+    };
+    let blocks = rows(get(state, "blocks")?.unwrap_or(&Value::Null), "blocks")?;
+    Ok(find_block(blocks, block_id)?.cloned())
+}
+
+/// Resolved weeks and day indices for a `(from_iso, to_iso)` drag.
+#[derive(Debug, PartialEq)]
+pub struct DateSpan {
+    pub from_week: String,
+    pub to_week: String,
+    pub from_day: i64,
+    pub to_day: i64,
+}
+
+impl DateSpan {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "from_week": self.from_week,
+            "to_week": self.to_week,
+            "from_day": self.from_day,
+            "to_day": self.to_day,
+        })
+    }
+}
+
+/// Resolve both ends of a date drag against `first_weekday`, or `None` when either date is invalid.
+pub fn resolve_date_span(from_iso: &str, to_iso: &str, first_weekday: u32) -> Option<DateSpan> {
+    let to_week = time::week_start_on(to_iso, first_weekday).ok()?;
+    let from_week = time::week_start_on(from_iso, first_weekday).ok()?;
+    let from_day = grid::due_day_in_week(from_iso, &from_week).ok()?;
+    let to_day = grid::due_day_in_week(to_iso, &to_week).ok()?;
+    Some(DateSpan {
+        from_week,
+        to_week,
+        from_day,
+        to_day,
+    })
+}
+
+/// Guard inputs for `move_to_date`.
+pub struct MoveToDateInput<'a> {
+    pub account_id: Option<i64>,
+    pub conflict: bool,
+    pub busy: bool,
+    pub pending_save: bool,
+    pub block_id: &'a str,
+    pub from_iso: &'a str,
+    pub to_iso: &'a str,
+    pub first_weekday: u32,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum MoveToDatePlan {
+    Stop {
+        result: bool,
+    },
+    Ready {
+        from_week: String,
+        to_week: String,
+        key: String,
+    },
+}
+
+impl MoveToDatePlan {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Stop { result } => json!({ "kind": "stop", "result": result }),
+            Self::Ready {
+                from_week,
+                to_week,
+                key,
+            } => json!({
+                "kind": "ready",
+                "from_week": from_week,
+                "to_week": to_week,
+                "key": key,
+            }),
+        }
+    }
+}
+
+/// Validate guards, resolve both weeks and assemble the retry key for `move_to_date`.
+pub fn prepare_move_to_date(input: &MoveToDateInput) -> MoveToDatePlan {
+    let Some(account_id) = input.account_id else {
+        return MoveToDatePlan::Stop { result: false };
+    };
+    if input.conflict || input.busy || input.pending_save {
+        return MoveToDatePlan::Stop { result: false };
+    }
+    let Ok(from_week) = time::week_start_on(input.from_iso, input.first_weekday) else {
+        return MoveToDatePlan::Stop { result: false };
+    };
+    let Ok(to_week) = time::week_start_on(input.to_iso, input.first_weekday) else {
+        return MoveToDatePlan::Stop { result: false };
+    };
+    if input.from_iso == input.to_iso {
+        return MoveToDatePlan::Stop { result: true };
+    }
+    let key = format!(
+        "move-to-date|{account_id}|{}|{}|{}",
+        input.block_id, input.from_iso, input.to_iso
+    );
+    MoveToDatePlan::Ready {
+        from_week,
+        to_week,
+        key,
+    }
+}
+
+/// Weeks that `move_to_date` still needs to GET, deduplicated in `(from_week, to_week)` order.
+pub fn move_to_date_needed(
+    from_week: &str,
+    to_week: &str,
+    has_source: bool,
+    has_dest: bool,
+) -> Vec<String> {
+    let mut needed = Vec::new();
+    if !has_source {
+        needed.push(from_week.to_string());
+    }
+    if to_week != from_week && !has_dest {
+        needed.push(to_week.to_string());
+    }
+    needed
+}
+
+/// Inputs for `_commit_move_to_date`: local/fetched source and destination week states, plus the
+/// metadata needed to build the `/api/changes` batch and Undo step.
+pub struct MoveToDateBatchInput<'a> {
+    pub block_id: &'a str,
+    pub from_iso: &'a str,
+    pub to_iso: &'a str,
+    pub from_week: &'a str,
+    pub to_week: &'a str,
+    pub source_local: Option<&'a Value>,
+    pub dest_local: Option<&'a Value>,
+    pub fetched: &'a Map<String, Value>,
+    pub assignments: &'a Value,
+    pub today_iso: &'a str,
+    pub operation_id: &'a str,
+    pub attempt_key: &'a str,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum MoveToDateBatch {
+    Say(String),
+    Submit {
+        pending_step: Value,
+        history_label: String,
+        move_attempt: String,
+        pending_save: Value,
+    },
+}
+
+impl MoveToDateBatch {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Submit {
+                pending_step,
+                history_label,
+                move_attempt,
+                pending_save,
+            } => json!({
+                "kind": "submit",
+                "pending_step": pending_step,
+                "history_label": history_label,
+                "move_attempt": move_attempt,
+                "pending_save": pending_save,
+            }),
+        }
+    }
+}
+
+/// Relocate one block between dates and build the `submit_batch` payload (`pending_step`,
+/// `history_label`, `move_attempt`, `pending_save`), or return refusal words.
+pub fn build_move_to_date_batch(
+    input: &MoveToDateBatchInput,
+    new_id: &str,
+) -> Result<MoveToDateBatch, EngineError> {
+    let source = input
+        .source_local
+        .filter(|value| !value.is_null())
+        .or_else(|| input.fetched.get(input.from_week))
+        .ok_or_else(|| EngineError::key(input.from_week))?;
+    let dest = if input.to_week == input.from_week {
+        None
+    } else {
+        Some(
+            input
+                .dest_local
+                .filter(|value| !value.is_null())
+                .or_else(|| input.fetched.get(input.to_week))
+                .ok_or_else(|| EngineError::key(input.to_week))?,
+        )
+    };
+    let from_day = grid::due_day_in_week(input.from_iso, input.from_week)?;
+    let to_day = grid::due_day_in_week(input.to_iso, input.to_week)?;
+    let today = datetext::day_of(input.today_iso)?;
+    let dest_words = reuse::week_label(input.to_week, today)?;
+    let reloc_input = RelocationInput {
+        block_id: input.block_id,
+        from_day,
+        to_day,
+        from_week: input.from_week,
+        to_week: input.to_week,
+        source,
+        dest,
+        assignments: input.assignments,
+        dest_words: &dest_words,
+    };
+    let mut ids = std::iter::once(new_id.to_string());
+    let (source_after, dest_after, title) = match relocate(&reloc_input, &mut ids)? {
+        Relocation::Say(words) => return Ok(MoveToDateBatch::Say(words)),
+        Relocation::Apply {
+            source_after,
+            dest_after,
+            title,
+        } => (source_after, dest_after, title),
+    };
+    let source_rev = get(source, "revision")?.ok_or_else(|| EngineError::key("revision"))?;
+    let source_blocks = rows(get(source, "blocks")?.unwrap_or(&Value::Null), "blocks")?;
+    let mut writes = vec![crate::session::changes::week_write(
+        input.from_week,
+        &source_after,
+        source_rev,
+    )?];
+    let mut step_weeks = vec![json!({
+        "week_start": input.from_week,
+        "before": source_blocks,
+        "after": source_after,
+    })];
+    if let Some(dest_after) = dest_after {
+        let dest_state = dest.ok_or_else(|| EngineError::key(input.to_week))?;
+        let dest_rev = get(dest_state, "revision")?.ok_or_else(|| EngineError::key("revision"))?;
+        let dest_blocks = rows(get(dest_state, "blocks")?.unwrap_or(&Value::Null), "blocks")?;
+        writes.push(crate::session::changes::week_write(
+            input.to_week,
+            &dest_after,
+            dest_rev,
+        )?);
+        step_weeks.push(json!({
+            "week_start": input.to_week,
+            "before": dest_blocks,
+            "after": dest_after,
+        }));
+    }
+    let label = format!("moving {title} to another date");
+    let pending_step = json!({
+        "label": label,
+        "weeks": step_weeks,
+        "assignments": [],
+        "stale": false,
+    });
+    let pending_save = json!({
+        "weeks": writes,
+        "assignments": [],
+        "operation_id": input.operation_id,
+        "stay": true,
+    });
+    Ok(MoveToDateBatch::Submit {
+        pending_step,
+        history_label: label,
+        move_attempt: input.attempt_key.to_string(),
+        pending_save,
+    })
+}
+
+/// Decision for `copy_selected`.
+#[derive(Debug, PartialEq)]
+pub enum CopySelectedPlan {
+    Absent,
+    Say(String),
+    Copied { clipboard: Value, say: String },
+}
+
+impl CopySelectedPlan {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Absent => json!({ "kind": "absent" }),
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Copied { clipboard, say } => json!({
+                "kind": "copied",
+                "clipboard": clipboard,
+                "say": say,
+            }),
+        }
+    }
+}
+
+/// Copy the selected block into the clipboard, or refuse when nothing is selected.
+pub fn copy_selected_plan(
+    signed_in: bool,
+    blocks: &Value,
+    selected_block_id: Option<&str>,
+    selected_occurrence_day: Option<i64>,
+    scope: &str,
+    new_id: &str,
+) -> Result<CopySelectedPlan, EngineError> {
+    let Some(block_id) = selected_block_id.filter(|id| !id.is_empty()) else {
+        return Ok(CopySelectedPlan::Say(SELECT_BEFORE_COPYING.to_string()));
+    };
+    if !signed_in {
+        return Ok(CopySelectedPlan::Absent);
+    }
+    let copied = clipboard_block(
+        blocks,
+        Some(block_id),
+        selected_occurrence_day,
+        scope,
+        new_id,
+    )?;
+    match copied.clipboard {
+        Some(clipboard) => Ok(CopySelectedPlan::Copied {
+            clipboard,
+            say: copied.words.unwrap_or_default(),
+        }),
+        None => Ok(CopySelectedPlan::Absent),
+    }
+}
+
+/// Decision for `copy_day`.
+#[derive(Debug, PartialEq)]
+pub enum CopyDayPlan {
+    Absent,
+    Say(String),
+    Copied { clipboard: Value, say: String },
+}
+
+impl CopyDayPlan {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Absent => json!({ "kind": "absent" }),
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Copied { clipboard, say } => json!({
+                "kind": "copied",
+                "clipboard": clipboard,
+                "say": say,
+            }),
+        }
+    }
+}
+
+/// Copy one day's items into the clipboard, resolving the destination day when `day` is omitted.
+pub fn copy_day_plan(
+    signed_in: bool,
+    blocks: &Value,
+    trace: &Value,
+    day: Option<i64>,
+    selection: &PasteSelection,
+    week_start: &str,
+    ids: &mut impl Iterator<Item = String>,
+) -> Result<CopyDayPlan, EngineError> {
+    if !signed_in {
+        return Ok(CopyDayPlan::Absent);
+    }
+    let chosen_day = match day {
+        Some(day) => Some(day),
+        None => match paste_destination(blocks, trace, selection, week_start)? {
+            None => return Ok(CopyDayPlan::Say(CHOOSE_BEFORE_COPYING_DAY.to_string())),
+            Some(destination) => destination.day,
+        },
+    };
+    match copy_day_items(blocks, trace, chosen_day, week_start, ids)? {
+        CopyDay::Say(words) => Ok(CopyDayPlan::Say(words)),
+        CopyDay::Copied { clipboard, words } => Ok(CopyDayPlan::Copied {
+            clipboard,
+            say: words,
+        }),
+    }
+}
+
+/// Guard and destination resolution for `paste_proposals`.
+#[derive(Debug, PartialEq)]
+pub enum PasteProposalsPrep {
+    Absent,
+    Say(String),
+    Ready {
+        day: i64,
+        start: Option<String>,
+        needs_minutes: bool,
+    },
+}
+
+impl PasteProposalsPrep {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Absent => json!({ "kind": "absent" }),
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Ready {
+                day,
+                start,
+                needs_minutes,
+            } => json!({
+                "kind": "ready",
+                "day": day,
+                "start": start,
+                "needs_minutes": needs_minutes,
+            }),
+        }
+    }
+}
+
+/// Check sign-in, clipboard and paste destination; tell the window whether it needs to compute
+/// homework minutes (skipped when there is no homework).
+#[allow(clippy::too_many_arguments)]
+pub fn paste_proposals_prepare(
+    signed_in: bool,
+    clipboard: Option<&Value>,
+    target_day: Option<i64>,
+    target_start: Option<&str>,
+    blocks: &Value,
+    trace: &Value,
+    selection: &PasteSelection,
+    week_start: &str,
+    has_assignments: bool,
+) -> Result<PasteProposalsPrep, EngineError> {
+    let clipboard = clipboard.filter(|value| !value.is_null());
+    if !signed_in {
+        return Ok(if clipboard.is_none() {
+            PasteProposalsPrep::Say(COPY_BEFORE_PASTING.to_string())
+        } else {
+            PasteProposalsPrep::Absent
+        });
+    }
+    match paste_ready(
+        clipboard,
+        target_day,
+        target_start,
+        blocks,
+        trace,
+        selection,
+        week_start,
+    )? {
+        PasteReady::Say(words) => Ok(PasteProposalsPrep::Say(words)),
+        PasteReady::Ready { day, start } => Ok(PasteProposalsPrep::Ready {
+            day,
+            start,
+            needs_minutes: has_assignments,
+        }),
+    }
+}
+
+/// Build the paste/duplicate proposal rows from `clipboard` and the per-assignment uncovered
+/// minutes map.
+pub fn paste_proposals_build(
+    clipboard: &Value,
+    week_start: &str,
+    target_day: i64,
+    target_start: Option<&str>,
+    assignments: &Value,
+    minutes: &Value,
+) -> Result<Vec<Value>, EngineError> {
+    let assignment_map = assignments.as_object().ok_or_else(|| EngineError {
+        kind: ErrorKind::Type,
+        message: "the assignments are an object".to_string(),
+    })?;
+    let minutes_map = minutes.as_object().ok_or_else(|| EngineError {
+        kind: ErrorKind::Type,
+        message: "the homework minutes are an object".to_string(),
+    })?;
+    let mut available = Map::new();
+    for item_id in assignment_map.keys() {
+        let uncovered = match minutes_map
+            .get(item_id)
+            .and_then(Value::as_object)
+            .and_then(|entry| entry.get("uncovered_min"))
+        {
+            Some(value) => day_number(value)?,
+            None => 0,
+        };
+        available.insert(item_id.clone(), Value::from(uncovered));
+    }
+    let items = get(clipboard, "items")?.ok_or_else(|| EngineError::key("items"))?;
+    let kind = get(clipboard, "kind")?
+        .and_then(Value::as_str)
+        .ok_or_else(|| EngineError::key("kind"))?;
+    clipboard::proposals_from_clipboard(
+        items,
+        kind,
+        week_start,
+        target_day,
+        target_start,
+        assignments,
+        &Value::Object(available),
+    )
+}
+
+/// Decision for `duplicate_selected`: prepares a temporary copy without touching the session's
+/// clipboard and without announcing "Copied ...".
+#[derive(Debug, PartialEq)]
+pub enum DuplicatePrep {
+    Absent,
+    Say(String),
+    Ready {
+        clipboard: Value,
+        target_day: i64,
+        announce: Option<String>,
+        needs_minutes: bool,
+    },
+}
+
+impl DuplicatePrep {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Absent => json!({ "kind": "absent" }),
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Ready {
+                clipboard,
+                target_day,
+                announce,
+                needs_minutes,
+            } => json!({
+                "kind": "ready",
+                "clipboard": clipboard,
+                "target_day": target_day,
+                "announce": announce,
+                "needs_minutes": needs_minutes,
+            }),
+        }
+    }
+}
+
+/// Prepare a duplicate preview for the selected block. Never leaves anything on the clipboard and
+/// never announces that anything was copied.
+pub fn duplicate_selected_prepare(
+    signed_in: bool,
+    blocks: &Value,
+    selected_block_id: Option<&str>,
+    selected_occurrence_day: Option<i64>,
+    scope: &str,
+    new_id: &str,
+    has_assignments: bool,
+) -> Result<DuplicatePrep, EngineError> {
+    let Some(block_id) = selected_block_id else {
+        return Ok(DuplicatePrep::Say(SELECT_BEFORE_DUPLICATING.to_string()));
+    };
+    if !signed_in {
+        return Ok(DuplicatePrep::Absent);
+    }
+    let copied = clipboard_block(
+        blocks,
+        Some(block_id),
+        selected_occurrence_day,
+        scope,
+        new_id,
+    )?;
+    let Some(clipboard) = copied.clipboard else {
+        return Ok(DuplicatePrep::Absent);
+    };
+    // Nothing is left copied, so nothing says so.
+    let announce: Option<String> = None;
+    Ok(DuplicatePrep::Ready {
+        clipboard,
+        target_day: selected_occurrence_day.unwrap_or(0),
+        announce,
+        needs_minutes: has_assignments,
+    })
+}
+
+/// The GET order `_commit_groups` uses for remote weeks: every week in `by_week` other than
+/// `week_start`, reversed (matching Python's `needed.pop()`).
+pub fn commit_groups_order(by_week: &Map<String, Value>, week_start: &str) -> Vec<String> {
+    by_week
+        .keys()
+        .filter(|week| week.as_str() != week_start)
+        .rev()
+        .cloned()
+        .collect()
+}
+
+/// Inputs for `confirm_preview`.
+pub struct ConfirmPreviewInput<'a> {
+    pub signed_in: bool,
+    pub conflict: bool,
+    pub rows: &'a Value,
+    pub week_start: &'a str,
+    pub blocks: &'a Value,
+    pub today_iso: &'a str,
+    pub operation_id: Option<&'a str>,
+    pub attempt_key: Option<&'a str>,
+    pub attempts: &'a Map<String, Value>,
+    pub fresh_operation_id: &'a str,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ConfirmPreviewPlan {
+    Absent,
+    Say {
+        say: String,
+        record_attempt: bool,
+        op_id: String,
+    },
+    SingleWeek {
+        op_id: String,
+        record_attempt: bool,
+        blocks: Vec<Value>,
+    },
+    MultiWeek {
+        op_id: String,
+        record_attempt: bool,
+        by_week: Value,
+        fetch_order: Vec<String>,
+    },
+}
+
+impl ConfirmPreviewPlan {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Absent => json!({ "kind": "absent" }),
+            Self::Say {
+                say,
+                record_attempt,
+                op_id,
+            } => json!({
+                "kind": "say",
+                "say": say,
+                "record_attempt": record_attempt,
+                "op_id": op_id,
+            }),
+            Self::SingleWeek {
+                op_id,
+                record_attempt,
+                blocks,
+            } => json!({
+                "kind": "single_week",
+                "op_id": op_id,
+                "record_attempt": record_attempt,
+                "blocks": blocks,
+            }),
+            Self::MultiWeek {
+                op_id,
+                record_attempt,
+                by_week,
+                fetch_order,
+            } => json!({
+                "kind": "multi_week",
+                "op_id": op_id,
+                "record_attempt": record_attempt,
+                "by_week": by_week,
+                "fetch_order": fetch_order,
+            }),
+        }
+    }
+}
+
+/// Decide how `confirm_preview` saves checked preview rows: single-week fast path with capacity
+/// check, multi-week grouped commit with fetch order, or refusal words. A refused selection never
+/// reserves an attempt.
+pub fn confirm_preview_plan(
+    input: &ConfirmPreviewInput,
+) -> Result<ConfirmPreviewPlan, EngineError> {
+    if !input.signed_in || input.conflict {
+        return Ok(ConfirmPreviewPlan::Absent);
+    }
+    let attempt_key = input.attempt_key.filter(|key| !key.is_empty());
+    let held = attempt_key
+        .and_then(|key| input.attempts.get(key))
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty());
+    let op_id = input
+        .operation_id
+        .filter(|id| !id.is_empty())
+        .or(held)
+        .unwrap_or(input.fresh_operation_id)
+        .to_string();
+    let by_week = match preview_groups(input.rows, &op_id)? {
+        PreviewGroups::Say(words) => {
+            return Ok(ConfirmPreviewPlan::Say {
+                say: words,
+                record_attempt: false,
+                op_id,
+            });
+        }
+        PreviewGroups::Groups { by_week } => by_week,
+    };
+    let record_attempt = attempt_key.is_some();
+    let by_week_map = by_week.as_object().ok_or_else(|| EngineError {
+        kind: ErrorKind::Type,
+        message: "grouped rows are an object".to_string(),
+    })?;
+    if by_week_map.len() == 1
+        && let Some(added_value) = by_week_map.get(input.week_start)
+    {
+        let existing = rows(input.blocks, "blocks")?;
+        let added = rows(added_value, "blocks")?;
+        let today = datetext::day_of(input.today_iso)?;
+        let week_words = reuse::week_label(input.week_start, today)?;
+        let problem =
+            planning::capacity_problem(existing.len() as i64, added.len() as i64, &week_words);
+        if !problem.is_empty() {
+            return Ok(ConfirmPreviewPlan::Say {
+                say: problem,
+                record_attempt,
+                op_id,
+            });
+        }
+        let mut combined = existing.clone();
+        combined.extend(added.iter().cloned());
+        return Ok(ConfirmPreviewPlan::SingleWeek {
+            op_id,
+            record_attempt,
+            blocks: combined,
+        });
+    }
+    let fetch_order = commit_groups_order(by_week_map, input.week_start);
+    Ok(ConfirmPreviewPlan::MultiWeek {
+        op_id,
+        record_attempt,
+        by_week,
+        fetch_order,
+    })
+}
+
+/// Inputs for `_commit_groups` after every remote week has been fetched.
+pub struct CommitGroupsBatchInput<'a> {
+    pub by_week: &'a Map<String, Value>,
+    pub week_start: &'a str,
+    pub current_blocks: &'a [Value],
+    pub current_revision: &'a Value,
+    pub fetched: &'a Map<String, Value>,
+    pub today_iso: &'a str,
+    pub label: &'a str,
+    pub snapshot_label: Option<&'a str>,
+    pub operation_id: &'a str,
+    pub said: Option<&'a str>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CommitGroupsBatch {
+    Say(String),
+    Submit {
+        pending_save: Value,
+        blocks: Option<Vec<Value>>,
+        history_label: Option<String>,
+        capture_step: bool,
+        save_status: Option<String>,
+    },
+}
+
+impl CommitGroupsBatch {
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Say(words) => json!({ "kind": "say", "say": words }),
+            Self::Submit {
+                pending_save,
+                blocks,
+                history_label,
+                capture_step,
+                save_status,
+            } => json!({
+                "kind": "submit",
+                "pending_save": pending_save,
+                "blocks": blocks,
+                "history_label": history_label,
+                "capture_step": capture_step,
+                "save_status": save_status,
+            }),
+        }
+    }
+}
+
+/// Check per-week block capacity and build the `submit_batch` arguments for `_commit_groups`.
+pub fn commit_groups_batch(
+    input: &CommitGroupsBatchInput,
+) -> Result<CommitGroupsBatch, EngineError> {
+    let mut writes = Vec::with_capacity(input.by_week.len());
+    let mut current_after: Option<Vec<Value>> = None;
+    let today = datetext::day_of(input.today_iso)?;
+    for (week, added_value) in input.by_week {
+        let added = rows(added_value, "blocks")?;
+        let (blocks, revision) = if week == input.week_start {
+            let mut combined = input.current_blocks.to_vec();
+            combined.extend(added.iter().cloned());
+            current_after = Some(combined.clone());
+            (combined, input.current_revision)
+        } else {
+            let data = input
+                .fetched
+                .get(week)
+                .ok_or_else(|| EngineError::key(week))?;
+            let existing = rows(get(data, "blocks")?.unwrap_or(&Value::Null), "blocks")?;
+            let mut combined = existing.clone();
+            combined.extend(added.iter().cloned());
+            let revision = get(data, "revision")?.ok_or_else(|| EngineError::key("revision"))?;
+            (combined, revision)
+        };
+        if blocks.len() as i64 > reuse::MAX_WEEK_BLOCKS {
+            let week_words = reuse::week_label(week, today)?;
+            let existing_count = (blocks.len() - added.len()) as i64;
+            return Ok(CommitGroupsBatch::Say(planning::capacity_problem(
+                existing_count,
+                added.len() as i64,
+                &week_words,
+            )));
+        }
+        writes.push(crate::session::changes::week_write(
+            week, &blocks, revision,
+        )?);
+    }
+    let mut payload = Map::new();
+    payload.insert("weeks".into(), Value::Array(writes));
+    payload.insert("assignments".into(), json!([]));
+    payload.insert("operation_id".into(), json!(input.operation_id));
+    if let Some(snapshot) = input.snapshot_label.filter(|text| !text.is_empty()) {
+        payload.insert("snapshot_label".into(), json!(snapshot));
+    }
+    let capture_step = current_after.is_some();
+    let history_label = capture_step.then(|| input.label.to_string());
+    Ok(CommitGroupsBatch::Submit {
+        pending_save: Value::Object(payload),
+        blocks: current_after,
+        history_label,
+        capture_step,
+        save_status: input.said.map(str::to_string),
     })
 }
