@@ -58,6 +58,8 @@ LOCKED: dict[str, dict[str, str]] = {
         "DayBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
     },
     "desktop/native/material/bridge_myday.py": {},
+    "desktop/native/material/sheet_block.py": {},
+    "desktop/native/material/sheet_preview.py": {},
 }
 
 # Files that still hold other decisions. Only these functions moved.
