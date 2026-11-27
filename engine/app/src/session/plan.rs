@@ -20,6 +20,8 @@ const WEEK_MINUTES: i64 = 7 * 24 * 60;
 const SHARE_MINUTES_MAX: i64 = 1_000_000;
 
 const PLANNING_BUSY: &str = "Already planning\u{2026}";
+const GATHERING_EARLIER: &str = "Gathering homework from earlier weeks\u{2026}";
+const PLANNING: &str = "Planning\u{2026}";
 const WEEK_CONFLICT: &str =
     "This week changed in another window. Choose More > Reload this week, then try again.";
 const SAVING_WAIT: &str = "Saving your last change\u{2026} Try Plan again in a moment.";
@@ -97,9 +99,12 @@ impl PlanPreparation {
             Self::FetchEarlier { weeks } => json!({
                 "kind": "fetch_earlier",
                 "weeks": weeks,
+                "progress": GATHERING_EARLIER,
             }),
             Self::Empty => json!({
                 "kind": "empty",
+                // The window keeps the Undo toast up for the one sentence this branch says.
+                "keep_undo": true,
             }),
             Self::Ready {
                 body,
@@ -114,6 +119,7 @@ impl PlanPreparation {
                 "prior_updates": prior_updates,
                 "shares": shares,
                 "week": week,
+                "progress": PLANNING,
             }),
         }
     }
@@ -978,5 +984,87 @@ pub fn apply_plan_answer(
         changed,
         placed_note,
         placed_where,
+    })
+}
+
+/// The sentence an empty plan says. Same rule as `weekmodel.homework_time_sentence`: last row
+/// for an assignment id wins each of minutes, missed and pinned; a missing field is 0; a
+/// present value is `int()`. Zero totals are left out. A negative total is still said, and
+/// the length label clamps it to zero minutes.
+pub fn homework_time_sentence(left_over: &[Value], needed: &[Value]) -> Result<String, String> {
+    let overdue = count_state(left_over, "overdue")?;
+    let carried = count_state(left_over, "left_from_last_week")?;
+    let minutes = sum_last(needed, "minutes")?;
+    let missed = sum_last(needed, "missed_min")?;
+    let pinned = sum_last(needed, "pinned_min")?;
+    let total = minutes
+        .checked_sub(missed)
+        .and_then(|sum| sum.checked_sub(pinned))
+        .ok_or_else(|| "homework minutes overflow".to_string())?;
+    if overdue == 0 && carried == 0 && total == 0 && missed == 0 && pinned == 0 {
+        return Ok("Everything has a time.".to_string());
+    }
+    let mut words = Vec::new();
+    if overdue != 0 {
+        words.push(format!("{overdue} overdue"));
+    }
+    if carried != 0 {
+        words.push(format!("{carried} left from last week"));
+    }
+    if total != 0 {
+        words.push(format!(
+            "{} still needs a time",
+            weekmodel::length_label(total)
+        ));
+    }
+    if missed != 0 {
+        words.push(format!("{} missed", weekmodel::length_label(missed)));
+    }
+    if pinned != 0 {
+        words.push(format!(
+            "{} pinned, in the past",
+            weekmodel::length_label(pinned)
+        ));
+    }
+    Ok(words.join(" · "))
+}
+
+fn count_state(items: &[Value], state: &str) -> Result<i64, String> {
+    let mut count = 0i64;
+    for item in items {
+        let item = item
+            .as_object()
+            .ok_or_else(|| "a leftover is an object".to_string())?;
+        if item.get("left_over_state").and_then(Value::as_str) == Some(state) {
+            count = count
+                .checked_add(1)
+                .ok_or_else(|| "leftover count overflow".to_string())?;
+        }
+    }
+    Ok(count)
+}
+
+/// Last row for each assignment id wins, including a missing field (that is 0). The sum is
+/// of those winning values. `"1"` and `1` are different ids, as they are in a Python dict.
+fn sum_last(items: &[Value], field: &str) -> Result<i64, String> {
+    let mut rows: Vec<(Value, i64)> = Vec::new();
+    for item in items {
+        let item = item
+            .as_object()
+            .ok_or_else(|| "a needed row is an object".to_string())?;
+        let key = item.get("assignment_id").cloned().unwrap_or(Value::Null);
+        let number = match item.get(field) {
+            None => 0,
+            Some(value) => flexweek_engine::stored::py_int(value).map_err(|err| err.message)?,
+        };
+        if let Some(found) = rows.iter_mut().find(|(existing, _)| existing == &key) {
+            found.1 = number;
+        } else {
+            rows.push((key, number));
+        }
+    }
+    rows.into_iter().try_fold(0i64, |sum, (_, number)| {
+        sum.checked_add(number)
+            .ok_or_else(|| "homework minutes overflow".to_string())
     })
 }

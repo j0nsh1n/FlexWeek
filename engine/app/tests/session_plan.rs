@@ -4,8 +4,8 @@
 
 use flexweek_app::session::plan::{
     PlanAnswerInput, PlanClock, PlanInput, PlanPreparation, WEEK_OVER, apply_auto_split,
-    apply_plan_answer, first_placed, left_sentence, place_now_sentence, plan_sentence,
-    prepare_plan,
+    apply_plan_answer, first_placed, homework_time_sentence, left_sentence, place_now_sentence,
+    plan_sentence, prepare_plan,
 };
 use flexweek_engine::desk::weekmodel::set_clock_24h;
 use serde_json::{Map, Value, json};
@@ -1649,4 +1649,104 @@ fn an_unplaced_duration_outside_one_week_of_minutes_is_refused() {
         });
         assert!(answer_for(&trace, &[], now).is_ok());
     }
+}
+
+#[test]
+fn an_empty_plan_says_the_homework_time_sentence() {
+    let left = vec![
+        json!({"id": "bio", "left_over_state": "overdue", "remaining_min": 60}),
+        json!({"id": "chem", "left_over_state": "left_from_last_week", "remaining_min": 30}),
+    ];
+    let needed = vec![
+        json!({"assignment_id": "chem", "minutes": 30}),
+        json!({"assignment_id": "art", "minutes": 15}),
+    ];
+    assert_eq!(
+        homework_time_sentence(&left, &needed).unwrap(),
+        "1 overdue · 1 left from last week · 45 min still needs a time"
+    );
+    assert_eq!(
+        homework_time_sentence(&[json!({"id": "bio", "left_over_state": "overdue"})], &[]).unwrap(),
+        "1 overdue"
+    );
+    assert_eq!(
+        homework_time_sentence(&[], &[]).unwrap(),
+        "Everything has a time."
+    );
+}
+
+#[test]
+fn homework_time_keeps_the_last_row_and_says_a_negative_total() {
+    let replaced = vec![
+        json!({"assignment_id": "chem", "minutes": 10, "missed_min": 5, "pinned_min": 1}),
+        json!({"assignment_id": "chem", "minutes": 40, "missed_min": 0, "pinned_min": 0}),
+    ];
+    assert_eq!(
+        homework_time_sentence(&[], &replaced).unwrap(),
+        "40 min still needs a time"
+    );
+    assert_eq!(
+        homework_time_sentence(&[], &[json!({"assignment_id": "chem", "minutes": -10})]).unwrap(),
+        "0 min still needs a time"
+    );
+    let parts = [json!({
+        "assignment_id": "chem",
+        "minutes": 50,
+        "missed_min": 20,
+        "pinned_min": 15,
+    })];
+    assert_eq!(
+        homework_time_sentence(&[], &parts).unwrap(),
+        "15 min still needs a time · 20 min missed · 15 min pinned, in the past"
+    );
+    assert_eq!(
+        homework_time_sentence(
+            &[],
+            &[
+                json!({"assignment_id": "1", "minutes": 10}),
+                json!({"assignment_id": 1, "minutes": 5}),
+            ]
+        )
+        .unwrap(),
+        "15 min still needs a time"
+    );
+    assert_eq!(
+        homework_time_sentence(&[], &[json!({"assignment_id": "a"})]).unwrap(),
+        "Everything has a time."
+    );
+    assert!(
+        homework_time_sentence(&[], &[json!({"assignment_id": "a", "minutes": null})]).is_err()
+    );
+}
+
+#[test]
+fn a_plan_says_its_progress_and_an_empty_plan_keeps_undo() {
+    let fetch = PlanPreparation::FetchEarlier {
+        weeks: vec!["2026-09-14".into()],
+    };
+    let shown = fetch.to_json();
+    assert_eq!(shown["kind"], "fetch_earlier");
+    assert_eq!(
+        shown["progress"],
+        "Gathering homework from earlier weeks\u{2026}"
+    );
+    assert_eq!(shown["weeks"], json!(["2026-09-14"]));
+    let ready = PlanPreparation::Ready {
+        body: json!({}),
+        targets: vec![],
+        prior_updates: vec![],
+        shares: vec![],
+        week: vec![],
+    };
+    let shown = ready.to_json();
+    assert_eq!(shown["kind"], "ready");
+    assert_eq!(shown["progress"], "Planning\u{2026}");
+    let shown = PlanPreparation::Empty.to_json();
+    assert_eq!(shown["kind"], "empty");
+    assert_eq!(shown["keep_undo"], true);
+    let blocked = PlanPreparation::Blocked {
+        message: "no".into(),
+        replan_after_save: false,
+    };
+    assert!(blocked.to_json().get("progress").is_none());
 }

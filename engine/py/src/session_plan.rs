@@ -3,7 +3,8 @@
 
 use flexweek_app::session::plan::{
     PlanAnswerInput, PlanClock, PlanInput, WEEK_OVER, apply_auto_split, apply_plan_answer,
-    first_placed, left_sentence, place_now_sentence, plan_sentence, prepare_plan,
+    first_placed, homework_time_sentence, left_sentence, place_now_sentence, plan_sentence,
+    prepare_plan,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -275,6 +276,22 @@ fn session_place_now_sentence(block: &str, week_start: &str) -> PyResult<String>
     })
 }
 
+/// The sentence an empty plan says. `left_over` and `needed` are JSON lists.
+#[pyfunction]
+fn session_homework_time_sentence(left_over: &str, needed: &str) -> PyResult<String> {
+    guard(|| {
+        let left = parse_json(left_over, "left_over")?;
+        let needed = parse_json(needed, "needed")?;
+        let left = left
+            .as_array()
+            .ok_or_else(|| PyValueError::new_err("left_over must be a list"))?;
+        let needed = needed
+            .as_array()
+            .ok_or_else(|| PyValueError::new_err("needed must be a list"))?;
+        homework_time_sentence(left, needed).map_err(PyValueError::new_err)
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("PLAN_WEEK_OVER", WEEK_OVER)?;
     crate::export!(
@@ -286,6 +303,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_plan_left_sentence,
         session_plan_sentence,
         session_place_now_sentence,
+        session_homework_time_sentence,
     );
     Ok(())
 }
