@@ -7,11 +7,11 @@
   "test": "desktop/tests/week/test_material_shared_rules.py::test_a_progress_message_never_shows_on_the_notice"
  },
  {
-  "file": "desktop/native/controller.py",
+  "file": "engine/app/src/session/copies.rs",
   "name": "Duplicate says it copied",
-  "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
-  "new": "        if not self.copy_block(source_id, day, scope):\n",
-  "test": "desktop/tests/week/test_material_shared_rules.py::test_duplicate_says_nothing_is_copied_and_then_what_it_duplicated"
+  "old": "    let announce: Option<String> = None;\n",
+  "new": "    let announce: Option<String> = copied.words;\n",
+  "test": "cargo:flexweek-app:session_copies:duplicate_never_says_it_copied"
  },
  {
   "file": "engine/engine/src/desk/datetext.rs",
