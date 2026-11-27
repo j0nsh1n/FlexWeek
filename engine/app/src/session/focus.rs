@@ -1156,9 +1156,13 @@ fn session_belongs_to_assignment(state: &Value, blocks: &Value) -> bool {
     let Some(items) = blocks.as_array() else {
         return false;
     };
-    items.iter().any(|item| {
-        item.get("id") == Some(block_id) && item.get("assignment_id") == Some(assignment)
-    })
+    // Only a session seen on the open week with another homework is refused. A timer from
+    // another week (Sunday night, reopened Monday) is not on this week's blocks at all; it
+    // is kept as before, and drop_missing judges it once its own week is open.
+    match items.iter().find(|item| item.get("id") == Some(block_id)) {
+        Some(item) => item.get("assignment_id") == Some(assignment),
+        None => true,
+    }
 }
 
 /// The timer rebuilt from the fields the app writes. Extra fields are dropped. A field

@@ -2156,6 +2156,34 @@ fn a_timer_whose_session_belongs_to_another_homework_is_dropped() {
 }
 
 #[test]
+fn a_timer_from_another_week_is_not_dropped_for_a_session_the_open_week_does_not_hold() {
+    // Started Sunday night, reopened on Monday: the open week has none of last week's blocks.
+    let saved = json!({
+        "assignmentId": "essay",
+        "sessionId": "last-week-block",
+        "weekStart": WEEK,
+        "day": 6,
+        "start": "21:00",
+        "phase": "work",
+        "cycles": 0,
+        "endsAt": 500,
+        "remainingMs": null,
+        "workMin": 30
+    });
+    let decision = call(
+        focus::restore_decision,
+        json!({
+            "saved": saved,
+            "assignments": { "essay": { "id": "essay", "title": "Essay", "completed": false } },
+            "blocks": [{ "id": "this-week-block", "title": "Write", "assignment_id": "essay" }],
+            "prefs": {},
+            "now_ms": 1000
+        }),
+    );
+    assert_ne!(decision["action"], "drop");
+}
+
+#[test]
 fn a_timer_on_its_own_session_is_still_advanced_when_the_work_ran_out() {
     let saved = json!({
         "assignmentId": "essay",
