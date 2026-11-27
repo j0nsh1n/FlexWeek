@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # Whole files. A method stays only when the scanner still flags Qt marshalling it cannot give up.
 LOCKED: dict[str, dict[str, str]] = {
     "desktop/native/hours/geometry.py": {},
+    "desktop/native/hours/month_cells.py": {},
     "desktop/native/hours/scale.py": {},
     "desktop/native/hours/words.py": {},
     "desktop/native/motion_level.py": {},
@@ -28,11 +29,19 @@ LOCKED: dict[str, dict[str, str]] = {
         "_seen_weekday": "reads the computer's local weekday name for the engine"
     },
     "desktop/native/account_copy.py": {},
+    "desktop/native/material/bridge_month.py": {
+        "MonthBridge._note": "emits this bridge's and its parent shell's Qt changed signals",
+        "MonthBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
+    },
     "desktop/native/material/bridge_week.py": {
         "_steady_ms": "reads the monotonic clock in milliseconds for the engine",
         "_moment": "reads the session wall clock as local datetime for the engine",
         "WeekBridge._connect_session": "connects Qt signals on the session to this bridge's slots",
         "WeekBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
+    },
+    "desktop/native/material/bridge_focus.py": {
+        "FocusBridge.show": "reads Qt's active focus item and the window's page, then emits Qt signals",
+        "FocusBridge.hide": "emits Qt signals and hands the focus restore to a QTimer on the Qt loop",
     },
     "desktop/native/material/theme.py": {
         "tokens_path": "reads the computer's font and theme locations for the engine",

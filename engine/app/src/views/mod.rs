@@ -5,8 +5,10 @@
 
 pub mod copy;
 pub mod day;
+pub mod focus;
 pub mod hours;
 pub mod look_file;
+pub mod month;
 pub mod sheet_rules;
 pub mod theme;
 pub mod week;
