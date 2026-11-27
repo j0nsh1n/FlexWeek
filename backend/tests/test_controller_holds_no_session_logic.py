@@ -19,6 +19,11 @@ CONTROLLER = ROOT / "desktop" / "native" / "controller.py"
 STAYS: dict[str, str] = {
     "_draft_field": "the writable flag picks the setter a fixture uses to edit one draft field",
     "NativeSession.__init__": "wires the Qt client, its signals, and the idle timer",
+    "_canonical_account_id": "turns an account-deleted event's owner text into the focus file's int key; slice P4-tail moves it to Rust",
+    "NativeSession._focus_entries": "copies the in-memory focus dict into the list the engine reads",
+    "NativeSession._set_focus_entries": "copies the engine's list back into the dict the window and tests read",
+    "NativeSession._write_focus_file": "writes the kept focus file; a newer-format file is left on disk",
+    "NativeSession._drop_stored_focus": "removes one account from the kept focus file, or from memory with no file",
     "NativeSession._draft_view": "caches a draft field and copies the three lists fixtures edit in place",
     "NativeSession._accept_draft_versions": "drops a cached draft when the Rust session's version moved",
     "NativeSession._flush_fixture_drafts": "writes the edits a fixture made in place back before the next draft command",
