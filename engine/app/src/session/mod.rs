@@ -21,6 +21,7 @@ pub mod frame;
 pub mod homework_edits;
 pub mod leaving;
 pub mod plan;
+pub mod plan_flow;
 pub mod plan_previews;
 pub mod preferences;
 pub mod reminders;
