@@ -86,8 +86,8 @@ list, all shipped).
   6-9 (#181), slice 7B Spotify (#184), then P1 sheet checks (#199), 4D routines (#200), 10A views (#201), 6B focus (#202), 4E copies (#203), 7C alerts
   (#204), 8B preferences (#205), 9B restore and import (#206), 5D plan flow (#207), 6C the focus timer kept on disk
   (#208), P2 pydantic and the dead backend adapters gone (#209), and the last controller decisions (#210).
-  controller.py forwards to the Rust session; a test fails on new logic there outside its commented stay list
-  (Qt, the request pipe, files, the clock). P5-P8 [ ] planned.
+  controller.py forwards to the Rust session; a test fails on logic in any method not named, with its reason, on
+  that test's stay list. P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)

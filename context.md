@@ -1,9 +1,9 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-26)
-- 2026-11-26: P4 is complete (#185-#210). The session's decisions live in `engine/app/src/session/*` behind guarded
-  `flexweek_engine` bindings; `desktop/native/controller.py` forwards and keeps only Qt, request, file, clock and host glue (and the Spotify opener),
-  enforced by `backend/tests/test_controller_holds_no_session_logic.py` (stay list with reasons). Pydantic,
+- 2026-11-26: P4 is complete (#181, #184-#186, #188-#190, #194-#196, #199-#210). The session's decisions live in `engine/app/src/session/*` behind guarded
+  `flexweek_engine` bindings; `desktop/native/controller.py` forwards; anything it still does in Python is named, with its reason, on the stay
+  list in `backend/tests/test_controller_holds_no_session_logic.py`, which fails on any other method holding logic. Pydantic,
   `backend/models.py` and 10 dead adapters are gone (#209); `backend/` keeps clock, slots, weeks, comfort, storage.
   A running focus timer is kept per account in `<kept>.focus.json` beside the kept sign-in (#208). Also today:
   #191 removed_days, #192 Sign out in Settings, #193 save before update, #197 CI pins Rust.
