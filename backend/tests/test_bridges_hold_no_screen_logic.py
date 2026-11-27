@@ -39,6 +39,10 @@ LOCKED: dict[str, dict[str, str]] = {
         "WeekBridge._connect_session": "connects Qt signals on the session to this bridge's slots",
         "WeekBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
     },
+    "desktop/native/material/bridge_focus.py": {
+        "FocusBridge.show": "reads Qt's active focus item and the window's page, then emits Qt signals",
+        "FocusBridge.hide": "emits Qt signals and hands the focus restore to a QTimer on the Qt loop",
+    },
     "desktop/native/material/theme.py": {
         "tokens_path": "reads the computer's font and theme locations for the engine",
         "qml_path": "locates the QML files the Qt shell loads",

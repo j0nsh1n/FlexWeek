@@ -7,18 +7,20 @@ bridge adds only whether the screen is open, and the words and buttons the scree
 
 from __future__ import annotations
 
+import json
 from typing import Any, Protocol
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from shiboken6 import isValid
 
-from desktop.native.focus import format_countdown, phase_duration_ms, remaining_ms
-
-PHASE_WORDS = {"work": "Focus", "break": "Break", "long_break": "Long break", "ended": "Session finished"}
-READY_WORDS = "Ready when you are"
-QUICK_TITLE = "Quick focus"
-SKIP_HINTS = {"work": "Skip to the break", "break": "Skip the break", "long_break": "Skip the break"}
-AUDIO_WORDS = {"rain": "Rain", "lo-fi": "Lo-Fi", "white-noise": "White noise", "spotify": "Spotify"}
+# The words live in the engine's Focus view-model; these names stay for callers that read them.
+_WORDS = json.loads(flexweek_engine.views_focus_words())
+PHASE_WORDS = _WORDS["phase_words"]
+READY_WORDS = _WORDS["ready_words"]
+QUICK_TITLE = _WORDS["quick_title"]
+SKIP_HINTS = _WORDS["skip_hints"]
+AUDIO_WORDS = _WORDS["audio_words"]
 
 
 class _Session(Protocol):
@@ -36,6 +38,7 @@ class _Session(Protocol):
 
 
 class FocusBridge(QObject):
+    _origin_item: QObject | None
     changed = Signal()
     # The screen asks for a yes before it ends a session that has begun.
     endRequested = Signal()
@@ -45,7 +48,7 @@ class FocusBridge(QObject):
         self.setObjectName("focusBridge")
         self._window = window
         self._open = False
-        self._origin_item: QObject | None = None
+        self._origin_item = None
         self._session().focus_changed.connect(self.refresh)
 
     def _session(self) -> Any:
@@ -53,16 +56,27 @@ class FocusBridge(QObject):
 
     def refresh(self) -> None:
         """The session's timer moved. A session that is gone has nothing left to show."""
-        if self._open and self._session().account is None:
-            self._open = False
+        self._open = flexweek_engine.views_focus_refresh_open(self._open, self._session().account is None)
         self.changed.emit()
 
     def _state(self) -> dict | None:
         return self._session().focus
 
-    def _phase(self) -> str:
-        state = self._state()
-        return "ready" if state is None else str(state.get("phase") or "work")
+    def _state_json(self) -> str:
+        return json.dumps(self._state())
+
+    def _do(self, step: str) -> None:
+        """Run the step the engine chose. The names are the engine's; each maps to one Qt call."""
+        {
+            "hide": self.hide,
+            "show": self.show,
+            "request_end": self.endRequested.emit,
+            "confirm_end": self.confirmEnd,
+            "stay": self._stay,
+        }[step]()
+
+    def _stay(self) -> None:
+        """The engine chose to leave things as they are."""
 
     @Property(bool, notify=changed)
     def open(self) -> bool:
@@ -70,101 +84,87 @@ class FocusBridge(QObject):
 
     @Property(str, notify=changed)
     def phase(self) -> str:
-        return self._phase()
+        return flexweek_engine.views_focus_phase(self._state_json())
 
     @Property(bool, notify=changed)
     def ready(self) -> bool:
-        return self._state() is None
+        return flexweek_engine.views_focus_ready(self._state_json())
 
     @Property(bool, notify=changed)
     def ended(self) -> bool:
-        return self._phase() == "ended"
+        return flexweek_engine.views_focus_ended(self._state_json())
 
     @Property(bool, notify=changed)
     def active(self) -> bool:
         """A timer exists and its session has not ended: Skip, Pause and Finish apply."""
-        return self._state() is not None and self._phase() != "ended"
+        return flexweek_engine.views_focus_active(self._state_json())
 
     @Property(bool, notify=changed)
     def running(self) -> bool:
-        state = self._state()
-        return bool(state and state.get("running") and self._phase() != "ended")
+        return flexweek_engine.views_focus_running(self._state_json())
 
     @Property(bool, notify=changed)
     def paused(self) -> bool:
-        return self.active and not self.running
+        return flexweek_engine.views_focus_paused(self._state_json())
 
     @Property(str, notify=changed)
     def phaseText(self) -> str:
-        if self._state() is None:
-            return READY_WORDS
-        words = PHASE_WORDS.get(self._phase(), "")
-        return words + (" · Paused" if self.paused else "")
+        return flexweek_engine.views_focus_phase_text(self._state_json())
 
     @Property(str, notify=changed)
     def title(self) -> str:
-        state = self._state()
-        if state is None:
-            offer = self._offer()
-            return QUICK_TITLE if offer is None else str(offer["title"])
-        return str(state.get("title") or QUICK_TITLE)
+        return flexweek_engine.views_focus_title(self._state_json(), self._offer_json())
 
     def _offer(self) -> dict | None:
         """The homework on now or next today, while Ready; a running timer has already chosen."""
-        return self._session().quick_focus_offer() if self._state() is None else None
+        if self._state() is None:
+            return self._session().quick_focus_offer()
+        return None
+
+    def _offer_json(self) -> str:
+        return json.dumps(self._offer())
 
     @Property(bool, notify=changed)
     def offered(self) -> bool:
         """Ready with homework on now or next today: Start counts toward it and Just a timer does not."""
-        return self._offer() is not None
+        return flexweek_engine.views_focus_offered(self._state_json(), self._offer_json())
 
     @Property(str, notify=changed)
     def timeText(self) -> str:
         session = self._session()
-        state = self._state()
-        if state is None:
-            return format_countdown(phase_duration_ms("work", session.preferences))
-        if self._phase() == "ended":
-            return format_countdown(0)
-        return format_countdown(remaining_ms(state, session.now_ms()))
+        return flexweek_engine.views_focus_time_text(
+            self._state_json(), json.dumps(session.preferences), session.now_ms()
+        )
 
     @Property(str, notify=changed)
     def pauseText(self) -> str:
-        return "Pause" if self.running else "Resume"
+        return flexweek_engine.views_focus_pause_text(self._state_json())
 
     @Property(str, notify=changed)
     def skipHint(self) -> str:
-        return SKIP_HINTS.get(self._phase(), "Skip")
+        return flexweek_engine.views_focus_skip_hint(self._state_json())
 
     @Property(str, notify=changed)
     def note(self) -> str:
         """What is on for this session, as the mockup says it: "Alerts muted · Rain"."""
         session = self._session()
-        words = []
-        if session.focus_mutes_alerts():
-            words.append("Alerts muted")
-        sound = AUDIO_WORDS.get((session.preferences or {}).get("focus_audio") or "")
-        if sound and self._state() is not None:
-            words.append(sound)
-        return " · ".join(words)
+        return flexweek_engine.views_focus_note(
+            self._state_json(), json.dumps(session.preferences), session.focus_mutes_alerts()
+        )
 
     @Property(bool, notify=changed)
     def canFinishHomework(self) -> bool:
         """Time is up on homework that is still open: Finished marks it done."""
-        session = self._session()
-        state = self._state()
-        if state is None or self._phase() != "ended":
-            return False
-        homework = (session.assignments or {}).get(state.get("assignmentId"))
-        return homework is not None and not homework.get("completed")
+        return flexweek_engine.views_focus_can_finish_homework(
+            self._state_json(), json.dumps(self._session().assignments)
+        )
 
     @Property(str, notify=changed)
     def endQuestion(self) -> str:
         session = self._session()
-        question = f"You've done {session.focus_elapsed_min()} min of {self.title}."
-        if (self._state() or {}).get("assignmentId") in (session.assignments or {}):
-            question += " It counts toward the homework."
-        return question
+        return flexweek_engine.views_focus_end_question(
+            self._state_json(), json.dumps(session.assignments), self.title, session.focus_elapsed_min()
+        )
 
     @Slot()
     def show(self) -> None:
@@ -175,7 +175,9 @@ class FocusBridge(QObject):
         scene = getattr(self._window, "_material_page", None)
         if scene is not None:
             active = scene.activeFocusItem()
-            if active is not None and getattr(active, "objectName", lambda: "")() != "materialFocus":
+            if active is not None and flexweek_engine.views_focus_remembers_origin(
+                getattr(active, "objectName", lambda: "")()
+            ):
                 self._origin_item = active
         self._open = True
         self.changed.emit()
@@ -199,7 +201,9 @@ class FocusBridge(QObject):
                     has_en = (
                         item.isEnabled() if hasattr(item, "isEnabled") else bool(item.property("enabled"))
                     )
-                    if has_vis and has_en and hasattr(item, "forceActiveFocus"):
+                    if flexweek_engine.views_focus_restores_origin(
+                        has_vis, has_en, hasattr(item, "forceActiveFocus")
+                    ):
                         item.forceActiveFocus()
 
                 # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
@@ -218,15 +222,14 @@ class FocusBridge(QObject):
     @Slot(str, "QVariant", result=bool)
     def startFocus(self, block_id: str, day: object = None) -> bool:
         """Start focus on a block, as the Widgets Start focus does, and open the screen on it."""
-        if self._session().start_focus(block_id or None, day if isinstance(day, int) else None):
-            self.show()
-            return True
-        return False
+        block, when = flexweek_engine.views_focus_start_args(block_id, day)
+        started = bool(self._session().start_focus(block, when))
+        self._do(flexweek_engine.views_focus_after_start_step(started))
+        return started
 
     @Slot()
     def startQuick(self) -> None:
-        if self._session().start_quick_focus():
-            self.show()
+        self._do(flexweek_engine.views_focus_after_start_step(bool(self._session().start_quick_focus())))
 
     @Slot()
     def togglePause(self) -> None:
@@ -245,8 +248,7 @@ class FocusBridge(QObject):
         # Queued still closes the screen: the week is loading behind it, and the homework
         # finishes when that load lands. A failed load leaves the ended timer for the next open.
         outcome = self._session().finish_focused_homework()
-        if outcome == "finished" or outcome == "queued":
-            self.hide()
+        self._do(flexweek_engine.views_focus_finish_step(outcome))
 
     @Slot()
     def finish(self) -> None:
@@ -257,18 +259,10 @@ class FocusBridge(QObject):
     def back(self) -> None:
         # A running or paused timer keeps going behind the other screens; a finished one has
         # nothing left to keep, so leaving clears it as Finish does.
-        if self.active:
-            self.hide()
-        else:
-            self._leave()
+        self._do(flexweek_engine.views_focus_back_step(self._state_json()))
 
     def _leave(self) -> None:
-        if self.active:
-            self.endRequested.emit()
-        elif self._state() is None:
-            self.hide()
-        else:
-            self.confirmEnd()
+        self._do(flexweek_engine.views_focus_leave_step(self._state_json()))
 
     @Slot()
     def confirmEnd(self) -> None:
