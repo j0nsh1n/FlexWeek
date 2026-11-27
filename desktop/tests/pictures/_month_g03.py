@@ -96,9 +96,9 @@ def grid(window: NativeWindow) -> object:
 
 def study_time_material(window: NativeWindow) -> object:
     _fill(window)
-    window._material_page.bridge.setShowStudyTime(True)
+    window._material_page.bridge.month.setShowStudyTime(True)
     _open_month(window)
-    window._material_page.bridge.setShowStudyTime(True)
+    window._material_page.bridge.month.setShowStudyTime(True)
     QApplication.processEvents()
     return None
 

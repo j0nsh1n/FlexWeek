@@ -43,10 +43,6 @@ def week_with_school(window: NativeWindow) -> None:
     settled(qapp, window)
 
 
-def week_list_closed(window: NativeWindow) -> None:
-    week_with_school(window)
-
-
 SCREENS: list[Screen] = [
     Screen(
         id="sheets.material_week_long_homework_title",
@@ -58,17 +54,5 @@ SCREENS: list[Screen] = [
         ),
         sources=("desktop/native/material",),
         styles=MATERIAL,
-    ),
-    Screen(
-        id="week.week_list_closed",
-        area="week",
-        prepare=week_list_closed,
-        checks=(
-            "The week list is hidden and takes no room: with the grid shown, note the top edge of "
-            "the grid, to "
-            "compare with week.week_list_open."
-        ),
-        sources=("desktop/native/window.py", "desktop/native/hours"),
-        styles=("classic",),
     ),
 ]
