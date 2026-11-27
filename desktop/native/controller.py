@@ -30,32 +30,41 @@ from desktop.native.files import (
     parse_import_payload,
 )
 from desktop.native.focus import (
+    add_focus_time_plan,
     advance_begin,
     advance_plan,
-    alerts_held,
+    apply_auto_complete_blocks,
+    apply_credit_blocks,
     auto_complete_plan,
     begin_state,
-    break_phase,
+    credit_enqueue_decision,
     credit_plan,
     drop_missing,
     elapsed_minutes,
-    enter_phase,
+    end_early_decision,
+    finish_after_load,
+    finish_focused_plan,
+    finish_intent_on_request,
     focus_candidates,
-    more_time_choices,
+    focus_spotify_decision,
+    focus_spotify_open_failed,
     mutes_alerts,
     now_and_next,
     now_next_line,
-    pause_state,
     persist_payload,
     quick_focus_homework,
     rebase_state,
-    remaining_ms,
-    restore_state,
-    set_phase,
+    release_held,
+    restart_finished_plan,
+    restore_decision,
+    scheduled_blocks_of,
+    split_held,
+    start_allowed,
     start_decision,
     start_target,
+    take_break_plan,
     tick_step,
-    work_minutes,
+    toggle_pause_decision,
 )
 from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
@@ -280,6 +289,10 @@ class NativeSession(QObject):
         self.now_ms = wall_clock.now_ms
         self._focus_busy = False
         self._pending_focus: dict | None = None
+        # Mark finished can wait for the timer's week. The week itself may be null, so null is not
+        # "nothing is waiting".
+        self._finish_focus_waiting = False
+        self._finish_focus_week: str | None = None
         # Material 3's focus rules (mute reminders, finish the block) apply only while Material is the
         # surface in use. The window hands in the question; the Widgets styles never set it.
         self.material_owns: Callable[[], bool] | None = None
@@ -909,12 +922,18 @@ class NativeSession(QObject):
             else:
                 self._keep_session()
             self.account_changed.emit(self.account)
+            # Sign-in does not clear the window the way sign-out does. Drop a finish that belonged
+            # to the previous account before this account's week opens.
+            self._clear_finish_intent()
             self.load_week(self.week_start, discard=True)
         elif kind == "registered":
             data = event["account"]
             self._drop_other_setup(data["id"])
             self.account = {"id": data["id"], "username": data["username"]}
             self.new_account = True
+            # Registration does not clear the window the way sign-out does. Drop a finish that
+            # belonged to the previous account, as sign-in does.
+            self._clear_finish_intent()
             self.busy_changed.emit(False)
             self.account_changed.emit(self.account)
             self.recovery_codes.emit(list(event["codes"] or []))
@@ -1007,11 +1026,22 @@ class NativeSession(QObject):
             return
         if self.busy:
             return
+        # A finish waiting for its own week is dropped when the student asks for a different one.
+        # The press itself asks for the timer's week, which keeps the wait. A request for another
+        # week while a load is in flight never reaches this check: the busy guard above ignores it.
+        if finish_intent_on_request(
+            waiting=self._finish_focus_waiting,
+            pending=self._finish_focus_week,
+            requested=week_start,
+        ) == "drop":
+            self._clear_finish_intent()
         route = self._draft_command(
             "load", requested=week_start or self.shown_week_of(wall_clock.today().isoformat()),
             first_weekday=self.first_weekday, discard=discard, selection=self._selection(),
         )
         if route["action"] == "keep":
+            # Nothing was loaded, so a finish waiting on this request would stay set.
+            self._clear_finish_intent()
             return
         if route["action"] == "restore":
             selection = route["selection"]
@@ -1023,6 +1053,7 @@ class NativeSession(QObject):
             self.week_changed.emit()
             self._restore_focus()
             self._drop_missing_focus()
+            self._finish_loaded_focus(loaded=True)
             return
         ticket = self._begin()
         self._say("Loading…")
@@ -1044,6 +1075,7 @@ class NativeSession(QObject):
             self.week_changed.emit()
             self._restore_focus()
             self._drop_missing_focus()
+            self._finish_loaded_focus(loaded=True)
             self._fetch_weeks()
             self._fetch_routines()
             self._fetch_preferences()
@@ -1069,6 +1101,7 @@ class NativeSession(QObject):
         if self._idle(ticket):
             self._say(message)
         self.week_changed.emit()
+        self._finish_loaded_focus(loaded=False)
 
     def _plan_waiting_for_load(self) -> None:
         planned, self._plan_after_load = self._plan_after_load, set()
@@ -3199,24 +3232,7 @@ class NativeSession(QObject):
         return clock_parts(self.now_ms())
 
     def scheduled_blocks(self) -> list[dict]:
-        if not self.trace:
-            return [
-                block
-                for block in self.blocks
-                if block.get("kind") == "locked" or (block.get("kind") == "flexible" and block.get("start"))
-            ]
-        sources = {block["id"]: block for block in self.blocks}
-        merged = []
-        for placed in self.trace.get("placed") or []:
-            source = sources.get(placed["id"])
-            if source is None:
-                merged.append(placed)
-                continue
-            item = dict(source)
-            item["days"] = list(placed.get("days") or source.get("days") or [])
-            item["start"] = placed.get("start")
-            merged.append(item)
-        return merged
+        return scheduled_blocks_of(self.blocks, self.trace)
 
     def now_next_text(self) -> str:
         clock = self._clock()
@@ -3257,10 +3273,15 @@ class NativeSession(QObject):
         else:
             self.focus_store[self.account["id"]] = payload
 
+    def _clear_finish_intent(self) -> None:
+        self._finish_focus_waiting = False
+        self._finish_focus_week = None
+
     def _reset_focus(self, persist: bool = True) -> None:
         self.focus = None
         self._focus_busy = False
         self._pending_focus = None
+        self._clear_finish_intent()
         if persist:
             self._persist_focus()
         self.focus_changed.emit()
@@ -3269,21 +3290,25 @@ class NativeSession(QObject):
         if self.account is None or self.focus is not None:
             return
         saved = self.focus_store.get(self.account["id"])
-        state = restore_state(saved, assignments=self.assignments, blocks=self.blocks, now_ms=self.now_ms())
-        if state is None:
+        decision = restore_decision(
+            saved,
+            assignments=self.assignments,
+            blocks=self.blocks,
+            prefs=self.preferences,
+            now_ms=self.now_ms(),
+        )
+        if decision["action"] == "drop":
             self.focus_store.pop(self.account["id"], None)
             return
-        expired = state.pop("expired", False)
-        self.focus = state
+        # Persist and tell, then either finish the work phase or replace it with the paused one.
+        self.focus = decision["state"]
         self._persist_focus()
         self.focus_changed.emit()
-        if expired and state["phase"] == "work":
+        if decision["action"] == "advance_work":
             self.advance_focus(completed=True)
-        elif expired:
-            self.focus = set_phase(state, "work", self.preferences, self.now_ms())
-            self.focus["running"] = False
-            self.focus["remainingMs"] = remaining_ms(self.focus, self.now_ms())
-            self._say("The break ended while FlexWeek was closed. Press Resume to focus again.")
+        elif decision["action"] == "paused_work":
+            self.focus = decision["paused"]
+            self._say(decision["say"])
             self._persist_focus()
             self.focus_changed.emit()
 
@@ -3315,7 +3340,7 @@ class NativeSession(QObject):
         replace: bool = False,
         quick: bool = False,
     ) -> bool:
-        if self.account is None or self.busy or self._focus_busy:
+        if not start_allowed(self.account is not None, self.busy, self._focus_busy):
             return False
         # Only a homework's title says whether it is overdue, so the clock is read only for one.
         names_homework = not quick and day is None and block_id in self.assignments
@@ -3350,16 +3375,16 @@ class NativeSession(QObject):
     def _open_focus_spotify(self) -> None:
         """Spotify, when that is the focus sound: open the Settings link. Anything else stays quiet.
         A missing link or an app that will not open is said once, and focus carries on."""
-        if (self.preferences or {}).get("focus_audio") != "spotify":
+        decision = focus_spotify_decision(self.preferences, self.spotify_url())
+        if decision["action"] == "skip":
             return
-        link = self.spotify_url()
-        if not link:
-            self._say("Focus started without Spotify. Add a link under Settings > Alerts.")
+        if decision["action"] == "say":
+            self._say(decision["say"])
             return
         from desktop.native.spotify import open_in_app
 
-        if not open_in_app(link):
-            self._say("Focus started without Spotify because the app didn't open.")
+        if not open_in_app(decision["link"]):
+            self._say(focus_spotify_open_failed())
 
     def confirm_replace_focus(self) -> bool:
         pending = self._pending_focus
@@ -3373,9 +3398,12 @@ class NativeSession(QObject):
         )
 
     def toggle_focus_pause(self) -> None:
-        if self.focus is None or self._focus_busy or self.busy or self.focus.get("phase") == "ended":
+        decision = toggle_pause_decision(
+            self.focus, focus_busy=self._focus_busy, busy=self.busy, now_ms=self.now_ms()
+        )
+        if decision["action"] == "ignore":
             return
-        self.focus = pause_state(self.focus, self.now_ms())
+        self.focus = decision["state"]
         self._persist_focus()
         self.focus_changed.emit()
 
@@ -3385,9 +3413,9 @@ class NativeSession(QObject):
     def end_focus_early(self) -> None:
         """End a session on the student's word: the whole minutes already worked count toward the
         homework or block, as the End question says, but nothing is finished by it."""
-        minutes = self.focus_elapsed_min()
-        if minutes > 0:
-            self.credit_focus_session(minutes, finished=False)
+        decision = end_early_decision(self.focus, self.week_start, self.preferences, self.now_ms())
+        if decision["credit"]:
+            self.credit_focus_session(decision["minutes"], finished=False)
         self._reset_focus()
 
     def focus_elapsed_min(self) -> int:
@@ -3440,25 +3468,20 @@ class NativeSession(QObject):
         finally:
             self._focus_busy = False
 
-    def _enter_phase(self, state: dict, phase: str) -> dict:
-        """Move to a phase and announce it, which is what the web's setFocusPhase does."""
-        entered = enter_phase(state, phase, self.preferences, self.now_ms())
-        self.alerts.emit([entered["alert"]])
-        moved: dict = entered["state"]
-        return moved
-
     def credit_focus_session(self, minutes: int | None = None, *, finished: bool = True) -> None:
-        state = self.focus
-        if state is None or not (state.get("blockId") or state.get("assignmentId")):
+        decision = credit_enqueue_decision(
+            self.focus, prefs=self.preferences, minutes=minutes, finished=finished, busy=self.busy
+        )
+        if decision["action"] == "ignore":
             return
-        worked = work_minutes(state, self.preferences) if minutes is None else minutes
-        credit = (dict(state), worked, finished)
-        if self.busy:
+        credit = decision["credit"]
+        held = (credit["state"], credit["work_min"], credit["finished"])
+        if decision["action"] == "enqueue":
             # A save is under way and its reply replaces the homework, which would wipe the minutes
             # added now. They are added once it is done.
-            self._credits_waiting.append(credit)
+            self._credits_waiting.append(held)
             return
-        self._credit_session(*credit)
+        self._credit_session(*held)
 
     def _credit_waiting_sessions(self) -> None:
         waiting, self._credits_waiting = self._credits_waiting, []
@@ -3478,12 +3501,10 @@ class NativeSession(QObject):
             return
         if "skip" in plan:
             return
-        updated = plan["updated"]
-        homework = updated if plan["to"] == "assignment" else None
-        blocks = None if homework is not None else [
-            updated if item["id"] == updated["id"] else item for item in self.blocks
-        ]
-        self._draft_command("credit_focus", homework=homework, blocks=blocks, mark_dirty=True)
+        applied = apply_credit_blocks(self.blocks, plan["to"], plan["updated"])
+        self._draft_command(
+            "credit_focus", homework=applied["homework"], blocks=applied["blocks"], mark_dirty=True
+        )
         if finished:
             self._auto_complete_session(state)
         self.save(record_history=False)
@@ -3498,19 +3519,14 @@ class NativeSession(QObject):
     def hold_alerts(self, notices: list[dict]) -> list[dict]:
         """The notices to show now. Focus's own are always shown; reminders are kept until focus
         leaves its work phase. Alarms the student set do not come through here and still ring."""
-        held = alerts_held(
-            [item.get("kind") for item in notices],
-            self.focus,
-            self.preferences,
-            self._material_focus_rules(),
-        )
-        if not any(held):
+        split = split_held(notices, self.focus, self.preferences, self._material_focus_rules())
+        if not split["hold"]:
             return notices
-        self._held_alerts.extend(item for item, keep in zip(notices, held, strict=True) if keep)
-        return [item for item, keep in zip(notices, held, strict=True) if not keep]
+        self._held_alerts.extend(split["hold"])
+        return split["show"]
 
     def release_held_alerts(self) -> list[dict]:
-        if not self._held_alerts or self.focus_mutes_alerts():
+        if not release_held(self._held_alerts, self.focus, self.preferences, self._material_focus_rules()):
             return []
         held, self._held_alerts = self._held_alerts, []
         return held
@@ -3526,58 +3542,79 @@ class NativeSession(QObject):
             assignments=self.assignments,
             blocks=self.blocks,
         )
-        done = plan["block"]
-        if done is not None:
-            blocks = [
-                {**block, "start": done["start"], "completed": True, "completed_day": done["completed_day"]}
-                if block["id"] == done["id"] else block
-                for block in self.blocks
-            ]
-            self._draft_command("credit_focus", blocks=blocks)
+        applied = apply_auto_complete_blocks(self.blocks, plan["block"])
+        if applied["changed"]:
+            self._draft_command("credit_focus", blocks=applied["blocks"])
         if plan["complete_homework"]:
             self.complete_homework(plan["complete_homework"], True)
 
-    def finish_focused_homework(self) -> bool:
-        state = self.focus
-        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
-            return False
-        assignment_id = state.get("assignmentId")
-        if not assignment_id or assignment_id not in self.assignments:
-            return False
-        if state.get("weekStart") != self.week_start:
-            self.load_week(state["weekStart"])
-            return False
-        blocks = deepcopy(self.blocks)
-        block = next((item for item in blocks if item["id"] == state.get("blockId")), None)
-        if block is not None and block.get("kind") == "flexible":
-            if (
-                state.get("start")
-                and isinstance(state.get("day"), int)
-                and state["day"] in (block.get("days") or [])
-            ):
-                block["start"] = state["start"]
-                # A finished day is only valid on a finished block, and finishing the homework below
-                # checks every session it has before marking any of them.
-                block["completed"] = True
-                block["completed_day"] = state["day"]
-            elif not isinstance(block.get("completed_day"), int):
-                block["start"] = None
-        self._draft_command("credit_focus", blocks=blocks)
-        self.complete_homework(assignment_id, True)
+    def _apply_focused_finish(self, plan: dict) -> bool:
+        self._draft_command("credit_focus", blocks=plan["blocks"])
+        self.complete_homework(plan["assignment_id"], True)
         self._reset_focus()
         self.save()
         return True
 
+    def finish_focused_homework(self) -> str | bool:
+        """Return finished, queued, or False. Queued waits for the other week's load."""
+        plan = finish_focused_plan(
+            self.focus,
+            busy=self.busy,
+            focus_busy=self._focus_busy,
+            week_start=self.week_start,
+            blocks=self.blocks,
+            assignments=self.assignments,
+        )
+        if plan["action"] == "ignore":
+            return False
+        if plan["action"] == "load_then_finish":
+            self._finish_focus_waiting = True
+            self._finish_focus_week = plan["week"]
+            self.load_week(plan["week"])
+            if self.account is None:
+                self._clear_finish_intent()
+            # A synchronous restore finishes before this returns. A fetch is still in flight.
+            # A load that stayed on the open week has already cleared the wait.
+            if self.focus is None:
+                return "finished"
+            if self._finish_focus_waiting:
+                return "queued"
+            return False
+        self._apply_focused_finish(plan)
+        return "finished"
+
+    def _finish_loaded_focus(self, *, loaded: bool) -> None:
+        plan = finish_after_load(
+            waiting=self._finish_focus_waiting,
+            pending=self._finish_focus_week,
+            load_ok=loaded,
+            state=self.focus,
+            busy=self.busy,
+            focus_busy=self._focus_busy,
+            week_start=self.week_start,
+            blocks=self.blocks,
+            assignments=self.assignments,
+        )
+        if plan["action"] == "none":
+            return
+        self._clear_finish_intent()
+        if plan["action"] != "finish":
+            return
+        self._apply_focused_finish(plan)
+
     def restart_finished_focus(self) -> bool:
         """Start again on a timer that has run out: a new session on the same homework (or a quick
         one), taking the place of the finished timer without asking to replace it."""
-        state = self.focus
-        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
+        plan = restart_finished_plan(
+            self.focus,
+            busy=self.busy,
+            focus_busy=self._focus_busy,
+            prefs=self.preferences,
+            now_ms=self.now_ms(),
+        )
+        if plan["action"] == "ignore":
             return False
-        target = {
-            key: state.get(key) for key in ("weekStart", "blockId", "assignmentId", "day", "start", "title")
-        }
-        self.focus = begin_state(target, self.preferences, self.now_ms())
+        self.focus = plan["state"]
         self._pending_focus = None
         self._persist_focus()
         self.focus_changed.emit()
@@ -3585,17 +3622,24 @@ class NativeSession(QObject):
         return True
 
     def add_focus_time(self, minutes: int) -> bool:
-        state = self.focus
-        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
+        plan = add_focus_time_plan(
+            self.focus,
+            busy=self.busy,
+            focus_busy=self._focus_busy,
+            assignments=self.assignments,
+            minutes=minutes,
+            prefs=self.preferences,
+            now_ms=self.now_ms(),
+        )
+        if plan["action"] == "ignore":
             return False
-        assignment = self.assignments.get(state.get("assignmentId"))
-        if assignment is None or minutes not in more_time_choices(int(assignment.get("estimate_min") or 0)):
-            self._say("Choose how much more time it needs.")
+        if plan["action"] == "refuse":
+            self._say(plan["say"])
             return False
-        homework = {**assignment, "estimate_min": int(assignment["estimate_min"]) + minutes}
-        self.focus = self._enter_phase(state, break_phase(int(state.get("cycles") or 0), self.preferences))
+        self.alerts.emit([plan["alert"]])
+        self.focus = plan["state"]
         self._draft_command(
-            "add_focus_time", homework=homework, history_label="adding time to " + assignment["title"],
+            "add_focus_time", homework=plan["homework"], history_label=plan["history_label"]
         )
         self._persist_focus()
         self.focus_changed.emit()
@@ -3603,10 +3647,13 @@ class NativeSession(QObject):
         return True
 
     def take_focus_break(self) -> bool:
-        state = self.focus
-        if state is None or state.get("phase") != "ended" or self._focus_busy:
+        plan = take_break_plan(
+            self.focus, focus_busy=self._focus_busy, prefs=self.preferences, now_ms=self.now_ms()
+        )
+        if plan["action"] == "ignore":
             return False
-        self.focus = self._enter_phase(state, break_phase(int(state.get("cycles") or 0), self.preferences))
+        self.alerts.emit([plan["alert"]])
+        self.focus = plan["state"]
         self._persist_focus()
         self.focus_changed.emit()
         return True

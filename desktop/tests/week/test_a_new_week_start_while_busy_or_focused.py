@@ -55,7 +55,7 @@ def test_homework_focused_before_the_week_start_changed_can_still_be_finished(
     fields.save_week_starts_on("wednesday")
     wait_until(qapp, lambda: session.week_start == "2026-11-04" and not session.busy)
     settled(qapp, session)
-    assert session.finish_focused_homework() is True
+    assert session.finish_focused_homework() == "finished"
     settled(qapp, session)
     assert session.assignments["essay"]["completed"] is True
     block = next(item for item in session.blocks if item["id"] == block_id)
