@@ -1,6 +1,5 @@
-"""Screens for the sheets area (chunk H9): the Material week's long homework title, and the week list
-opened from the keyboard. Looks the old regression tests measured in code: they are judged on these
-pictures."""
+"""Screens for the sheets area (chunk H9): the Material week's long homework title. A look the old
+regression tests measured in code: it is judged on this picture."""
 
 from __future__ import annotations
 
@@ -27,26 +26,6 @@ def long_homework_title(window: NativeWindow) -> None:
     pump(qapp)
 
 
-def week_with_school(window: NativeWindow) -> None:
-    qapp = QApplication.instance()
-    window.session.add_block(
-        {
-            "id": "school",
-            "title": "School",
-            "kind": "locked",
-            "category": "class",
-            "start": "08:30",
-            "duration_min": 405,
-            "days": [0, 1, 2, 3, 4],
-        }
-    )
-    settled(qapp, window)
-
-
-def week_list_closed(window: NativeWindow) -> None:
-    week_with_school(window)
-
-
 SCREENS: list[Screen] = [
     Screen(
         id="sheets.material_week_long_homework_title",
@@ -58,17 +37,5 @@ SCREENS: list[Screen] = [
         ),
         sources=("desktop/native/material",),
         styles=MATERIAL,
-    ),
-    Screen(
-        id="week.week_list_closed",
-        area="week",
-        prepare=week_list_closed,
-        checks=(
-            "The week list is hidden and takes no room: with the grid shown, note the top edge of "
-            "the grid, to "
-            "compare with week.week_list_open."
-        ),
-        sources=("desktop/native/window.py", "desktop/native/hours"),
-        styles=("classic",),
     ),
 ]

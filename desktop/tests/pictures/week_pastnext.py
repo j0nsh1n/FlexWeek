@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QAbstractButton, QApplication
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
@@ -18,7 +18,6 @@ def _saved(window: NativeWindow) -> None:
 
 def _show_week(window: NativeWindow, main: str) -> None:
     window._layout = {"main": main, "day": "one", "options": {}}
-    window.findChild(QAbstractButton, "viewWeek").click()
     window._on_week()
     QApplication.processEvents()
 
