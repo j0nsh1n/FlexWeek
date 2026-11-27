@@ -51,6 +51,8 @@ LOCKED: dict[str, dict[str, str]] = {
         "store_material": "writes the look file with Python's JSON spelling",
     },
     "desktop/native/layout_choice.py": {},
+    "desktop/native/material/sheet_block.py": {},
+    "desktop/native/material/sheet_preview.py": {},
 }
 
 # Files that still hold other decisions. Only these functions moved.
