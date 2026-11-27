@@ -946,6 +946,9 @@ class NativeSession(QObject):
             self._drop_other_setup(data["id"])
             self.account = {"id": data["id"], "username": data["username"]}
             self.new_account = True
+            # Registration does not clear the window the way sign-out does. Drop a finish that
+            # belonged to the previous account, as sign-in does.
+            self._clear_finish_intent()
             self.busy_changed.emit(False)
             self.account_changed.emit(self.account)
             self.recovery_codes.emit(list(event["codes"] or []))
@@ -1039,7 +1042,8 @@ class NativeSession(QObject):
         if self.busy:
             return
         # A finish waiting for its own week is dropped when the student asks for a different one.
-        # The press itself asks for the timer's week, which keeps the wait.
+        # The press itself asks for the timer's week, which keeps the wait. A request for another
+        # week while a load is in flight never reaches this check: the busy guard above ignores it.
         if finish_intent_on_request(
             waiting=self._finish_focus_waiting,
             pending=self._finish_focus_week,
@@ -1051,6 +1055,8 @@ class NativeSession(QObject):
             first_weekday=self.first_weekday, discard=discard, selection=self._selection(),
         )
         if route["action"] == "keep":
+            # Nothing was loaded, so a finish waiting on this request would stay set.
+            self._clear_finish_intent()
             return
         if route["action"] == "restore":
             selection = route["selection"]
@@ -3511,7 +3517,8 @@ class NativeSession(QObject):
         self.save()
         return True
 
-    def finish_focused_homework(self) -> bool:
+    def finish_focused_homework(self) -> str | bool:
+        """Return finished, queued, or False. Queued waits for the other week's load."""
         plan = finish_focused_plan(
             self.focus,
             busy=self.busy,
@@ -3528,9 +3535,15 @@ class NativeSession(QObject):
             self.load_week(plan["week"])
             if self.account is None:
                 self._clear_finish_intent()
-            # A synchronous restore finishes before this returns. A fetch finishes in its reply.
-            return self.focus is None
-        return self._apply_focused_finish(plan)
+            # A synchronous restore finishes before this returns. A fetch is still in flight.
+            # A load that stayed on the open week has already cleared the wait.
+            if self.focus is None:
+                return "finished"
+            if self._finish_focus_waiting:
+                return "queued"
+            return False
+        self._apply_focused_finish(plan)
+        return "finished"
 
     def _finish_loaded_focus(self, *, loaded: bool) -> None:
         plan = finish_after_load(
