@@ -2,9 +2,15 @@
 //! restore, export, import and `import_week_file` methods, with the words a student reads.
 
 use flexweek_app::session::transfer::{
-    ImportContext, ImportDecision, create_restore_key, import_key, import_week_decision,
-    restore_apply_guard, restore_key, restore_points_after_create, transfer_blocked,
+    ApplyImport, ApplyRestore, CreateRestore, ExportAccount, ImportContext, ImportDecision,
+    PreviewImport, PreviewRestore, create_restore_key, finish_apply_import_err,
+    finish_apply_import_ok, finish_apply_restore_err, finish_apply_restore_ok,
+    finish_create_restore, finish_preview_import, import_key, import_week_decision,
+    prepare_apply_import, prepare_apply_restore, prepare_create_restore, prepare_export_account,
+    prepare_preview_import, prepare_preview_restore, restore_apply_guard, restore_key,
+    restore_points_after_create, restore_points_from_reply, transfer_blocked,
 };
+use flexweek_engine::ErrorKind;
 use serde_json::{Value, json};
 
 const WEEK: &str = "2026-09-21";
@@ -238,6 +244,10 @@ fn operation_keys_keep_their_shapes() {
     assert_eq!(import_key(7, &Value::Null), "import|7|None");
 }
 
+const SAVE_FIRST_EXPORT: &str = "Save your last change first (More > Retry save), then export.";
+const SAVE_FIRST_IMPORT: &str = "Save your last change first (More > Retry save), then import.";
+const PREVIEW_FIRST: &str = "Preview the saved copy first.";
+
 #[test]
 fn a_point_with_no_id_replaces_one_whose_id_is_null() {
     // The window compared `item.get("id") != point.get("id")`: a missing id and a null one are the same.
@@ -252,5 +262,349 @@ fn a_point_with_no_id_replaces_one_whose_id_is_null() {
             json!({"label": "new"}),
             json!({"id": "p2", "label": "kept"})
         ]
+    );
+}
+
+#[test]
+fn a_blank_or_whitespace_name_is_refused_and_a_missing_id_is_not_asked_yet() {
+    let blank = prepare_create_restore(true, None, "   ").unwrap();
+    assert_eq!(blank, CreateRestore::Say("Name the saved copy.".into()));
+    // U+001C is space to Python's strip and not to Rust's, so a name of only that is still blank.
+    let control = prepare_create_restore(true, None, "\u{1c}").unwrap();
+    assert_eq!(control, CreateRestore::Say("Name the saved copy.".into()));
+    let signed_out = prepare_create_restore(false, None, "Before exams").unwrap();
+    assert_eq!(
+        signed_out,
+        CreateRestore::Say("Name the saved copy.".into())
+    );
+}
+
+#[test]
+fn a_usable_name_with_no_account_id_is_a_missing_key() {
+    let err = prepare_create_restore(true, None, "Before exams").unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Key);
+    assert_eq!(err.message, "id");
+}
+
+#[test]
+fn the_create_request_strips_the_name_and_saves_under_that_key() {
+    let ready = prepare_create_restore(true, Some(7), "  Before exams  ").unwrap();
+    assert_eq!(
+        ready,
+        CreateRestore::Ready {
+            key: "create-restore|7|Before exams".into(),
+            method: "POST",
+            path: "/api/restore-points".into(),
+            body: json!({ "label": "Before exams" }),
+            progress: "Saving a copy\u{2026}",
+        }
+    );
+}
+
+#[test]
+fn the_saved_copy_sentence_uses_the_reply_label() {
+    let reply = json!({"id": "p", "label": "Before term 2"});
+    let finished = finish_create_restore(&[], &reply, "  Before exams  ").unwrap();
+    assert_eq!(finished.words, "Saved copy Before term 2.");
+    assert_eq!(finished.points, vec![reply]);
+}
+
+#[test]
+fn a_point_with_no_label_keeps_the_name_that_was_typed_spaces_included() {
+    let reply = json!({"id": "p"});
+    let finished = finish_create_restore(&[], &reply, "  Before exams  ").unwrap();
+    assert_eq!(finished.words, "Saved copy   Before exams  .");
+}
+
+#[test]
+fn an_empty_label_on_the_point_is_not_replaced_by_the_typed_name() {
+    let reply = json!({"id": "p", "label": ""});
+    let finished = finish_create_restore(&[], &reply, "Before exams").unwrap();
+    assert_eq!(finished.words, "Saved copy .");
+}
+
+#[test]
+fn a_label_that_is_not_text_cannot_be_said() {
+    let reply = json!({"id": "p", "label": 1});
+    let err = finish_create_restore(&[], &reply, "Before exams").unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Type);
+    assert_eq!(err.message, "can only concatenate str (not \"int\") to str");
+}
+
+#[test]
+fn a_wrapped_restore_point_is_the_one_that_is_stored() {
+    let reply = json!({
+        "restore_point": {"id": "p2", "label": "two again"},
+        "label": "not this",
+    });
+    let current = [
+        json!({"id": "p2", "label": "two"}),
+        json!({"id": "p1", "label": "one"}),
+    ];
+    let finished = finish_create_restore(&current, &reply, "typed").unwrap();
+    assert_eq!(finished.words, "Saved copy two again.");
+    assert_eq!(
+        finished.points,
+        vec![
+            json!({"id": "p2", "label": "two again"}),
+            json!({"id": "p1", "label": "one"}),
+        ]
+    );
+}
+
+#[test]
+fn an_empty_restore_point_field_falls_back_to_the_whole_reply() {
+    let reply = json!({"restore_point": {}, "id": "p", "label": "whole"});
+    let finished = finish_create_restore(&[], &reply, "typed").unwrap();
+    assert_eq!(finished.words, "Saved copy whole.");
+    assert_eq!(finished.points, vec![reply]);
+}
+
+#[test]
+fn finish_create_still_keeps_only_the_newest_twenty() {
+    let current: Vec<Value> = (0..20).map(|n| json!({"id": format!("old{n}")})).collect();
+    let reply = json!({"id": "new", "label": "new"});
+    let finished = finish_create_restore(&current, &reply, "new").unwrap();
+    assert_eq!(finished.points.len(), 20);
+    assert_eq!(finished.points[0]["id"], "new");
+    assert_eq!(finished.points[19]["id"], "old18");
+}
+
+#[test]
+fn the_listed_points_prefer_restore_points_and_an_empty_list_falls_through() {
+    let listed = restore_points_from_reply(&json!({"restore_points": [{"id": "a"}]})).unwrap();
+    assert_eq!(listed, vec![json!({"id": "a"})]);
+    let fallback = restore_points_from_reply(&json!({
+        "restore_points": [],
+        "points": [{"id": "b"}],
+    }))
+    .unwrap();
+    assert_eq!(fallback, vec![json!({"id": "b"})]);
+    let neither = restore_points_from_reply(&json!({})).unwrap();
+    assert!(neither.is_empty());
+}
+
+#[test]
+fn a_restore_point_count_instead_of_a_list_is_not_iterable() {
+    let err = restore_points_from_reply(&json!({"restore_points": 1})).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Type);
+    assert_eq!(err.message, "'int' object is not iterable");
+}
+
+#[test]
+fn a_reply_that_is_not_an_object_has_no_get() {
+    let err = restore_points_from_reply(&json!([{"id": "a"}])).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Attribute);
+    assert_eq!(err.message, "'list' object has no attribute 'get'");
+}
+
+#[test]
+fn a_signed_out_preview_sends_nothing() {
+    assert_eq!(prepare_preview_restore(false, "p1"), PreviewRestore::Absent);
+}
+
+#[test]
+fn a_preview_path_encodes_the_point_id_the_way_the_window_quoted_it() {
+    assert_eq!(
+        prepare_preview_restore(true, "a/b c"),
+        PreviewRestore::Ready {
+            method: "GET",
+            path: "/api/restore-points/a%2Fb%20c/preview".into(),
+        }
+    );
+    assert_eq!(
+        prepare_preview_restore(true, "café~"),
+        PreviewRestore::Ready {
+            method: "GET",
+            path: "/api/restore-points/caf%C3%A9~/preview".into(),
+        }
+    );
+}
+
+#[test]
+fn applying_still_needs_the_preview_of_that_point() {
+    let preview = json!({"id": "p1", "state_token": "t"});
+    let refused = prepare_apply_restore(true, Some(7), Some(&preview), "p2").unwrap();
+    assert_eq!(refused, ApplyRestore::Say(PREVIEW_FIRST.into()));
+    let signed_out = prepare_apply_restore(false, None, Some(&preview), "p1").unwrap();
+    assert_eq!(signed_out, ApplyRestore::Say(PREVIEW_FIRST.into()));
+    let missing = prepare_apply_restore(true, Some(7), None, "p1").unwrap();
+    assert_eq!(missing, ApplyRestore::Say(PREVIEW_FIRST.into()));
+}
+
+#[test]
+fn a_ready_restore_posts_the_quoted_path_and_the_preview_token() {
+    let preview = json!({"id": "a/b", "state_token": "tok"});
+    let ready = prepare_apply_restore(true, Some(7), Some(&preview), "a/b").unwrap();
+    assert_eq!(
+        ready,
+        ApplyRestore::Ready {
+            key: "restore|7|a/b".into(),
+            method: "POST",
+            path: "/api/restore-points/a%2Fb/restore".into(),
+            body: json!({ "state_token": "tok" }),
+            progress: "Restoring\u{2026}",
+        }
+    );
+}
+
+#[test]
+fn a_preview_without_its_token_is_a_missing_key() {
+    let preview = json!({"id": "p1"});
+    let err = prepare_apply_restore(true, Some(7), Some(&preview), "p1").unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Key);
+    assert_eq!(err.message, "state_token");
+}
+
+#[test]
+fn only_a_conflict_clears_the_preview_after_a_failed_restore_or_import() {
+    assert_eq!(finish_apply_restore_err(409)["clear_preview"], true);
+    assert_eq!(finish_apply_restore_err(400)["clear_preview"], false);
+    assert_eq!(finish_apply_restore_err(500)["clear_preview"], false);
+    assert_eq!(finish_apply_import_err(409)["clear_preview"], true);
+    assert_eq!(finish_apply_import_err(404)["clear_preview"], false);
+}
+
+#[test]
+fn a_finished_restore_reloads_the_week_and_says_restored() {
+    assert_eq!(
+        finish_apply_restore_ok(),
+        json!({
+            "clear_preview": true,
+            "clear_history": true,
+            "focus_after_restore": true,
+            "words": "Restored.",
+            "reload": true,
+            "fetch_points": true,
+        })
+    );
+}
+
+#[test]
+fn export_waits_when_signed_out_or_dirty_and_otherwise_posts_the_password() {
+    assert_eq!(
+        prepare_export_account(false, false, 0, "secret"),
+        ExportAccount::Say(SAVE_FIRST_EXPORT.into())
+    );
+    assert_eq!(
+        prepare_export_account(true, false, 2, "secret"),
+        ExportAccount::Say(SAVE_FIRST_EXPORT.into())
+    );
+    assert_eq!(
+        prepare_export_account(true, false, 0, ""),
+        ExportAccount::Ready {
+            method: "POST",
+            path: "/api/account-export".into(),
+            body: json!({ "password": "" }),
+        }
+    );
+}
+
+#[test]
+fn an_import_preview_posts_the_file_unless_something_is_unsaved() {
+    let file = json!({"format": 3, "username": "ada"});
+    assert_eq!(
+        prepare_preview_import(false, false, 0, &file),
+        PreviewImport::Say(SAVE_FIRST_IMPORT.into())
+    );
+    assert_eq!(
+        prepare_preview_import(true, true, 0, &file),
+        PreviewImport::Say(SAVE_FIRST_IMPORT.into())
+    );
+    assert_eq!(
+        prepare_preview_import(true, false, 0, &file),
+        PreviewImport::Ready {
+            method: "POST",
+            path: "/api/account-import/preview".into(),
+            body: json!({ "snapshot": file }),
+        }
+    );
+}
+
+#[test]
+fn the_kept_import_preview_starts_from_the_file_and_the_reply_overwrites_it() {
+    let file = json!({"format": 3, "username": "ada"});
+    let reply = json!({"state_token": "t", "source_username": "ada", "changes": []});
+    let merged = finish_preview_import(&file, &reply).unwrap();
+    assert_eq!(
+        merged,
+        json!({
+            "snapshot": {"format": 3, "username": "ada"},
+            "state_token": "t",
+            "source_username": "ada",
+            "changes": [],
+        })
+    );
+    let replaced = json!({"snapshot": {"format": 3, "username": "bea"}, "state_token": "t"});
+    let merged = finish_preview_import(&file, &replaced).unwrap();
+    assert_eq!(merged["snapshot"]["username"], "bea");
+    let keys: Vec<&String> = merged.as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["snapshot", "state_token"]);
+}
+
+#[test]
+fn a_preview_reply_that_is_not_an_object_is_not_a_mapping() {
+    let err = finish_preview_import(&json!({}), &json!([1])).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Type);
+    assert_eq!(err.message, "'list' object is not a mapping");
+}
+
+#[test]
+fn an_import_with_no_account_or_no_preview_does_nothing() {
+    let preview = json!({"snapshot": {}, "state_token": "t"});
+    assert_eq!(
+        prepare_apply_import(None, Some(&preview), false, 0).unwrap(),
+        ApplyImport::Absent
+    );
+    assert_eq!(
+        prepare_apply_import(Some(7), None, false, 0).unwrap(),
+        ApplyImport::Absent
+    );
+}
+
+#[test]
+fn unsaved_work_is_refused_before_a_bad_import_preview_is_read() {
+    let preview = json!([1, 2]);
+    let refused = prepare_apply_import(Some(7), Some(&preview), true, 0).unwrap();
+    assert_eq!(refused, ApplyImport::Say(SAVE_FIRST_IMPORT.into()));
+    let err = prepare_apply_import(Some(7), Some(&preview), false, 0).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Attribute);
+    assert_eq!(err.message, "'list' object has no attribute 'get'");
+}
+
+#[test]
+fn a_ready_import_posts_the_snapshot_and_names_a_missing_token_none() {
+    let preview = json!({"snapshot": {"format": 3}, "state_token": null});
+    let ready = prepare_apply_import(Some(7), Some(&preview), false, 0).unwrap();
+    assert_eq!(
+        ready,
+        ApplyImport::Ready {
+            key: "import|7|None".into(),
+            method: "POST",
+            path: "/api/account-import".into(),
+            body: json!({ "snapshot": {"format": 3}, "state_token": null }),
+        }
+    );
+}
+
+#[test]
+fn a_missing_snapshot_on_the_import_preview_is_a_missing_key() {
+    let preview = json!({"state_token": "t"});
+    let err = prepare_apply_import(Some(7), Some(&preview), false, 0).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Key);
+    assert_eq!(err.message, "snapshot");
+}
+
+#[test]
+fn a_finished_import_discards_the_open_week_and_says_it_imported() {
+    assert_eq!(
+        finish_apply_import_ok(),
+        json!({
+            "clear_preview": true,
+            "clear_history": true,
+            "words": "Imported account data.",
+            "reload_discard": true,
+            "fetch_points": true,
+        })
     );
 }

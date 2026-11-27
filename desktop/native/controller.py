@@ -4160,43 +4160,50 @@ class NativeSession(QObject):
             return
 
         def ok(data: dict) -> None:
-            self.restore_points = list(data.get("restore_points") or data.get("points") or [])
+            self.restore_points = json.loads(
+                flexweek_engine.session_restore_points_from_reply(json.dumps(data))
+            )
             self.week_changed.emit()
 
         self.client.request("GET", "/api/restore-points", None, ok, lambda _error: None)
 
     def create_restore_point(self, label: str) -> None:
-        if self.account is None or not label.strip():
-            self._say("Name the saved copy.")
+        account_id = None if self.account is None else self.account.get("id")
+        decision = json.loads(
+            flexweek_engine.session_prepare_create_restore(self.account is not None, account_id, label)
+        )
+        if decision["kind"] == "say":
+            self._say(decision["say"])
             return
-        key = flexweek_engine.create_restore_operation_key(self.account["id"], label.strip())
+        key = decision["key"]
         ticket = self._begin()
-        self._say("Saving a copy…")
+        self._say(decision["progress"])
 
         def ok(data: dict) -> None:
             # The point exists now. The same name asked for again is a new backup, not a retry.
             self._draft_command("forget_attempt", key=key)
             if not self._idle(ticket):
                 return
-            point = data.get("restore_point") or data
-            self.restore_points = json.loads(
-                flexweek_engine.restore_points_after_create_json(
-                    json.dumps(self.restore_points), json.dumps(point)
+            finished = json.loads(
+                flexweek_engine.session_finish_create_restore(
+                    json.dumps(self.restore_points), json.dumps(data), label
                 )
             )
-            self._say("Saved copy " + point.get("label", label) + ".")
+            self.restore_points = finished["points"]
+            self._say(finished["words"])
             self.week_changed.emit()
 
+        body = decision["body"]
+        body["operation_id"] = self._operation(key)
         self.client.request(
-            "POST",
-            "/api/restore-points",
-            {"label": label.strip(), "operation_id": self._operation(key)},
-            ok,
-            lambda error: self._fail(ticket, error),
+            decision["method"], decision["path"], body, ok, lambda error: self._fail(ticket, error)
         )
 
     def preview_restore_point(self, point_id: str, on_preview=None) -> None:
-        if self.account is None:
+        decision = json.loads(
+            flexweek_engine.session_prepare_preview_restore(self.account is not None, point_id)
+        )
+        if decision["kind"] == "absent":
             return
         ticket = self._begin()
 
@@ -4213,13 +4220,7 @@ class NativeSession(QObject):
                 self.restore_preview = None
             self._fail(ticket, error)
 
-        self.client.request(
-            "GET",
-            f"/api/restore-points/{quote(point_id, safe='')}/preview",
-            None,
-            ok,
-            err,
-        )
+        self.client.request(decision["method"], decision["path"], None, ok, err)
 
     def undo_to_restore_point(self, point_id: str) -> None:
         """A notice's Undo for a change from this week on: read the point, then put it back."""
@@ -4227,46 +4228,56 @@ class NativeSession(QObject):
 
     def apply_restore_point(self, point_id: str) -> None:
         preview = self.restore_preview
-        words = flexweek_engine.restore_guard_words(
-            self.account is not None, None if preview is None else json.dumps(preview), point_id
+        account_id = None if self.account is None else self.account.get("id")
+        decision = json.loads(
+            flexweek_engine.session_prepare_apply_restore(
+                self.account is not None,
+                account_id,
+                None if preview is None else json.dumps(preview),
+                point_id,
+            )
         )
-        if words is not None:
-            self._say(words)
+        if decision["kind"] == "say":
+            self._say(decision["say"])
             return
-        assert self.account is not None and preview is not None
-        key = flexweek_engine.restore_operation_key(self.account["id"], point_id)
+        key = decision["key"]
         ticket = self._begin()
-        self._say("Restoring…")
+        self._say(decision["progress"])
 
         def ok(_data: dict) -> None:
             if not self._idle(ticket):
                 return
-            self.restore_preview = None
-            self._draft_command("history_clear")
-            self._focus_after_restore = True
-            self._say("Restored.")
-            self.load_week(self.week_start, said="Restored.")
-            self._fetch_restore_points()
+            done = json.loads(flexweek_engine.session_finish_apply_restore_ok())
+            if done["clear_preview"]:
+                self.restore_preview = None
+            if done["clear_history"]:
+                self._draft_command("history_clear")
+            if done["focus_after_restore"]:
+                self._focus_after_restore = True
+            self._say(done["words"])
+            if done["reload"]:
+                self.load_week(self.week_start, said=done["words"])
+            if done["fetch_points"]:
+                self._fetch_restore_points()
 
         def err(error: ApiError) -> None:
-            if self._alive(ticket) and error.status == 409:
+            done = json.loads(flexweek_engine.session_finish_apply_restore_err(error.status))
+            if self._alive(ticket) and done["clear_preview"]:
                 self.restore_preview = None
             self._fail(ticket, error)
 
-        self.client.request(
-            "POST",
-            f"/api/restore-points/{quote(point_id, safe='')}/restore",
-            {"state_token": preview["state_token"], "operation_id": self._operation(key)},
-            ok,
-            err,
-        )
+        body = decision["body"]
+        body["operation_id"] = self._operation(key)
+        self.client.request(decision["method"], decision["path"], body, ok, err)
 
     def export_account(self, password: str, on_snapshot) -> None:
-        words = flexweek_engine.transfer_blocked_words(
-            self.account is None or self.dirty, len(self.dirty_assignments), "export"
+        decision = json.loads(
+            flexweek_engine.session_prepare_export_account(
+                self.account is not None, self.dirty, len(self.dirty_assignments), password
+            )
         )
-        if words is not None:
-            self._say(words)
+        if decision["kind"] == "say":
+            self._say(decision["say"])
             return
         ticket = self._begin()
 
@@ -4276,26 +4287,33 @@ class NativeSession(QObject):
             on_snapshot(data)
 
         self.client.request(
-            "POST",
-            "/api/account-export",
-            {"password": password},
+            decision["method"],
+            decision["path"],
+            decision["body"],
             ok,
             lambda error: self._fail(ticket, error),
         )
 
     def preview_account_import(self, snapshot: dict, on_preview=None) -> None:
-        words = flexweek_engine.transfer_blocked_words(
-            self.account is None or self.dirty, len(self.dirty_assignments), "import"
+        decision = json.loads(
+            flexweek_engine.session_prepare_preview_import(
+                self.account is not None,
+                self.dirty,
+                len(self.dirty_assignments),
+                json.dumps(snapshot),
+            )
         )
-        if words is not None:
-            self._say(words)
+        if decision["kind"] == "say":
+            self._say(decision["say"])
             return
         ticket = self._begin()
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            self.transfer_preview = {"snapshot": snapshot, **data}
+            self.transfer_preview = json.loads(
+                flexweek_engine.session_finish_preview_import(json.dumps(snapshot), json.dumps(data))
+            )
             self.week_changed.emit()
             if on_preview is not None:
                 on_preview()
@@ -4305,52 +4323,50 @@ class NativeSession(QObject):
                 self.transfer_preview = None
             self._fail(ticket, error)
 
-        self.client.request(
-            "POST",
-            "/api/account-import/preview",
-            {"snapshot": snapshot},
-            ok,
-            err,
-        )
+        self.client.request(decision["method"], decision["path"], decision["body"], ok, err)
 
     def apply_account_import(self) -> None:
         preview = self.transfer_preview
-        if self.account is None or preview is None:
-            return
-        words = flexweek_engine.transfer_blocked_words(self.dirty, len(self.dirty_assignments), "import")
-        if words is not None:
-            self._say(words)
-            return
-        key = flexweek_engine.import_operation_key(
-            self.account["id"], json.dumps(preview.get("state_token"))
+        account_id = None if self.account is None else self.account.get("id")
+        decision = json.loads(
+            flexweek_engine.session_prepare_apply_import(
+                account_id,
+                None if preview is None else json.dumps(preview),
+                self.dirty,
+                len(self.dirty_assignments),
+            )
         )
+        if decision["kind"] == "absent":
+            return
+        if decision["kind"] == "say":
+            self._say(decision["say"])
+            return
+        key = decision["key"]
         ticket = self._begin()
 
         def ok(_data: dict) -> None:
             if not self._idle(ticket):
                 return
-            self.transfer_preview = None
-            self._draft_command("history_clear")
-            self._say("Imported account data.")
-            self.load_week(self.week_start, discard=True)
-            self._fetch_restore_points()
+            done = json.loads(flexweek_engine.session_finish_apply_import_ok())
+            if done["clear_preview"]:
+                self.transfer_preview = None
+            if done["clear_history"]:
+                self._draft_command("history_clear")
+            self._say(done["words"])
+            if done["reload_discard"]:
+                self.load_week(self.week_start, discard=True)
+            if done["fetch_points"]:
+                self._fetch_restore_points()
 
         def err(error: ApiError) -> None:
-            if self._alive(ticket) and error.status == 409:
+            done = json.loads(flexweek_engine.session_finish_apply_import_err(error.status))
+            if self._alive(ticket) and done["clear_preview"]:
                 self.transfer_preview = None
             self._fail(ticket, error)
 
-        self.client.request(
-            "POST",
-            "/api/account-import",
-            {
-                "snapshot": preview["snapshot"],
-                "state_token": preview["state_token"],
-                "operation_id": self._operation(key),
-            },
-            ok,
-            err,
-        )
+        body = decision["body"]
+        body["operation_id"] = self._operation(key)
+        self.client.request(decision["method"], decision["path"], body, ok, err)
 
     def week_file(self) -> dict:
         return export_week_payload(self.week_start, self.blocks, self.assignments)
