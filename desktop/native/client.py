@@ -8,7 +8,6 @@ from __future__ import annotations
 import itertools
 import json
 import logging
-import re
 import secrets
 import time
 import weakref
@@ -62,39 +61,20 @@ def _error(status: int, detail: object = None) -> ApiError:
 
 
 def _username_ok(name: str) -> bool:
-    return re.fullmatch(r"[A-Za-z0-9_]{3,32}", name) is not None
+    return flexweek_engine.view_username_ok(name)
 
 
 def sign_in_problem(name: str, password: str) -> str:
     """What is wrong before asking the server, which could only say "check the required fields"."""
-    if not name:
-        return SIGN_IN_NO_USERNAME
-    if not password:
-        return SIGN_IN_NO_PASSWORD
-    if not _username_ok(name):
-        return SIGN_IN_BAD_USERNAME
-    if len(password) < 12:
-        return SIGN_IN_SHORT_PASSWORD
-    return ""
+    return flexweek_engine.view_sign_in_problem(name, password)
 
 
 def sign_up_problem(name: str, password: str) -> str:
-    if not name:
-        return SIGN_UP_NO_USERNAME
-    if not _username_ok(name):
-        return USERNAME_ERROR
-    if not password:
-        return SIGN_UP_NO_PASSWORD
-    if len(password) > 128:
-        return SIGN_UP_LONG_PASSWORD
-    if len(password) < 12:
-        return short_password_needed(12 - len(password))
-    return ""
+    return flexweek_engine.view_sign_up_problem(name, password)
 
 
 def short_password_needed(n: int) -> str:
-    unit = "character" if n == 1 else "characters"
-    return SIGN_UP_SHORT_PASSWORD.format(n=n, unit=unit)
+    return flexweek_engine.view_short_password_needed(n)
 
 
 class _Host:
