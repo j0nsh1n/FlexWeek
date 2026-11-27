@@ -146,6 +146,31 @@ ROUTINE_STATUS = frozenset(
     ("Saving…", "Saved.", "Saving preferences…", "Saved preferences.", "Loading…", "This week.")
 )
 
+# The focus file's account key is the decimal form of a Rust i64. Sign-out hands the id as an int.
+# Deleting an account hands it as that decimal text. A bool is an int in Python and is neither.
+_FOCUS_ID_MIN = -9223372036854775808
+_FOCUS_ID_MAX = 9223372036854775807
+
+
+def _canonical_account_id(account_id: object) -> int | None:
+    """The id the focus file stores, or None when this value is not that id."""
+    if isinstance(account_id, bool):
+        return None
+    if isinstance(account_id, int):
+        parsed = account_id
+    elif isinstance(account_id, str):
+        try:
+            parsed = int(account_id)
+        except ValueError:
+            return None
+        if str(parsed) != account_id:
+            return None
+    else:
+        return None
+    if parsed < _FOCUS_ID_MIN or parsed > _FOCUS_ID_MAX:
+        return None
+    return parsed
+
 
 def _late_summary(moved: int) -> str:
     return str(flexweek_engine.session_late_summary(moved))
@@ -284,6 +309,8 @@ class NativeSession(QObject):
         # Registered in this sitting, so setup can open before the account's preferences arrive.
         self.new_account = False
         self.focus_store: dict[int, dict | None] = {}
+        # A newer focus file is left on disk. Timers for this run stay in memory and are not written back.
+        self._focus_file_sealed = False
         self.look: dict = sanitize_look(None)
         self.now_ms = wall_clock.now_ms
         self._focus_busy = False
@@ -1045,6 +1072,8 @@ class NativeSession(QObject):
                 self._forget_session()
             if self._resuming:
                 # Before the words, so the sign-in card is there to show them.
+                # The closed app only had the opaque token, not an account id. That account's timer
+                # stays and comes back on the next sign-in. Other accounts on this computer stay too.
                 self._resuming = False
                 self.resume_failed.emit()
             if event["idle"]:
@@ -1068,6 +1097,9 @@ class NativeSession(QObject):
             self._forget_session()
             if self.kept is not None and event["owner"] is not None:
                 self.kept.forget_look(event["owner"])
+            # Delete can finish after the window has already cleared the account, so the timer is
+            # dropped from the owner the event names, not from whoever is signed in now.
+            self._drop_stored_focus(event["owner"])
             self._clear_local()
             self.busy_changed.emit(False)
             self.account_changed.emit(None)
@@ -3371,21 +3403,24 @@ class NativeSession(QObject):
         loaded = json.loads(
             flexweek_engine.session_focus_load_kept(json.dumps({"text": self.kept.read_focus()}))
         )
+        self._focus_file_sealed = bool(loaded.get("sealed"))
         self._set_focus_entries(loaded["entries"])
 
     def _write_focus_file(self, kept: dict) -> None:
-        if self.kept is None:
+        if self.kept is None or self._focus_file_sealed:
             return
         body = json.loads(flexweek_engine.session_focus_kept_text(json.dumps(kept)))
         self.kept.write_focus(body["text"])
 
     def _drop_stored_focus(self, account_id: object) -> None:
-        if isinstance(account_id, bool) or not isinstance(account_id, int):
+        parsed = _canonical_account_id(account_id)
+        if parsed is None:
             return
-        if self.kept is None:
-            self.focus_store.pop(account_id, None)
+        # A sealed file is left as it is. Reloading it would wipe the timers this run is holding.
+        if self.kept is None or self._focus_file_sealed:
+            self.focus_store.pop(parsed, None)
             return
-        self.kept.forget_focus(account_id)
+        self.kept.forget_focus(parsed)
         self._load_focus_file()
 
     def _persist_focus(self) -> None:
@@ -3429,6 +3464,9 @@ class NativeSession(QObject):
         if self.account is None or self.focus is not None:
             return
         saved = self.focus_store.get(self.account["id"])
+        # No entry for this account. Leave the file alone, including one this build does not write.
+        if saved is None:
+            return
         decision = restore_decision(
             saved,
             assignments=self.assignments,

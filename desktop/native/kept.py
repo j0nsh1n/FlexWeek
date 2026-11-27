@@ -25,6 +25,8 @@ from pathlib import Path
 # cookie header, so it is refused rather than sent.
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{20,128}")
 TEXT_SIZES = ("small", "normal", "large")
+# A few accounts' timers fit under this. A larger file is not a timer file, and it is not read whole.
+_FOCUS_MAX_BYTES = 64 * 1024
 
 
 class KeptSession:
@@ -71,9 +73,14 @@ class KeptSession:
         self.path.unlink(missing_ok=True)
 
     def read_focus(self) -> str | None:
+        # A focus file is optional. Anything wrong with reading it is no timers, never an error at startup.
         try:
-            return self.focus.read_text()
-        except (OSError, UnicodeDecodeError):
+            with self.focus.open("rb") as handle:
+                raw = handle.read(_FOCUS_MAX_BYTES + 1)
+            if len(raw) > _FOCUS_MAX_BYTES:
+                return None
+            return raw.decode("utf-8")
+        except (OSError, UnicodeError, MemoryError):
             return None
 
     def write_focus(self, text: str) -> None:
@@ -82,7 +89,7 @@ class KeptSession:
         with contextlib.suppress(FileNotFoundError):
             temporary.unlink()
         handle = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(handle, "w") as out:
+        with os.fdopen(handle, "w", encoding="utf-8") as out:
             out.write(text)
         os.replace(temporary, self.focus)
 
@@ -94,11 +101,17 @@ class KeptSession:
         import flexweek_engine
 
         loaded = json.loads(flexweek_engine.session_focus_load_kept(json.dumps({"text": text})))
+        # A newer format stays on disk. This run's timers are kept in memory instead.
+        if loaded.get("sealed"):
+            return
         removed = json.loads(
             flexweek_engine.session_focus_remove_kept(
                 json.dumps({"entries": loaded["entries"], "account_id": account_id})
             )
         )
+        # Nothing of this account was stored, so the file is already what a write would make.
+        if not removed.get("changed"):
+            return
         body = json.loads(flexweek_engine.session_focus_kept_text(json.dumps(removed)))
         self.write_focus(body["text"])
 
