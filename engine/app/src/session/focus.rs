@@ -513,6 +513,11 @@ pub fn scheduled_blocks(args: &Value) -> EngineResult<Value> {
             .collect();
         return Ok(json!(shown));
     }
+    // A number or a list has no placements. Python's `trace.get` refused it; returning
+    // nothing would hide that the trace was the wrong shape.
+    if !args["trace"].is_object() {
+        return Err(EngineError::value("trace is an object"));
+    }
     let placed = match args["trace"].get("placed") {
         None | Some(Value::Null) => &NULL,
         Some(value) => value,
@@ -594,6 +599,11 @@ pub fn restore_decision(args: &Value) -> EngineResult<Value> {
 /// Arguments: `prefs`, `link`.
 pub fn focus_spotify_decision(args: &Value) -> EngineResult<Value> {
     let prefs = &args["prefs"];
+    // None is no preferences. A truthy value that is not a dict has no `get`, so it is refused
+    // rather than treated as "not Spotify".
+    if truthy(prefs) && !prefs.is_object() {
+        return Err(EngineError::value("prefs is an object"));
+    }
     let audio = if prefs.is_object() {
         prefs.get("focus_audio").unwrap_or(&NULL)
     } else {
@@ -718,7 +728,11 @@ pub fn apply_auto_complete_blocks(args: &Value) -> EngineResult<Value> {
 /// Split notices into those focus keeps back and those to show now.
 /// Arguments: `notices`, `focus`, `prefs`, `material_owns`.
 pub fn split_held(args: &Value) -> EngineResult<Value> {
-    let notices = args["notices"].as_array().cloned().unwrap_or_default();
+    // A string would be walked one character at a time and then fail. An empty split would hide that.
+    let notices = args["notices"]
+        .as_array()
+        .cloned()
+        .ok_or_else(|| EngineError::value("notices is a list"))?;
     let muting = mutes(args);
     let mut show = Vec::new();
     let mut hold = Vec::new();

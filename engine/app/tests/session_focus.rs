@@ -1490,3 +1490,40 @@ fn a_break_after_a_finished_timer_does_not_care_that_a_save_is_busy() {
         "ignore"
     );
 }
+
+#[test]
+fn a_truthy_trace_that_is_not_an_object_is_refused() {
+    for trace in [json!(1), json!([1]), json!("placed")] {
+        let err = focus::scheduled_blocks(&json!({ "blocks": [], "trace": trace })).unwrap_err();
+        assert_eq!(
+            err,
+            flexweek_engine::EngineError::value("trace is an object")
+        );
+    }
+}
+
+#[test]
+fn prefs_that_are_not_an_object_are_refused() {
+    let err =
+        focus::focus_spotify_decision(&json!({ "prefs": "spotify", "link": "spotify:track:1" }))
+            .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("prefs is an object")
+    );
+}
+
+#[test]
+fn notices_that_are_not_a_list_are_refused() {
+    let err = focus::split_held(&json!({
+        "notices": "bad",
+        "focus": Value::Null,
+        "prefs": {},
+        "material_owns": false
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("notices is a list")
+    );
+}
