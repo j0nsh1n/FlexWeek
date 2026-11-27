@@ -581,7 +581,12 @@ fn an_extreme_length_on_a_fixed_time_is_refused_without_overflowing() {
     assert_eq!(shown(&draft, &world)["step"], 1);
     assert!(!draft.advance(&world.env()).unwrap());
     assert_eq!(shown(&draft, &world)["step"], 2);
-    put(&mut draft, &world, "estimate", json!("99999999999999999999"));
+    put(
+        &mut draft,
+        &world,
+        "estimate",
+        json!("99999999999999999999"),
+    );
     draft.back();
     put(&mut draft, &world, "when", json!("fixed"));
     put(&mut draft, &world, "whenDay", json!(4));
