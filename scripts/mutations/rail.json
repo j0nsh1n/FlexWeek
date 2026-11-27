@@ -1,9 +1,9 @@
 [
  {
-  "file": "desktop/native/hours/geometry.py",
+  "file": "engine/app/src/views/hours.rs",
   "name": "blocks back to back two pixels apart",
-  "old": "BETWEEN = 3.0\n",
-  "new": "BETWEEN = 2.0\n",
-  "test": "desktop/tests/week/test_minutes_on_a_track.py::test_a_span_is_drawn_between_its_minutes_and_shares_the_width_when_it_overlaps"
+  "old": "const BETWEEN: f64 = 3.0;\n",
+  "new": "const BETWEEN: f64 = 2.0;\n",
+  "test": "cargo:flexweek-app:views_hours:blocks_back_to_back_are_three_apart"
  }
 ]
