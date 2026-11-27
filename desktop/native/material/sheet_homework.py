@@ -24,7 +24,7 @@ TYPES = tuple(flexweek_engine.VIEWS_HOMEWORK_TYPES)
 ENERGIES = tuple(flexweek_engine.VIEWS_HOMEWORK_ENERGIES)
 WHEN_CHOICES = tuple(flexweek_engine.VIEWS_HOMEWORK_WHEN_CHOICES)
 SPREAD_CHOICES = tuple(flexweek_engine.VIEWS_HOMEWORK_SPREAD_CHOICES)
-DAYS_AHEAD = tuple(flexweek_engine.VIEWS_HOMEWORK_DAYS_AHEAD)
+DAYS_AHEAD = flexweek_engine.VIEWS_HOMEWORK_DAYS_AHEAD
 
 
 def quarter_hours(step: int = SLOT_MIN) -> list[dict]:
