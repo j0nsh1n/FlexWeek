@@ -97,38 +97,25 @@ class KeptAlerts(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._notices: list[dict] = []
-        self._text = ""
+        self._strip = flexweek_engine.AlertStrip()
 
     def add(self, notices: list[dict]) -> None:
-        self._notices.extend(notices)
-        self._render()
+        self._strip.add(json.dumps(notices, default=str))
+        self.changed.emit()
 
     def clear(self) -> None:
-        self._notices.clear()
-        self._render()
+        self._strip.clear()
+        self.changed.emit()
 
     def pending(self) -> int:
-        return len(self._notices)
+        return self._strip.pending()
 
     def text(self) -> str:
-        return self._text
+        return self._strip.text()
 
     def drop(self) -> None:
         """One at a time, so a second alert that arrived while the first sat there is still seen."""
-        if self._notices:
-            self._notices.pop(0)
-        self._render()
-        if not self._notices:
-            self.handled.emit()
-
-    def _render(self) -> None:
-        if not self._notices:
-            self._text = ""
-            self.changed.emit()
-            return
-        notice = self._notices[0]
-        body = notice.get("body") or ""
-        more = f"  (+{len(self._notices) - 1} more)" if len(self._notices) > 1 else ""
-        self._text = f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}{more}"
+        handled = self._strip.drop()
         self.changed.emit()
+        if handled:
+            self.handled.emit()
