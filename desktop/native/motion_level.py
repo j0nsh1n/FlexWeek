@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import flexweek_engine  # type: ignore[import-untyped]
+
 
 @dataclass(frozen=True)
 class Level:
@@ -17,17 +19,8 @@ class Level:
 
 # The stored ids (look.MOTION_LEVELS), which saved preferences and custom looks use. "extra" is
 # shown as More. Reduce keeps the fades and nothing travels: no slide, rise, drift, zoom or lift.
-# More is 2.5 times as slow, so the standard planning ease of 220 ms is 550 ms. At 1.45 it was
-# hard to tell from Normal.
-LEVELS = {
-    "normal": Level(1.0, 1.0),
-    "extra": Level(2.5, 4 / 3),
-    "reduce": Level(1.0, 0.0),
-    "off": Level(0.0, 0.0),
-}
-# Notices, dialogs, blocks settling after a plan: long enough to see where things went, short
-# enough never to feel like waiting.
-EASE_MS = 220
+LEVELS = {name: Level(pace, reach) for name, pace, reach in flexweek_engine.views_theme_motion_levels()}
+EASE_MS: int = int(flexweek_engine.MOTION_EASE_MS)
 
 # The level the whole app runs at, for what has no window to ask: dialogs, designs, painted hours.
 _app_level = "normal"
@@ -35,15 +28,13 @@ _app_level = "normal"
 
 def motion_level(preference: object, look_default: object) -> str:
     """The student's Animations setting, or the look's own when they never chose one."""
-    if preference in LEVELS:
-        return str(preference)
-    return str(look_default) if look_default in LEVELS else "normal"
+    return str(flexweek_engine.views_theme_motion_level(preference, look_default))
 
 
 def set_app_level(level: str) -> None:
     """Make `level` the app's, or Normal when it is not a level."""
     global _app_level
-    _app_level = level if level in LEVELS else "normal"
+    _app_level = str(flexweek_engine.views_theme_motion_level(level, None))
 
 
 def app_level() -> str:
@@ -52,14 +43,14 @@ def app_level() -> str:
 
 def duration(ms: int, level: str | None = None) -> int:
     """How long Normal's `ms` takes at `level`, or at the app's; 0 is at once."""
-    return round(ms * LEVELS[level or _app_level].pace)
+    return int(flexweek_engine.views_theme_motion_duration(ms, level, _app_level))
 
 
 def distance(px: int, level: str | None = None) -> int:
     """How far Normal's `px` goes at `level`, or at the app's; 0 under Reduce and Off."""
-    return round(px * LEVELS[level or _app_level].reach)
+    return int(flexweek_engine.views_theme_motion_distance(px, level, _app_level))
 
 
 def moves(level: str | None = None) -> bool:
     """Whether things travel at `level`, or at the app's, rather than only fading or not moving."""
-    return LEVELS[level or _app_level].reach > 0
+    return bool(flexweek_engine.views_theme_motion_moves(level, _app_level))

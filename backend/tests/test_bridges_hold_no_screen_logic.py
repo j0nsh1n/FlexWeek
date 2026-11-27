@@ -21,6 +21,8 @@ LOCKED: dict[str, dict[str, str]] = {
     "desktop/native/hours/geometry.py": {},
     "desktop/native/hours/scale.py": {},
     "desktop/native/hours/words.py": {},
+    "desktop/native/motion_level.py": {},
+    "desktop/native/look.py": {"_cached_look_json": "keeps the engine's look JSON answers in an LRU cache"},
 }
 
 # Files that still hold other decisions. Only these functions moved.

@@ -1,10 +1,10 @@
 [
   {
     "name": "Reduce lets things travel",
-    "file": "desktop/native/motion_level.py",
-    "old": "    \"reduce\": Level(1.0, 0.0),",
-    "new": "    \"reduce\": Level(1.0, 1.0),",
-    "test": "desktop/tests/settings/test_animation_levels.py::test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them"
+    "file": "engine/app/src/views/theme.rs",
+    "old": "    (\"reduce\", 1.0, 0.0),",
+    "new": "    (\"reduce\", 1.0, 1.0),",
+    "test": "cargo:flexweek-app:views_theme:normal_runs_the_plans_numbers_and_the_other_levels_scale_them"
   },
   {
     "name": "the level never reaches Qt's menu and tooltip fades",
