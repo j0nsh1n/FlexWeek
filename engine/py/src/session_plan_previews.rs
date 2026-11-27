@@ -4,10 +4,10 @@
 
 use flexweek_app::session::plan_previews::{
     AllowSplittingInput, LateAcceptInput, LateAnswerInput, LateInput, RecoverAnswerInput,
-    RecoverInput, SpreadAnswerInput, SpreadSelectionInput, accept_late, late_answer, late_blocks,
-    late_payload_from_base, late_summary, prepare_allow_splitting, prepare_late, recover_answer,
-    recover_payload_from_base, recover_request, spread_answer, spread_key, spread_ready_sentence,
-    spread_selection,
+    RecoverInput, SpreadAnswerInput, SpreadSelectionInput, accept_late, confirm_spread_skipped,
+    late_answer, late_blocks, late_payload_from_base, late_summary, prepare_allow_splitting,
+    prepare_late, recover_answer, recover_payload_from_base, recover_request, spread_answer,
+    spread_key, spread_ready_sentence, spread_selection,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -355,6 +355,11 @@ fn session_spread_selection(
     })
 }
 
+#[pyfunction]
+fn session_confirm_spread_skipped(has_preview: bool, signed_in: bool) -> PyResult<bool> {
+    guard(|| Ok(confirm_spread_skipped(has_preview, signed_in)))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -372,6 +377,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_accept_late,
         session_spread_answer,
         session_spread_selection,
+        session_confirm_spread_skipped,
     );
     Ok(())
 }

@@ -6,7 +6,7 @@
 use flexweek_app::session::unfinished::{
     ClockNow, HomeworkCountsInput, UnfinishedInput, UnfinishedPlan, UnfinishedPlanInput,
     UnfinishedPreview, UnfinishedPreviewInput, homework_counts, left_unfinished_items, overdue_ids,
-    plan_unfinished, unfinished_items, unfinished_preview,
+    plan_left_skipped, plan_unfinished, unfinished_items, unfinished_preview,
 };
 use serde_json::{Map, Value, json};
 
@@ -1324,4 +1324,12 @@ fn left_over_items_from_reports_week_error_before_clock_error() {
         "expected week_start error first, got: {}",
         err.message
     );
+}
+
+#[test]
+fn plan_left_waits_while_busy_in_conflict_or_saving() {
+    assert!(plan_left_skipped(true, false, false));
+    assert!(plan_left_skipped(false, true, false));
+    assert!(plan_left_skipped(false, false, true));
+    assert!(!plan_left_skipped(false, false, false));
 }

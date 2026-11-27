@@ -5,7 +5,8 @@
 use flexweek_app::session::block_edits::{
     BlockDeleteInput, BlockEditInput, DeleteSelectedPlan, HandMoveInput, RepeatEditInput,
     ResumePending, apply_block_edit, apply_hand_move, delete_block, delete_selected_plan,
-    has_block, place_block_words, repeat_edit, resume_pending, setup_standing, unpin_label,
+    has_block, place_block_hold, place_block_words, repeat_edit, resume_pending, setup_standing,
+    unpin_label,
 };
 use flexweek_engine::desk::{grid::occupied_intervals, weekmodel::build_week};
 use serde_json::{Value, json};
@@ -726,4 +727,13 @@ fn unpin_label_names_the_homework_or_falls_back_to_homework() {
         unpin_label(&assignments, "missing").unwrap(),
         "unpinning homework"
     );
+}
+
+#[test]
+fn a_busy_hand_move_is_held_until_the_save_lands() {
+    assert_eq!(
+        place_block_hold(true, "b1", 1, 2, 540, 600).unwrap(),
+        json!(["b1", 1, 2, 540, 600])
+    );
+    assert!(place_block_hold(false, "b1", 1, 2, 540, 600).is_none());
 }

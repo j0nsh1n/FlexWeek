@@ -7,11 +7,11 @@ use flexweek_app::session::copies::{
     ClipboardBlock, CommitGroupsBatchInput, ConfirmPreviewInput, CopyDay, DateProblemInput,
     MoveToDateBatchInput, MoveToDateInput, PasteReady, PasteSelection, PreviewGroups, Relocation,
     RelocationInput, block_on_week, build_move_to_date_batch, clipboard_block, commit_groups_batch,
-    commit_groups_order, confirm_preview_plan, copy_day_items, copy_day_plan, copy_empty_words,
-    copy_selected_plan, date_problem, duplicate_selected_prepare, fixed_copy_rows,
-    move_to_date_needed, paste_destination, paste_proposals_build, paste_proposals_prepare,
-    paste_ready, prepare_move_to_date, preview_groups, previous_week_for_copy, relocate,
-    resolve_date_span,
+    commit_groups_order, confirm_preview_plan, copy_block_skipped, copy_day_items, copy_day_plan,
+    copy_empty_words, copy_selected_plan, date_problem, duplicate_selected_prepare,
+    fixed_copy_rows, move_to_date_needed, paste_destination, paste_proposals_build,
+    paste_proposals_prepare, paste_ready, prepare_move_to_date, preview_groups,
+    previous_week_for_copy, relocate, resolve_date_span,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -727,6 +727,11 @@ fn session_commit_groups_batch(payload: &str) -> PyResult<String> {
     })
 }
 
+#[pyfunction]
+fn session_copy_block_skipped(signed_in: bool) -> PyResult<bool> {
+    guard(|| Ok(copy_block_skipped(signed_in)))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -753,6 +758,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_confirm_preview_plan,
         session_commit_groups_order,
         session_commit_groups_batch,
+        session_copy_block_skipped,
     );
     Ok(())
 }

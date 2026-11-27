@@ -4,8 +4,8 @@
 
 use flexweek_app::session::block_edits::{
     BlockDeleteInput, BlockEditInput, HandMoveInput, RepeatEditInput, apply_block_edit,
-    apply_hand_move, delete_block, delete_selected_plan, has_block, place_block_words, repeat_edit,
-    resume_pending, setup_standing, unpin_label,
+    apply_hand_move, delete_block, delete_selected_plan, has_block, place_block_hold,
+    place_block_words, repeat_edit, resume_pending, setup_standing, unpin_label,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -281,6 +281,24 @@ fn unpin_label_json(assignments: &str, assignment_id: &str) -> PyResult<String> 
     })
 }
 
+/// The hand move held while a save is busy, as a JSON list, or None when it can run now.
+#[pyfunction]
+fn place_block_hold_json(
+    busy: bool,
+    block_id: &str,
+    from_day: i64,
+    day: i64,
+    start: i64,
+    end: i64,
+) -> PyResult<Option<String>> {
+    guard(|| {
+        Ok(
+            place_block_hold(busy, block_id, from_day, day, start, end)
+                .map(|held| held.to_string()),
+        )
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -294,6 +312,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         resume_pending_json,
         delete_selected_plan_json,
         unpin_label_json,
+        place_block_hold_json,
     );
     Ok(())
 }

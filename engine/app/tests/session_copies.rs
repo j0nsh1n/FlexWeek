@@ -10,10 +10,11 @@ use flexweek_app::session::copies::{
     MoveToDateBatchInput, MoveToDateInput, MoveToDatePlan, PasteProposalsPrep, PasteReady,
     PasteSelection, PreviewGroups, PreviousWeekCopy, Relocation, RelocationInput, block_on_week,
     build_move_to_date_batch, clipboard_block, commit_groups_batch, commit_groups_order,
-    confirm_preview_plan, copy_day_items, copy_day_plan, copy_empty_words, copy_selected_plan,
-    date_problem, duplicate_selected_prepare, fixed_copy_rows, move_to_date_needed,
-    paste_destination, paste_proposals_build, paste_proposals_prepare, paste_ready,
-    prepare_move_to_date, preview_groups, previous_week_for_copy, relocate, resolve_date_span,
+    confirm_preview_plan, copy_block_skipped, copy_day_items, copy_day_plan, copy_empty_words,
+    copy_selected_plan, date_problem, duplicate_selected_prepare, fixed_copy_rows,
+    move_to_date_needed, paste_destination, paste_proposals_build, paste_proposals_prepare,
+    paste_ready, prepare_move_to_date, preview_groups, previous_week_for_copy, relocate,
+    resolve_date_span,
 };
 use serde_json::{Map, Value, json};
 
@@ -1325,4 +1326,10 @@ fn commit_groups_preserves_reversed_get_order_and_builds_batch() {
         CommitGroupsBatch::Say(words) => assert!(words.contains("100 blocks"), "{words}"),
         CommitGroupsBatch::Submit { .. } => panic!("full remote week must be refused"),
     }
+}
+
+#[test]
+fn a_copy_does_not_start_while_signed_out() {
+    assert!(copy_block_skipped(false));
+    assert!(!copy_block_skipped(true));
 }

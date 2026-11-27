@@ -648,3 +648,16 @@ pub fn unpin_label(assignments: &Value, assignment_id: &str) -> Result<String, E
         .unwrap_or_else(|| "homework".to_string());
     Ok(format!("unpinning {title}"))
 }
+
+/// A hand move waits out a busy save. The held move is the block, the day it left, and where
+/// it was dropped. Nothing is held when the session is free to place it now.
+pub fn place_block_hold(
+    busy: bool,
+    block_id: &str,
+    from_day: i64,
+    day: i64,
+    start: i64,
+    end: i64,
+) -> Option<Value> {
+    busy.then(|| json!([block_id, from_day, day, start, end]))
+}

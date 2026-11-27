@@ -281,3 +281,8 @@ pub fn refresh_assignments(
     }
     Ok(refresh)
 }
+
+/// A week load does not start while signed out or while a request is already busy.
+pub fn load_week_skipped(signed_in: bool, busy: bool) -> bool {
+    !signed_in || busy
+}

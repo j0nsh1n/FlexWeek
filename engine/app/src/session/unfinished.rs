@@ -877,3 +877,8 @@ pub fn plan_unfinished(
         overdue_targets,
     })
 }
+
+/// Plan into this week does not start while busy, in a conflict, or while a save is still waiting.
+pub fn plan_left_skipped(busy: bool, conflict: bool, pending_save: bool) -> bool {
+    busy || conflict || pending_save
+}

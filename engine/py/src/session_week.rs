@@ -253,6 +253,11 @@ fn week_block_index(ids: Vec<String>, id: &str) -> PyResult<Option<usize>> {
 }
 
 #[pyfunction]
+fn week_load_skipped(signed_in: bool, busy: bool) -> PyResult<bool> {
+    guard(|| Ok(week::load_week_skipped(signed_in, busy)))
+}
+
+#[pyfunction]
 fn week_refresh_assignments(
     incoming: &str,
     local: HashSet<String>,
@@ -286,6 +291,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         week_wrote_open,
         week_local_source,
         week_block_index,
+        week_load_skipped,
         week_refresh_assignments,
     );
     Ok(())

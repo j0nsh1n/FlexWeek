@@ -5,10 +5,10 @@
 use flexweek_app::session::plan_previews::{
     AllowSplittingInput, LateAcceptDecision, LateAcceptInput, LateAnswerInput, LateInput,
     LatePreparation, PreviousSource, RecoverAnswerInput, RecoverInput, RecoverPreparation,
-    SpreadAnswerInput, SpreadPreview, SpreadSelectionInput, accept_late, late_answer, late_blocks,
-    late_payload_from_base, late_summary, prepare_allow_splitting, prepare_late, recover_answer,
-    recover_payload_from_base, recover_request, spread_answer, spread_key, spread_ready_sentence,
-    spread_selection,
+    SpreadAnswerInput, SpreadPreview, SpreadSelectionInput, accept_late, confirm_spread_skipped,
+    late_answer, late_blocks, late_payload_from_base, late_summary, prepare_allow_splitting,
+    prepare_late, recover_answer, recover_payload_from_base, recover_request, spread_answer,
+    spread_key, spread_ready_sentence, spread_selection,
 };
 use serde_json::{Value, json};
 
@@ -1400,4 +1400,12 @@ fn recover_request_returns_save_only_for_a_removed_day() {
     })
     .unwrap();
     assert_eq!(prep, RecoverPreparation::SaveOnly);
+}
+
+#[test]
+fn confirming_a_spread_needs_the_preview_and_a_signed_in_window() {
+    assert!(confirm_spread_skipped(false, true));
+    assert!(confirm_spread_skipped(true, false));
+    assert!(confirm_spread_skipped(false, false));
+    assert!(!confirm_spread_skipped(true, true));
 }
