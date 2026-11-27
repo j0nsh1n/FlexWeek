@@ -1,26 +1,24 @@
-"""The day screen's bridge. QML reads this. It reads the session and nothing lower."""
+"""The day screen's bridge. QML reads this. It reads the session and nothing lower.
+
+Decisions and view state live in `flexweek_engine.DayView`; this object reads the session, hands
+the facts over, and forwards what comes back into Qt models, properties, signals and slots.
+"""
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+import json
+from collections.abc import Iterable, Sequence
+from datetime import date, datetime
 from typing import Any, Protocol
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.calendar import monday_of
-from desktop.native.focus import remaining_ms
-from desktop.native.hours.scale import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
-from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row, overlapped
-from desktop.native.material.day_board import (
-    DIM_KEYS,
-    NUDGE_KEYS,
-    DayBoard,
-    DayRow,
-    board_for,
-    read_flag,
-)
-from desktop.native.weekmodel import length_label, set_clock_24h
+from desktop.native.material.bridge_week import BLOCK_ROLES
+from desktop.native.material.day_board import DayBoard, DayRow, board_for, board_from
+from desktop.native.weekmodel import set_clock_24h
 
 ROW_ROLES = (
     "title",
@@ -39,8 +37,14 @@ ROW_ROLES = (
 
 def _week_holding(session: object, iso_day: str) -> str:
     """The first day of the week on screen that holds `iso_day`: it starts on the student's chosen day."""
-    shown_week_of = getattr(session, "shown_week_of", None)
-    return str(shown_week_of(iso_day)) if callable(shown_week_of) else monday_of(iso_day)
+    holder = getattr(session, "shown_week_of", None)
+    if holder is None:
+        return monday_of(iso_day)
+    return str(holder(iso_day))
+
+
+def _moment(session: Any) -> datetime:
+    return datetime.fromtimestamp(session.now_ms() / 1000)
 
 
 class _Session(Protocol):
@@ -80,30 +84,18 @@ class DayBridge(QObject):
         super().__init__(parent)
         self.setObjectName("dayBridge")
         self._window = window
-        self._today_only = today_only
-        self._mode = "light"
+        self._view = flexweek_engine.DayView(today_only)
         self._up = Rows(ROW_ROLES, self)
         self._done = Rows(ROW_ROLES, self)
         self._blocks = Rows(BLOCK_ROLES, self)
         self._block_rows: list[dict] = []
         self._board = _empty()
-        self._iso = ""
-        self._year = 2026
-        self._month = 1
-        self._mini_day = 0
-        self._day_index = -1
-        self._opening_minute = OPENS
-        self._waiting = False
-        self._load_error = ""
-        self._asked_week = ""
-        self._load_started = False
-        # Day asked for today while another week was loading; that load lands later and moves the day.
-        self._want_today = False
-        # The focus timer, as the Now card names it: (title, time left or "Session finished", ended, homework
-        # still open, homework already done), or blank.
-        self._timer: tuple[str, str, bool, bool, bool] = ("", "", False, False, False)
-        self._today = False
-        session = getattr(window, "session", None)
+        self._apply_snapshot()
+        self._connect_session(today_only)
+        self._publish(self._board)
+
+    def _connect_session(self, today_only: bool) -> None:
+        session = getattr(self._window, "session", None)
         timer = getattr(session, "focus_changed", None)
         if timer is not None and hasattr(timer, "connect"):
             timer.connect(self._on_timer)
@@ -113,108 +105,73 @@ class DayBridge(QObject):
         landed = getattr(session, "week_changed", None)
         if not today_only and landed is not None and hasattr(landed, "connect"):
             landed.connect(self._after_week)
-        self._publish(self._board)
+
+    @property
+    def _mode(self) -> str:
+        return str(self._view.mode())
+
+    def _apply_snapshot(self) -> None:
+        self._snap: dict = json.loads(self._view.snapshot_json())
+
+    def _announce(self) -> None:
+        self._apply_snapshot()
+        self.changed.emit()
 
     def reload(self, mode: str, *, fetch: bool = False) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
-        self._mode = mode if mode in ("light", "dark") else "light"
         session = self._window.session  # type: ignore[attr-defined]
-        prefs = getattr(session, "preferences", None) or {}
-        set_clock_24h(bool(prefs.get("clock_24h")))
-        moment = datetime.fromtimestamp(session.now_ms() / 1000)
-        today = moment.date()
-        viewed = today if self._today_only else _chosen_day(session, today)
-        self._iso = viewed.isoformat()
-        self._year = viewed.year
-        self._month = viewed.month
-        self._mini_day = viewed.day
-        items: tuple = ()
-        week_start = getattr(session, "week_start", "") or ""
-        account = getattr(session, "account", None)
-        self._day_index = -1
-        week_model = None
-        if self._today_only and account is not None:
-            needed = _week_holding(session, viewed.isoformat())
-            if week_start != needed:
-                self._iso = viewed.isoformat()
-                self._year = viewed.year
-                self._month = viewed.month
-                self._mini_day = viewed.day
-                idle = not getattr(session, "busy", False)
-                if self._load_started and self._asked_week == needed and idle:
-                    self._waiting = False
-                    self._load_error = getattr(session, "message", "") or "Couldn't load today."
-                    self.changed.emit()
-                    return
-                self._waiting = True
-                self._load_error = ""
-                self._asked_week = needed
-                want = fetch or self._showing() or self._load_started
-                self._load_started = False
-                loader = getattr(session, "load_week", None)
-                if want and callable(loader) and idle:
-                    loader(needed)
-                    self._load_started = True
-                self.changed.emit()
-                return
-            self._waiting = False
-            self._load_error = ""
-            self._asked_week = ""
-            self._load_started = False
-        offset = -1
-        now_minute = moment.hour * 60 + moment.minute
-        if account is not None and week_start:
-            start = date.fromisoformat(week_start)
-            offset = (today - start).days
-            week_model = session.built_week()
-            if start <= viewed <= start + timedelta(days=6):
-                self._day_index = (viewed - start).days
-                on_day = getattr(week_model, "on_day", None)
-                if callable(on_day):
-                    items = on_day(self._day_index)
-        when = "today" if viewed == today else ("past" if viewed < today else "future")
-        self._today = when == "today"
-        self._timer = _timer_words(session)
-        minute = now_minute if when == "today" else 0
-        self._opening_minute = _opening_minute(
-            week_model, viewed, today, minute if when == "today" else None, self._day_index
+        moment = _moment(session)
+        today_iso = moment.date().isoformat()
+        prefs = getattr(session, "preferences", None)
+        clock, proceed, load, day, read_week = self._view.begin_reload(
+            mode,
+            prefs,
+            today_iso,
+            moment.hour,
+            moment.minute,
+            getattr(session, "selected_day", None),
+            getattr(session, "account", None) is not None,
+            getattr(session, "week_start", None),
+            _week_holding(session, today_iso),
+            bool(getattr(session, "busy", False)),
+            getattr(session, "message", None),
+            fetch,
+            getattr(self.parent(), "_screen", ""),
+            getattr(session, "load_week", None) is not None,
         )
-        self._waiting = False
-        self._load_error = ""
-        dim = read_flag(prefs, DIM_KEYS, True)
-        missed = session.missed_block_ids() if account is not None and week_start else frozenset()
-        block_rows = []
-        for item in items:
-            end = int(item.end)
-            day = int(item.day)
-            if offset > 6:
-                gone = True
-            elif offset < 0:
-                gone = False
-            else:
-                gone = day < offset or (day == offset and end <= now_minute)
-            block_rows.append(
-                occurrence_row(
-                    item, self._mode, dim=dim, gone=gone, fresh=False, missed=item.block_id in missed
-                )
-            )
-        unplaced, words = _waiting_for_a_time(week_model, self._day_index, when)
-        self._publish(
-            board_for(
+        set_clock_24h(clock)
+        if proceed is None:
+            self._ask_for_week(session, load)
+            self._announce()
+            return
+        week = None
+        missed: Iterable[str] = ()
+        if read_week is not None:
+            week = session.built_week()
+            missed = session.missed_block_ids()
+        items: Sequence = ()
+        if day is not None:
+            on_day = getattr(week, "on_day", None)
+            if on_day is not None:
+                items = on_day(day)
+        answer = json.loads(
+            self._view.finish_reload(
+                week,
                 items,
-                minute=minute,
-                when=when,
-                nudges=read_flag(prefs, NUDGE_KEYS, True),
-                dim=dim,
-                mode=self._mode,
-                on=viewed,
-                now=moment,
-                missed=missed,
-                unplaced=unplaced,
-                unplaced_words=words,
-            ),
-            overlapped(block_rows),
+                missed,
+                prefs,
+                json.dumps(getattr(session, "focus", None)),
+                getattr(session, "assignments", None),
+                session.now_ms(),
+                moment,
+            )
         )
+        self._publish(board_from(answer["board"]), answer["block_rows"])
+
+    def _ask_for_week(self, session: Any, week: str | None) -> None:
+        if week is not None:
+            session.load_week(week)
+            self._view.mark_load_started()
 
     def _publish(self, board: DayBoard, block_rows: list[dict] | None = None) -> None:
         self._board = board
@@ -224,53 +181,58 @@ class DayBridge(QObject):
         if self._block_rows != rows:
             self._block_rows = list(rows)
             self._blocks.set_rows(rows)
-        self.changed.emit()
+        self._announce()
 
     def _on_timer(self) -> None:
         """The timer ticks twice a second; the card changes only when its words do."""
-        words = _timer_words(self._window.session)  # type: ignore[attr-defined]
-        if words != self._timer:
-            self._timer = words
-            self.changed.emit()
+        session = self._window.session  # type: ignore[attr-defined]
+        changed = self._view.refresh_timer(
+            json.dumps(getattr(session, "focus", None)),
+            session.now_ms(),
+            getattr(session, "assignments", None),
+        )
+        if changed is not None:
+            self._announce()
 
     def _say(self, text: str) -> None:
         note = getattr(self.parent(), "note", None)
-        if callable(note):
+        if note is not None:
             note(text)
 
     @Slot(str)
     def finishHomework(self, assignment_id: str) -> None:
         """Mark that homework finished and say so, with Undo on the snackbar."""
-        if not assignment_id:
-            return
         session = self._window.session  # type: ignore[attr-defined]
-        if getattr(session, "busy", False) or getattr(session, "pending_save", None) is not None:
-            self._say("Saving your last change… That check will work in a moment.")
-            return
-        item = (getattr(session, "assignments", None) or {}).get(assignment_id) or {}
-        title = item.get("title") or "Homework"
-        session.complete_homework(assignment_id, True)
-        save = getattr(session, "save", None)
-        if callable(save):
-            save()
-        self._say(f"Finished {title}")
-        self.reload(self._mode)
+        first, finished = flexweek_engine.views_day_finish_plan(
+            assignment_id,
+            bool(getattr(session, "busy", False)),
+            getattr(session, "pending_save", None) is not None,
+            getattr(session, "assignments", None),
+        )
+        if first is not None:
+            self._say(first)
+        if finished is not None:
+            session.complete_homework(assignment_id, True)
+            save = getattr(session, "save", None)
+            if save is not None:
+                save()
+            self._say(finished)
+            self.reload(self._mode)
+
+    def _open_day(self, session: Any, iso: str) -> None:
+        opener = getattr(session, "open_day", None)
+        if opener is not None:
+            opener(iso)
+        else:
+            session.selected_day = iso
 
     def ensure_today(self) -> None:
         """Load today's week if looking at a different one, and reset Day to today."""
         session = getattr(self._window, "session", None)
-        if session is not None and not self._today_only:
-            moment = datetime.fromtimestamp(session.now_ms() / 1000)
-            today_iso = moment.date().isoformat()
-            opener = getattr(session, "open_day", None)
-            if callable(opener):
-                opener(today_iso)
-            else:
-                session.selected_day = today_iso
-            self._want_today = bool(getattr(session, "busy", False))
-        self._asked_week = ""
-        self._load_started = False
-        self._load_error = ""
+        if self._view.today_requested(session is not None) is not None:
+            self._open_day(session, _moment(session).date().isoformat())
+            self._view.set_want_today(bool(getattr(session, "busy", False)))
+        self._view.reset_load()
         self.reload(self._mode, fetch=True)
         self.dateOpened.emit()
 
@@ -281,29 +243,28 @@ class DayBridge(QObject):
         too early. The reopen waits a turn so the landing load finishes its own follow-up requests.
         """
         session = getattr(self._window, "session", None)
-        if not self._want_today or session is None or getattr(session, "busy", False):
+        landed = self._view.after_week(session is not None, bool(getattr(session, "busy", False)))
+        if landed is None:
             return
-        self._want_today = False
-        if getattr(self.parent(), "_screen", "") != "day":
-            return
-        today_iso = datetime.fromtimestamp(session.now_ms() / 1000).date().isoformat()
-        landed_today = getattr(session, "week_start", "") == _week_holding(session, today_iso)
-        if getattr(session, "selected_day", "") != today_iso or not landed_today:
+        today_iso = _moment(session).date().isoformat()
+        again = self._view.reopen_today(
+            getattr(self.parent(), "_screen", ""),
+            getattr(session, "selected_day", None),
+            getattr(session, "week_start", None),
+            _week_holding(session, today_iso),
+            today_iso,
+        )
+        if again is not None:
             QTimer.singleShot(0, self, self.ensure_today)
 
-    def _showing(self) -> bool:
-        return getattr(self.parent(), "_screen", "") == "myday"
-
     def _on_busy(self, busy: bool) -> None:
-        if busy or not self._today_only:
-            return
-        if self._load_started or (self._waiting and self._showing()):
+        if self._view.on_busy(busy, getattr(self.parent(), "_screen", "")) is not None:
             self.reload(self._mode)
 
     @Slot()
     def today(self) -> None:
         """Day's T key: show today again, as the rail's Day does."""
-        if not self._today_only:
+        if self._view.today_requested(True) is not None:
             self.ensure_today()
 
     @Slot()
@@ -317,93 +278,79 @@ class DayBridge(QObject):
     @Slot(int)
     def pickDay(self, day: int) -> None:
         """Open `day` in the month the side panel is showing."""
-        if self._today_only or not 1 <= day <= 31:
-            return
-        try:
-            target = date(self._year, self._month, day)
-        except ValueError:
-            return
-        self._open(target.isoformat())
+        target = self._view.pick_target(day)
+        if target is not None:
+            self._open(target)
 
     @Slot()
     def markFinished(self) -> None:
         """The Now card's Mark finished: done now, or queued until the timer's week loads."""
         outcome = self._window.session.finish_focused_homework()  # type: ignore[attr-defined]
-        if outcome == "finished" or outcome == "queued":
+        if flexweek_engine.views_day_finish_refreshes(outcome) is not None:
             self._on_timer()
 
     @Slot()
     def startAgain(self) -> None:
         """The Now card's Start again: a new timer on the same homework, never asking to replace."""
         window = self._window
-        if window.session.restart_finished_focus():  # type: ignore[attr-defined]
+        restarted = window.session.restart_finished_focus()  # type: ignore[attr-defined]
+        if flexweek_engine.views_day_when_true(restarted) is not None:
             opener = getattr(window, "_open_focus_screen", None)
-            if callable(opener):
+            if opener is not None:
                 opener()
 
     @Slot()
     def dismissFinished(self) -> None:
         """The Now card's OK on a finished session whose homework is already done: clear the timer."""
         session = self._window.session  # type: ignore[attr-defined]
-        state = getattr(session, "focus", None)
-        if isinstance(state, dict) and state.get("phase") == "ended":
+        if flexweek_engine.views_day_focus_ended(getattr(session, "focus", None)) is not None:
             session.reset_focus()
 
     @Slot()
     def startFocus(self) -> None:
         """Back to a running timer; else the Focus lane's hook, otherwise the Widgets Start focus path."""
-        window = self._window
-        opener = getattr(window, "_open_focus_screen", None)
-        if self._today and self._timer[0] and callable(opener):
-            opener()
-            return
-        block_id = self._board.focus_block_id
-        day = self._board.focus_day
-        hook = getattr(window, "start_material_focus", None)
-        if callable(hook):
-            hook(block_id, day)
-            return
-        starter = getattr(window, "_start_focus", None)
-        if callable(starter):
-            starter(block_id, None if day < 0 else day)
-            return
-        self._window.session.start_focus(block_id or None, None if day < 0 else day)  # type: ignore[attr-defined]
+        window: Any = self._window
+        call, block_id, day = self._view.start_focus_plan(
+            getattr(window, "_open_focus_screen", None) is not None,
+            getattr(window, "start_material_focus", None) is not None,
+            getattr(window, "_start_focus", None) is not None,
+            self._board.focus_block_id,
+            self._board.focus_day,
+        )
+        calls = {
+            "open_focus": lambda: window._open_focus_screen(),
+            "hook": lambda: window.start_material_focus(block_id, day),
+            "widgets": lambda: window._start_focus(block_id, day),
+            "session": lambda: window.session.start_focus(block_id, day),
+        }
+        calls[call]()
 
     def _shift(self, days: int) -> None:
-        if self._today_only or not self._iso:
-            return
-        self._open((date.fromisoformat(self._iso) + timedelta(days=days)).isoformat())
+        target = self._view.shift_target(days)
+        if target is not None:
+            self._open(target)
 
     def _open(self, iso: str) -> None:
-        self._want_today = False
-        session = self._window.session  # type: ignore[attr-defined]
-        opener = getattr(session, "open_day", None)
-        if callable(opener):
-            opener(iso)
-        else:
-            session.selected_day = iso
+        self._view.set_want_today(False)
+        self._open_day(self._window.session, iso)  # type: ignore[attr-defined]
         self.reload(self._mode)
         self.dateOpened.emit()
 
     @Property(str, notify=changed)
     def iso(self) -> str:
-        return self._iso
+        return self._snap["iso"]
 
     @Property(str, notify=changed)
     def leftLine(self) -> str:
-        if self._waiting:
-            return "Loading…"
-        if self._load_error:
-            return self._load_error
-        return self._board.left_line
+        return str(self._view.left_line(self._board.left_line))
 
     @Property(bool, notify=changed)
     def waiting(self) -> bool:
-        return self._waiting
+        return self._snap["waiting"]
 
     @Property(str, notify=changed)
     def loadError(self) -> str:
-        return self._load_error
+        return self._snap["loadError"]
 
     @Property(int, notify=changed)
     def leftCount(self) -> int:
@@ -411,7 +358,7 @@ class DayBridge(QObject):
 
     @Property(bool, notify=changed)
     def showNow(self) -> bool:
-        return self._board.show_now or bool(self._timer[0] and self._today)
+        return bool(self._view.show_now(self._board.show_now))
 
     @Property(str, notify=changed)
     def nowTitle(self) -> str:
@@ -464,23 +411,23 @@ class DayBridge(QObject):
 
     @Property(int, notify=changed)
     def year(self) -> int:
-        return self._year
+        return self._snap["year"]
 
     @Property(int, notify=changed)
     def month(self) -> int:
-        return self._month
+        return self._snap["month"]
 
     @Property(int, notify=changed)
     def miniDay(self) -> int:
-        return self._mini_day
+        return self._snap["miniDay"]
 
     @Property(int, notify=changed)
     def dayIndex(self) -> int:
-        return self._day_index
+        return self._snap["dayIndex"]
 
     @Property(int, notify=changed)
     def openingMinute(self) -> int:
-        return self._opening_minute
+        return self._snap["openingMinute"]
 
     @Property(str, notify=changed)
     def focusBlockId(self) -> str:
@@ -488,77 +435,25 @@ class DayBridge(QObject):
 
     @Property(str, notify=changed)
     def timerTitle(self) -> str:
-        return self._timer[0] if self._today else ""
+        return self._snap["timerTitle"]
 
     @Property(str, notify=changed)
     def timerLine(self) -> str:
-        return self._timer[1] if self._today else ""
+        return self._snap["timerLine"]
 
     @Property(bool, notify=changed)
     def timerEnded(self) -> bool:
-        return bool(self._today and self._timer[0] and self._timer[2])
+        return self._snap["timerEnded"]
 
     @Property(bool, notify=changed)
     def timerDone(self) -> bool:
         """Time is up on homework that is already done: only OK is left to offer."""
-        return bool(self.timerEnded and self._timer[4])
+        return self._snap["timerDone"]
 
     @Property(bool, notify=changed)
     def timerCanFinish(self) -> bool:
         """Time is up on homework that is still open, which a quick focus never has."""
-        return bool(self.timerEnded and self._timer[3])
-
-
-def _waiting_for_a_time(week: object, day_index: int, when: str) -> tuple[int, tuple[str, str] | None]:
-    """How many homework items due today have no time yet, and the week model's words for them (its name, then
-    what to do), as the Widgets My day said them. The words are None while something placed is still ahead."""
-    if when != "today" or week is None or day_index < 0 or not hasattr(week, "due_today_unplaced"):
-        return 0, None
-    waiting = week.due_today_unplaced(day_index)  # type: ignore[attr-defined]
-    if not waiting:
-        return 0, None
-    if week.leftover_kind(day_index) != "needs_time":  # type: ignore[attr-defined]
-        return len(waiting), None
-    _kicker, title, line = week.leftover_parts(day_index)  # type: ignore[attr-defined]
-    return len(waiting), (title, line)
-
-
-def _opening_minute(week: object, viewed: date, today: date, now: int | None, day_index: int) -> int:
-    """Now on today, else the day's first block, else 08:00. QML only scrolls."""
-    if day_index < 0 or week is None:
-        return now if viewed == today and now is not None else OPENS
-    today_index = day_index if viewed == today else None
-    return opening_minute(week, today_index, now, day_index)  # type: ignore[arg-type]
-
-
-def _timer_words(session: object) -> tuple[str, str, bool, bool, bool]:
-    """The timer's homework and its time left, or "Session finished" once it has run out and has not
-    been cleared ("Finished" when its homework was already done); blank when there is none. The last
-    three say it has ended, its homework is open, and its homework is already done."""
-    state = getattr(session, "focus", None)
-    if not isinstance(state, dict):
-        return ("", "", False, False, False)
-    title = str(state.get("title") or "Quick focus")
-    if state.get("phase") == "ended":
-        homework = (getattr(session, "assignments", None) or {}).get(state.get("assignmentId"))
-        if homework is not None and homework.get("completed"):
-            return (title, "Finished", True, False, True)
-        return (title, "Session finished", True, homework is not None, False)
-    left = max(1, -(-remaining_ms(state, session.now_ms()) // 60_000))  # type: ignore[attr-defined]
-    words = f"{length_label(left)} left"
-    if state.get("phase") in ("break", "long_break"):
-        words = f"Break, {words}"
-    return (title, words, False, False, False)
-
-
-def _chosen_day(session: object, today: date) -> date:
-    selected = getattr(session, "selected_day", "") or ""
-    if isinstance(selected, str) and selected:
-        try:
-            return date.fromisoformat(selected)
-        except ValueError:
-            return today
-    return today
+        return self._snap["timerCanFinish"]
 
 
 def _qml_row(row: DayRow) -> dict:
