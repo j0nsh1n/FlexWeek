@@ -60,12 +60,7 @@ def known_pack(pack: object) -> str:
 
 
 def pack_axis(pack: object) -> str:
-    chosen = known_pack(pack)
-    if chosen in {"light-frost", "slate"}:
-        return "slate"
-    if chosen in {"dark-frost", "nocturne"}:
-        return "nocturne"
-    return "system"
+    return str(flexweek_engine.views_theme_pack_axis(pack))
 
 
 def sanitize_custom(raw: object) -> tuple[dict | None, list[str]]:
@@ -97,8 +92,4 @@ def look_motion(look: dict | None) -> str:
     """The motion level a look starts at when the student never chose one: a custom look's own, Reduce
     for Paper ("distinct page turns, sharp transitions"), else Normal. Light and Dark once started at
     More, 0.16's leftover, so choosing Light moved more than System did."""
-    selected = sanitize_look(look)
-    custom = selected.get("custom")
-    if custom is not None:
-        return custom.get("motion") or ("reduce" if LOOK_BASES[custom["base"]][1] == "paper" else "normal")
-    return "reduce" if selected["preset"] == "paper" else "normal"
+    return str(flexweek_engine.views_theme_look_motion(_look_json_key(look)))
