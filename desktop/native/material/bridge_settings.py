@@ -991,6 +991,8 @@ class SettingsBridge(QObject):
         # Choices sent to the server and not yet answered. They show at once, so a second arrow key steps on
         # from the first instead of from the old saved value.
         self._unsaved: dict[str, Any] = {}
+        self._write_seq = 0
+        self._failed_at = 0
         self._preview_fit = "Fit"
         self._preview_view = "week"
         self._draft_theme: dict[str, Any] = {}
@@ -1104,6 +1106,7 @@ class SettingsBridge(QObject):
         self._section = "look"
         self._page = "sections"
         self._unsaved = {}
+        self._failed_at = 0
         self._notice = ""
         self._spotify_error = ""
         self._sync_problem = ""
@@ -1540,6 +1543,8 @@ class SettingsBridge(QObject):
     def _write(self, updates: dict[str, Any], *, login: bool | None = None) -> None:
         session = self._window.session
         self._unsaved.update(updates)
+        self._write_seq += 1
+        seq = self._write_seq
 
         def settle() -> None:
             # A newer choice for the same setting is still on its way and keeps showing.
@@ -1553,13 +1558,17 @@ class SettingsBridge(QObject):
                 if login is not None:
                     self._window._apply_start_at_login(login)
                 self._bridge.refresh()  # type: ignore[attr-defined]
-                self._notice = ""
+                # Keep an earlier failure notice visible when an already-queued sibling write succeeds.
+                if seq > self._failed_at:
+                    self._notice = ""
             else:
+                self._failed_at = self._write_seq
                 self._notice = "Couldn't save that change. Try again."
             self._publish()
 
         if not session.save_preferences(updates, then):
             settle()
+            self._failed_at = self._write_seq
             self._notice = "Couldn't save that change. Try again."
         self._publish()
 
