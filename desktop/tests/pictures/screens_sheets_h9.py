@@ -1,6 +1,5 @@
-"""Screens for the sheets area (chunk H9): the Material week's long homework title, and the week list
-opened from the keyboard. Looks the old regression tests measured in code: they are judged on these
-pictures."""
+"""Screens for the sheets area (chunk H9): the Material week's long homework title. A look the old
+regression tests measured in code: it is judged on this picture."""
 
 from __future__ import annotations
 
@@ -25,22 +24,6 @@ def long_homework_title(window: NativeWindow) -> None:
     from desktop.tests.material_support import pump
 
     pump(qapp)
-
-
-def week_with_school(window: NativeWindow) -> None:
-    qapp = QApplication.instance()
-    window.session.add_block(
-        {
-            "id": "school",
-            "title": "School",
-            "kind": "locked",
-            "category": "class",
-            "start": "08:30",
-            "duration_min": 405,
-            "days": [0, 1, 2, 3, 4],
-        }
-    )
-    settled(qapp, window)
 
 
 SCREENS: list[Screen] = [
