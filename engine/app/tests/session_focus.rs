@@ -1527,3 +1527,15 @@ fn notices_that_are_not_a_list_are_refused() {
         flexweek_engine::EngineError::value("notices is a list")
     );
 }
+
+#[test]
+fn a_saved_timer_with_nan_or_a_lone_surrogate_is_dropped() {
+    // `plain` writes NaN as this one-key object, and a lone surrogate as a private-use character.
+    let mut nan_timer = saved_timer("work", 0);
+    nan_timer["endsAt"] = json!({ "\u{0}float": "nan" });
+    assert_eq!(restored(nan_timer, 1000)["action"], "drop");
+
+    let mut surrogate = saved_timer("work", 5000);
+    surrogate["start"] = json!(format!("09:00{}", char::from_u32(0x10F800).unwrap()));
+    assert_eq!(restored(surrogate, 1000)["action"], "drop");
+}

@@ -567,6 +567,11 @@ fn listed_days(placed: &Value, source: &Value) -> EngineResult<Value> {
 /// put back on work and paused, and `say` is the sentence the student sees.
 /// Arguments: `saved`, `assignments`, `blocks`, `prefs`, `now_ms`.
 pub fn restore_decision(args: &Value) -> EngineResult<Value> {
+    // `plain` writes NaN as a one-key object and a lone surrogate as a private-use character.
+    // Reading either as a timer would raise; a save that cannot be read is forgotten.
+    if saved_is_corrupt(&args["saved"]) {
+        return Ok(json!({ "action": "drop" }));
+    }
     let now = now_of(args)?;
     let Some(mut state) =
         timer::restore_state(&args["saved"], &args["assignments"], &args["blocks"], now)?
@@ -751,6 +756,26 @@ pub fn split_held(args: &Value) -> EngineResult<Value> {
 /// Arguments: `held` (the kept list), `focus`, `prefs`, `material_owns`.
 pub fn release_held(args: &Value) -> EngineResult<Value> {
     Ok(json!(truthy(&args["held"]) && !mutes(args)))
+}
+
+/// A private-use character in the range `plain` uses for a lone surrogate.
+fn mapped_surrogate(ch: char) -> bool {
+    ('\u{10F800}'..='\u{10FFFF}').contains(&ch)
+}
+
+/// NaN, infinity, or a lone surrogate anywhere in a saved timer. Those are not values a timer holds.
+fn saved_is_corrupt(value: &Value) -> bool {
+    if flexweek_engine::stored::nonfinite(value).is_some() {
+        return true;
+    }
+    match value {
+        Value::String(text) => text.chars().any(mapped_surrogate),
+        Value::Array(items) => items.iter().any(saved_is_corrupt),
+        Value::Object(map) => map
+            .iter()
+            .any(|(key, item)| key.chars().any(mapped_surrogate) || saved_is_corrupt(item)),
+        _ => false,
+    }
 }
 
 fn ended_blocked(state: &Value, busy: bool, focus_busy: bool, check_busy: bool) -> bool {

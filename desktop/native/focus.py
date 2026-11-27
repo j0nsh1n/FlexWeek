@@ -274,13 +274,20 @@ def restore_decision(
     saved: dict | None, *, assignments: dict, blocks: list[dict], prefs: dict | None, now_ms: int
 ) -> dict:
     """What a saved timer becomes: drop, active, advance_work, or paused_work."""
-    decision: dict = _decide(
-        "restore_decision",
-        saved=saved,
-        assignments=assignments,
-        blocks=blocks,
-        prefs=prefs,
-        now_ms=now_ms,
+    # A saved timer can hold NaN or a lone surrogate. `plain` is the form the decision drops;
+    # `json.dumps` would raise before that decision ran.
+    decision: dict = json.loads(
+        flexweek_engine.session_focus_restore_decision(
+            plain(
+                {
+                    "saved": saved,
+                    "assignments": assignments,
+                    "blocks": blocks,
+                    "prefs": prefs,
+                    "now_ms": now_ms,
+                }
+            )
+        )
     )
     return decision
 
