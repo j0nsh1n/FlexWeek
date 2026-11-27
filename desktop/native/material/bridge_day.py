@@ -137,7 +137,7 @@ class DayBridge(QObject):
             getattr(session, "message", None),
             fetch,
             getattr(self.parent(), "_screen", ""),
-            hasattr(session, "load_week"),
+            getattr(session, "load_week", None) is not None,
         )
         set_clock_24h(clock)
         if proceed is None:
