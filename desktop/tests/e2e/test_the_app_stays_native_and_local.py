@@ -78,3 +78,25 @@ def test_signing_up_and_saving_with_phone_sync_set_up_opens_no_network_port(
         window.hide()
         free(window)
         sync.stop()
+
+
+def pydantic_loaded() -> list[str]:
+    return sorted(name for name in sys.modules if name == "pydantic" or name.startswith("pydantic."))
+
+
+def test_starting_the_window_does_not_import_pydantic(qapp: QApplication, database: Path) -> None:
+    """The window starts the way the app does, and pydantic is not among the modules that loaded."""
+    assert pydantic_loaded() == []
+    sync = SyncHost(database)
+    sync.start_if_paired()
+    window = NativeWindow(database, sync=sync)
+    window.show()
+    try:
+        assert window.session is not None
+        assert pydantic_loaded() == []
+    finally:
+        with contextlib.suppress(RuntimeError):
+            window.session.client.reset()
+        window.hide()
+        free(window)
+        sync.stop()
