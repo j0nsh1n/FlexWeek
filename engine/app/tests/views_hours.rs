@@ -377,6 +377,21 @@ fn a_midnight_track_puts_00_00_at_its_top_edge() {
 }
 
 #[test]
+fn a_backwards_sweep_answers_as_python_does_instead_of_panicking() {
+    // Python: min(max(0, 150), -150) = -150, then 0 + (-150 - 150) / -300 * 1440.
+    let ring = Ring {
+        x: 100.0,
+        y: 100.0,
+        inner: 40.0,
+        outer: 80.0,
+        first: 0,
+        last: 1440,
+        sweep: -300.0,
+    };
+    assert_eq!(dial_minute(&ring, 100.0, 40.0).unwrap(), 1440.0);
+}
+
+#[test]
 fn a_dial_reads_clockwise_from_the_top() {
     let ring = Ring {
         x: 100.0,

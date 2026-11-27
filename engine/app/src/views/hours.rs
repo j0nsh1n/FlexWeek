@@ -321,7 +321,8 @@ pub fn dial_minute(ring: &Ring, x: f64, y: f64) -> EngineResult<f64> {
         return Err(EngineError::zero_division("division by zero"));
     }
     let half = ring.sweep / 2.0;
-    let turn = dial_turn(ring, x, y).clamp(-half, half);
+    // Python's min(max(...)): f64::clamp panics when the sweep is negative.
+    let turn = dial_turn(ring, x, y).max(-half).min(half);
     let span = ring.last - ring.first;
     Ok(ring.first as f64 + (turn + half) / ring.sweep * span as f64)
 }
