@@ -10,11 +10,13 @@ saved surface is Material.
 
 from __future__ import annotations
 
+import json
 import logging
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import flexweek_engine  # type: ignore[import-untyped]
 from flexweek_engine import valid_spotify_url  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     Property,
@@ -32,17 +34,10 @@ from PySide6.QtWidgets import QApplication
 
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.account_copy import (
-    CREATE_HEADING,
-    CREATE_NOTE,
-    RECOVERY_COPY,
     RECOVERY_FILE,
     RECOVERY_KEEP,
     RECOVERY_SAID_MS,
-    RECOVERY_SAVE,
     RECOVERY_WAIT,
-    RESET_HEADING,
-    RESET_NOTE,
-    SIGN_IN_HEADING,
 )
 from desktop.native.calendar import (
     DAY_FULL,
@@ -51,20 +46,6 @@ from desktop.native.calendar import (
     is_setup_block,
     new_activity_id,
     weekday_order,
-)
-from desktop.native.client import (
-    PASSWORD_LENGTH_HINT,
-    SESSION_ENDED,
-    SIGN_IN_AGAIN,
-    SIGN_IN_WHY,
-    SIGN_IN_WHY_LINK,
-    TOO_MANY_TRIES,
-    TYPE_RECOVERY_CODE,
-    USERNAME_ERROR,
-    USERNAME_HINT,
-    short_password_needed,
-    sign_in_problem,
-    sign_up_problem,
 )
 from desktop.native.fields import (
     WEEK_STARTS,
@@ -119,18 +100,18 @@ log = logging.getLogger("flexweek.material")
 
 # Three steps: Material has no style page (Material 3 is the only style) and no first-homework or Done page.
 RAIL_STEPS = MATERIAL_RAIL
-RECOVERY_HEADING = "Save these recovery codes"
-RECOVERY_NOTE = (
-    "They are the only way to reset your password. FlexWeek can't email you. "
-    "Copy them somewhere you will still have if this computer is gone."
-)
-RECOVERY_ACK = "I have saved these codes"
-RECOVERY_CONTINUE = "Continue to my week"
-WHY_TITLE = "Why it doesn't say which"
+_AUTH_WORDS = json.loads(flexweek_engine.views_account_auth_words())
+RECOVERY_HEADING = _AUTH_WORDS["recovery_heading"]
+RECOVERY_NOTE = _AUTH_WORDS["recovery_note"]
+RECOVERY_ACK = _AUTH_WORDS["recovery_ack"]
+RECOVERY_CONTINUE = _AUTH_WORDS["recovery_continue"]
+WHY_TITLE = _AUTH_WORDS["why_title"]
+SIGN_IN_WHY_LINK = _AUTH_WORDS["why_link"]
+SIGN_IN_WHY = _AUTH_WORDS["why_body"]
 SPOTIFY_PLACEHOLDER = "Paste a link from Spotify: open.spotify.com/track/… or /playlist/…"
 SPOTIFY_PROBLEM = "Paste a link that starts with https://open.spotify.com, or pick another sound."
-AUTH_PHASES = ("sign-in", "create", "reset")
-PHASES = (*AUTH_PHASES, "recovery", "setup", "app")
+AUTH_PHASES = tuple(_AUTH_WORDS["auth_phases"])
+PHASES = tuple(_AUTH_WORDS["phases"])
 
 
 def _minutes(start: str, end: str) -> int:
@@ -221,6 +202,7 @@ TABLES = {
 class AccountBridge(QObject):
     """The account and setup screens. `phase` is app once the week is the page."""
 
+    _ask_handlers: dict[str, Any] | None
     changed = Signal()
 
     def __init__(self, window: QObject) -> None:
@@ -229,31 +211,17 @@ class AccountBridge(QObject):
         session = window.session  # type: ignore[attr-defined]
         # A session kept at the last sign-in is tried just after the window opens: until it answers, only the
         # plain background shows, not a sign-in card that would flash before the week.
-        if session.account is not None:
-            self._phase = "app"
-        elif session.kept is not None and session.kept.token() is not None:
-            self._phase = "opening"
-        else:
-            self._phase = "sign-in"
-        self._username = ""
-        self._password = ""
-        self._keep = bool(session.keep_signed_in)
-        self._code = ""
-        self._new_password = ""
-        self._problems = {"username": "", "password": "", "recovery": "", "new": ""}
-        self._status = ""
-        self._why_open = False
-        self._codes: list[str] = []
-        self._ack = False
-        self._copy_label = RECOVERY_COPY
-        self._save_label = RECOVERY_SAVE
-        self._recovery_status = ""
+        kept_token = self._kept_token(session)
+        self._auth = flexweek_engine.AccountAuthView(
+            session.account is not None,
+            kept_token is not None,
+            bool(session.keep_signed_in),
+        )
         self._said = QTimer(self)
         self._said.setSingleShot(True)
         self._said.setInterval(RECOVERY_SAID_MS)
         self._said.timeout.connect(self._reset_recovery_labels)
-        self._ask: dict = {}
-        self._ask_handlers: dict[str, Any] | None = None
+        self._ask_handlers = None
         self._edited_done = None
         self._state: Any = None
         self._step = WEEK
@@ -295,10 +263,26 @@ class AccountBridge(QObject):
         session.busy_changed.connect(self._on_busy)
         session.resume_failed.connect(self._on_resume_failed)
 
+    @staticmethod
+    def _kept_token(session: Any) -> object:
+        if session.account is not None:
+            return None
+        if session.kept is None:
+            return None
+        return session.kept.token()
+
+    @property
+    def _phase(self) -> str:
+        return self._auth.phase()
+
+    @_phase.setter
+    def _phase(self, value: str) -> None:
+        self._auth.set_phase(value)
+
     @property
     def codes(self) -> list[str]:
         """The recovery codes on screen, for the window to hand to the Widgets page if Material fails."""
-        return list(self._codes)
+        return self._auth.codes()
 
     @property
     def setup_step(self) -> int:
@@ -308,15 +292,7 @@ class AccountBridge(QObject):
 
     def show_sign_in(self, *, clear: bool = False) -> None:
         """The sign-in card. `clear` drops what the previous student typed."""
-        if clear:
-            self._username = ""
-            self._password = ""
-            self._code = ""
-            self._new_password = ""
-        self._phase = "sign-in"
-        self._clear_problems()
-        self._status = ""
-        self._why_open = False
+        self._auth.show_sign_in(bool(clear))
         self.changed.emit()
 
     @Slot()
@@ -325,104 +301,78 @@ class AccountBridge(QObject):
 
     @Slot()
     def showCreate(self) -> None:  # noqa: N802 — QML slot
-        self._phase = "create"
-        self._clear_problems()
-        self._status = ""
-        self._why_open = False
+        self._auth.show_create()
         self.changed.emit()
 
     @Slot()
     def showReset(self) -> None:  # noqa: N802 — QML slot
-        self._phase = "reset"
-        self._clear_problems()
-        self._status = ""
-        self._why_open = False
+        self._auth.show_reset()
         self.changed.emit()
 
     @Slot(str)
     def setUsername(self, value: str) -> None:  # noqa: N802 — QML slot
-        self._username = value
-        self._problems["username"] = ""
+        self._auth.set_username(value)
         self.changed.emit()
 
     @Slot(str)
     def setPassword(self, value: str) -> None:  # noqa: N802 — QML slot
-        self._password = value
-        self._problems["password"] = ""
-        self._why_open = False
+        self._auth.set_password(value)
         self.changed.emit()
 
     @Slot(str)
     def setRecoveryCode(self, value: str) -> None:  # noqa: N802 — QML slot
-        self._code = value
-        self._problems["recovery"] = ""
+        self._auth.set_recovery_code(value)
         self.changed.emit()
 
     @Slot(str)
     def setNewPassword(self, value: str) -> None:  # noqa: N802 — QML slot
-        self._new_password = value
-        self._problems["new"] = ""
+        self._auth.set_new_password(value)
         self.changed.emit()
 
     @Slot(bool)
     def setKeepSignedIn(self, on: bool) -> None:  # noqa: N802 — QML slot
-        self._keep = bool(on)
-        self._window.session.keep_signed_in = self._keep  # type: ignore[attr-defined]
+        self._window.session.keep_signed_in = self._auth.set_keep_signed_in(bool(on))  # type: ignore[attr-defined]
         self.changed.emit()
 
-    @Slot()
-    def submit(self) -> None:
-        phase = self._phase
-        name = self._username.strip()
-        if phase == "sign-in":
-            problem = sign_in_problem(name, self._password)
-            action = self._window.session.login  # type: ignore[attr-defined]
-            values: tuple = (name, self._password)
-        elif phase == "create":
-            problem = sign_up_problem(name, self._password)
-            action = self._window.session.register  # type: ignore[attr-defined]
-            values = (name, self._password)
-        elif phase == "reset":
-            problem = self._recovery_problem()
-            action = self._window.session.recover  # type: ignore[attr-defined]
-            values = (name, self._code.strip(), self._new_password)
-        else:
-            return
-        if problem:
-            self._show_problem(problem)
-            return
-        self._window.session.keep_signed_in = self._keep  # type: ignore[attr-defined]
+    def _run_auth(self, action: Any, values: list[str]) -> None:
+        self._window.session.keep_signed_in = self._auth.keep_signed_in()  # type: ignore[attr-defined]
         action(*values)
 
     @Slot()
+    def submit(self) -> None:
+        plan = self._auth.submit()
+        if plan is None:
+            return
+        action, values = plan
+        {
+            "problem": lambda _args: self.changed.emit(),
+            "login": lambda args: self._run_auth(self._window.session.login, args),  # type: ignore[attr-defined]
+            "register": lambda args: self._run_auth(self._window.session.register, args),  # type: ignore[attr-defined]
+            "recover": lambda args: self._run_auth(self._window.session.recover, args),  # type: ignore[attr-defined]
+        }[action](values)
+
+    @Slot()
     def explainWhy(self) -> None:  # noqa: N802 — QML slot
-        if self.whyVisible:
-            self._why_open = True
+        if self._auth.explain_why() is not None:
             self.changed.emit()
 
     @Slot()
     def dismissWhy(self) -> None:  # noqa: N802 — QML slot
-        self._why_open = False
+        self._auth.dismiss_why()
         self.changed.emit()
 
     def show_recovery(self, codes: list) -> None:
-        self._codes = [str(code) for code in codes]
-        self._ack = False
-        self._copy_label = RECOVERY_COPY
-        self._save_label = RECOVERY_SAVE
-        self._recovery_status = ""
-        self._phase = "recovery"
+        self._auth.show_recovery(codes)
         self.changed.emit()
 
     @Slot(bool)
     def setRecoveryAck(self, on: bool) -> None:  # noqa: N802 — QML slot
-        self._ack = bool(on)
+        self._auth.set_recovery_ack(bool(on))
         self.changed.emit()
 
     @Slot()
     def copyCodes(self) -> None:  # noqa: N802 — QML slot
-        QApplication.clipboard().setText(self.recoveryCodes + "\n")
-        self._copy_label = "Copied"
+        QApplication.clipboard().setText(self._auth.copy_codes())
         self._said.start()
         self.changed.emit()
 
@@ -435,34 +385,30 @@ class AccountBridge(QObject):
         )
 
     def _write_codes(self, path: str) -> None:
-        if not path:
+        payload = self._auth.recovery_file_payload(path)
+        if payload is None:
             return
         try:
-            Path(path).write_text(self.recoveryCodes + "\n")
+            Path(path).write_text(payload)
         except OSError:
-            self._recovery_status = "FlexWeek couldn't save the codes there. Try another folder."
+            self._auth.mark_save_failed()
             self.changed.emit()
             return
-        self._recovery_status = ""
-        self._save_label = "Saved"
+        self._auth.mark_save_succeeded()
         self._said.start()
         self.changed.emit()
 
     @Slot()
     def finishRecovery(self) -> None:  # noqa: N802 — QML slot
-        if not self._ack:
-            self._recovery_status = RECOVERY_WAIT
-            self.changed.emit()
-            return
-        self._window._finish_recovery()  # type: ignore[attr-defined]
+        {
+            "wait": lambda: self.changed.emit(),
+            "finish": lambda: self._window._finish_recovery(),  # type: ignore[attr-defined]
+        }[self._auth.finish_recovery()]()
 
     def show_app(self) -> None:
-        if self._phase == "app":
-            return
-        self._phase = "app"
-        self._why_open = False
-        self._skip_open = False
-        self.changed.emit()
+        if self._auth.show_app() is not None:
+            self._skip_open = False
+            self.changed.emit()
 
     # Setup
 
@@ -790,49 +736,60 @@ class AccountBridge(QObject):
     def pose_edited(self, ask: dict, done) -> None:
         """The edited-weeks question over setup. `done` is called with the answer, or None to cancel."""
         self._edited_done = done
-        self._ask = ask
+        self._auth.pose_edited(json.dumps(ask), done is not None)
         self.changed.emit()
 
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def ask(self) -> dict:
-        return self._ask
+        return json.loads(self._auth.ask_json())
 
     def pose_question(self, question: dict, handlers: dict[str, Any]) -> None:
         """A question over the account screens (the recovery codes' file). Each answer runs its handler;
         Cancel and Esc run none."""
-        self._ask = dict(question)
         self._ask_handlers = handlers
+        self._auth.pose_question(json.dumps(dict(question)), handlers is not None)
         self.changed.emit()
 
-    @Slot(str)
-    def answer(self, choice: str) -> None:
-        if self._ask_handlers is not None:
-            handlers, self._ask_handlers = self._ask_handlers, None
-            self._ask = {}
-            self.changed.emit()
-            run = handlers.get(choice)
-            if run is not None:
-                run()
-            return
-        self._finish_edited(choice if choice in ("keep", "replace", "from_today") else None)
+    def _run_prompt(self, action: str, choice: str | None) -> None:
+        {
+            "none": lambda _choice: None,
+            "question": self._run_question_choice,
+            "question_closed": self._clear_question,
+            "edited": self._run_edited_done,
+        }[action](choice)
 
-    @Slot()
-    def closeSheet(self) -> None:  # noqa: N802 — QML name
-        if self._ask_handlers is not None:
-            self._ask_handlers = None
-            self._ask = {}
-            self.changed.emit()
+    def _run_question_choice(self, choice: str | None) -> None:
+        handlers, self._ask_handlers = self._ask_handlers, None
+        self.changed.emit()
+        if handlers is None:
             return
-        self._finish_edited(None)
+        run = handlers.get(choice)
+        if run is not None:
+            run()
 
-    def _finish_edited(self, choice: str | None) -> None:
+    def _clear_question(self, _choice: str | None) -> None:
+        self._ask_handlers = None
+        self.changed.emit()
+
+    def _run_edited_done(self, choice: str | None) -> None:
         done, self._edited_done = self._edited_done, None
-        if not self._ask and done is None:
-            return
-        self._ask = {}
         self.changed.emit()
         if done is not None:
             done(choice)
+
+    @Slot(str)
+    def answer(self, choice: str) -> None:
+        action, picked = self._auth.answer(choice)
+        self._run_prompt(action, picked)
+
+    @Slot()
+    def closeSheet(self) -> None:  # noqa: N802 — QML name
+        action, picked = self._auth.close_sheet()
+        self._run_prompt(action, picked)
+
+    def _finish_edited(self, choice: str | None) -> None:
+        action, picked = self._auth.finish_edited(choice)
+        self._run_prompt(action, picked)
 
     @Slot()
     def setupNext(self) -> None:  # noqa: N802 — QML slot
@@ -891,71 +848,55 @@ class AccountBridge(QObject):
 
     @Property(str, notify=changed)
     def phase(self) -> str:
-        return self._phase
+        return self._auth.phase()
 
     @Property(str, notify=changed)
     def heading(self) -> str:
-        if self._phase == "recovery":
-            return RECOVERY_HEADING
-        if self._phase == "setup":
-            return MATERIAL_TITLES[self._step]
-        return {
-            "sign-in": SIGN_IN_HEADING,
-            "create": CREATE_HEADING,
-            "reset": RESET_HEADING,
-        }.get(self._phase, "")
+        return self._auth.heading(MATERIAL_TITLES.get(self._step))
 
     @Property(str, notify=changed)
     def note(self) -> str:
-        if self._phase == "recovery":
-            return RECOVERY_NOTE
-        if self._phase == "create":
-            return CREATE_NOTE
-        if self._phase == "reset":
-            return RESET_NOTE
-        if self._phase == "setup":
-            return MATERIAL_NOTES[self._step]
-        return ""
+        return self._auth.note(MATERIAL_NOTES.get(self._step))
 
     @Property(str, notify=changed)
     def username(self) -> str:
-        return self._username
+        return self._auth.username()
 
     @Property(str, notify=changed)
     def password(self) -> str:
-        return self._password
+        return self._auth.password()
 
     @Property(bool, notify=changed)
     def keepSignedIn(self) -> bool:  # noqa: N802 — QML name
-        return self._keep
+        return self._auth.keep_signed_in()
 
     @Property(str, notify=changed)
     def usernameHint(self) -> str:  # noqa: N802 — QML name
-        return USERNAME_HINT if self._phase == "create" else ""
+        return self._auth.username_hint()
 
     @Property(str, notify=changed)
     def passwordHint(self) -> str:  # noqa: N802 — QML name
-        return PASSWORD_LENGTH_HINT if self._phase == "create" else ""
+        return self._auth.password_hint()
 
     @Property(str, notify=changed)
     def usernameProblem(self) -> str:  # noqa: N802 — QML name
-        return self._problems["username"]
+        return self._auth.username_problem()
 
     @Property(str, notify=changed)
     def passwordProblem(self) -> str:  # noqa: N802 — QML name
-        return self._problems["password"]
+        return self._auth.password_problem()
 
     @Property(str, notify=changed)
     def recoveryProblem(self) -> str:  # noqa: N802 — QML name
-        return self._problems["recovery"]
+        return self._auth.recovery_problem_text()
 
     @Property(str, notify=changed)
     def newPasswordProblem(self) -> str:  # noqa: N802 — QML name
-        return self._problems["new"]
+        return self._auth.new_password_problem()
 
     @Property(str, notify=changed)
     def statusLine(self) -> str:  # noqa: N802 — QML name
-        return self._status
+        return self._auth.status_line()
 
     @Property(QObject, constant=True)
     def activitiesModel(self) -> QObject:  # noqa: N802 — QML name
@@ -975,11 +916,11 @@ class AccountBridge(QObject):
 
     @Property(bool, notify=changed)
     def whyVisible(self) -> bool:  # noqa: N802 — QML name
-        return self._problems["password"].startswith("Wrong username or password")
+        return self._auth.why_visible()
 
     @Property(bool, notify=changed)
     def whyOpen(self) -> bool:  # noqa: N802 — QML name
-        return self._why_open
+        return self._auth.why_open()
 
     @Property(str, constant=True)
     def whyLink(self) -> str:  # noqa: N802 — QML name
@@ -995,35 +936,35 @@ class AccountBridge(QObject):
 
     @Property(str, notify=changed)
     def recoveryCode(self) -> str:  # noqa: N802 — QML name
-        return self._code
+        return self._auth.recovery_code()
 
     @Property(str, notify=changed)
     def newPassword(self) -> str:  # noqa: N802 — QML name
-        return self._new_password
+        return self._auth.new_password()
 
     @Property(str, notify=changed)
     def recoveryCodes(self) -> str:  # noqa: N802 — QML name
-        return "\n".join(self._codes)
+        return self._auth.recovery_codes_text()
 
     @Property(bool, notify=changed)
     def recoveryAck(self) -> bool:  # noqa: N802 — QML name
-        return self._ack
+        return self._auth.recovery_ack()
 
     @Property(bool, notify=changed)
     def recoveryReady(self) -> bool:  # noqa: N802 — QML name
-        return self._ack and not self._window.session.busy  # type: ignore[attr-defined]
+        return self._auth.recovery_ready(bool(self._window.session.busy))  # type: ignore[attr-defined]
 
     @Property(str, notify=changed)
     def copyLabel(self) -> str:  # noqa: N802 — QML name
-        return self._copy_label
+        return self._auth.copy_label()
 
     @Property(str, notify=changed)
     def saveLabel(self) -> str:  # noqa: N802 — QML name
-        return self._save_label
+        return self._auth.save_label()
 
     @Property(str, notify=changed)
     def recoveryStatus(self) -> str:  # noqa: N802 — QML name
-        return self._recovery_status
+        return self._auth.recovery_status()
 
     @Property(str, constant=True)
     def recoveryAckLabel(self) -> str:  # noqa: N802 — QML name
@@ -1601,78 +1542,28 @@ class AccountBridge(QObject):
         self.changed.emit()
 
     def _on_resume_failed(self) -> None:
-        if self._phase == "opening":
-            self._phase = "sign-in"
+        if self._auth.on_resume_failed() is not None:
             self.changed.emit()
 
     def _on_status(self, message: str) -> None:
-        if self._phase not in AUTH_PHASES:
-            return
-        if not message:
-            self._clear_problems()
-            self._status = ""
+        if self._auth.on_status(message) is not None:
             self.changed.emit()
-            return
-        if message.endswith("…"):
-            self._status = message
-            self.changed.emit()
-            return
-        field = self._field_for(message)
-        if field:
-            self._clear_problems()
-            self._problems[field] = message
-            self._status = ""
-        else:
-            self._status = message
-        self.changed.emit()
 
     def _field_for(self, message: str) -> str:
-        words = message.lower()
-        if message in {SIGN_IN_AGAIN, SESSION_ENDED}:
-            return ""
-        if message == TOO_MANY_TRIES:
-            return "recovery" if self._phase == "reset" else "password"
-        if message == USERNAME_ERROR:
-            return "username"
-        if message.startswith("Wrong username or password"):
-            return "password"
-        if "recovery code" in words or "each code" in words:
-            return "recovery"
-        if "username" in words:
-            return "username"
-        if "password" in words:
-            return "new" if self._phase == "reset" else "password"
-        return ""
+        return self._auth.field_for(message)
 
     def _show_problem(self, message: str) -> None:
-        self._clear_problems()
-        field = self._field_for(message)
-        if field:
-            self._problems[field] = message
-            self._status = ""
-        else:
-            self._status = message
+        self._auth.show_problem(message)
         self.changed.emit()
 
     def _clear_problems(self) -> None:
-        self._problems = {"username": "", "password": "", "recovery": "", "new": ""}
-        self._why_open = False
+        self._auth.clear_problems()
 
     def _recovery_problem(self) -> str:
-        password = self._new_password
-        if not self._username.strip():
-            return "Type your username."
-        if not self._code.strip():
-            return TYPE_RECOVERY_CODE
-        if not password:
-            return "Choose a password with at least 12 characters."
-        if len(password) < 12:
-            return short_password_needed(12 - len(password))
-        return ""
+        return self._auth.recovery_problem()
 
     def _reset_recovery_labels(self) -> None:
-        self._copy_label = RECOVERY_COPY
-        self._save_label = RECOVERY_SAVE
+        self._auth.reset_recovery_labels()
         self.changed.emit()
 
     def _apply_clock(self) -> None:
