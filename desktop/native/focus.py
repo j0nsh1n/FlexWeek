@@ -129,6 +129,13 @@ def _decide(name: str, **args: object) -> Any:
     return json.loads(ask(json.dumps(args)))
 
 
+def start_names_homework(*, quick: bool, day: int | None, block_id: str | None, assignments: dict) -> bool:
+    named: bool = _decide(
+        "start_names_homework", quick=quick, day=day, block_id=block_id, assignments=assignments
+    )
+    return named
+
+
 def overdue_for_start(
     *,
     quick: bool,

@@ -62,6 +62,7 @@ from desktop.native.focus import (
     split_held,
     start_allowed,
     start_decision,
+    start_names_homework,
     start_target,
     take_break_plan,
     tick_step,
@@ -3535,7 +3536,13 @@ class NativeSession(QObject):
                 day=day,
                 block_id=block_id,
                 assignments=self.assignments,
-                overdue=list(self._overdue_assignment_ids()),
+                # Read only for a start that names homework, as before: the overdue ids read the
+                # clock and every due date, which a Quick focus or a placed block never needed.
+                overdue=list(self._overdue_assignment_ids())
+                if start_names_homework(
+                    quick=quick, day=day, block_id=block_id, assignments=self.assignments
+                )
+                else [],
             ),
         )
         if "refuse" in planned:

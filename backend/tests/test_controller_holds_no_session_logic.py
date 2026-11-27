@@ -48,7 +48,6 @@ STAYS: dict[str, str] = {
     "NativeSession._touch": "marks the draft dirty and emits week_changed",
     "NativeSession.add_homework": "applies the engine's homework edit, including the sessions it pinned",
     "NativeSession._time_step": "the drag step the hand-move request passes in, from the open preferences",
-
     "NativeSession.keep_setup": "queues the one setup write still waiting",
     "NativeSession.flush_setup": "dispatches the next queued setup step to preferences, study hours, or the week's save",
     "NativeSession._fixed_copy_rows": "makes a fresh id for each block of the week being copied, or none when it has no blocks",
@@ -57,9 +56,7 @@ STAYS: dict[str, str] = {
     "NativeSession._block_on_week": "None from a week read stays None on the way into the move",
     "NativeSession._commit_move_to_date": "applies the engine's move batch and says when it refused",
     "NativeSession.delete_homework": "requests the delete and applies the reply for this ticket only",
-
     "NativeSession._post_pending": "sends the next queued save and applies the reply for this ticket",
-
     "NativeSession.solve": "asks the engine to plan, then fetches the earlier week that request names",
     "NativeSession._dump_blocks": "None blocks stay the open week's on the way into a request",
     "NativeSession._fetch_weeks": "ignores a stale weeks reply and keeps an empty list when the body omits them",

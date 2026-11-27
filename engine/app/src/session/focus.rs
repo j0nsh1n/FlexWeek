@@ -1311,15 +1311,24 @@ fn account_id_of(args: &Value) -> EngineResult<i64> {
 /// Overdue ids a homework start sorts. Empty unless this start names homework: not a quick
 /// start, no day, and the id is a homework on the open week. Arguments: `quick`, `day`,
 /// `block_id`, `assignments`, `overdue`.
-pub fn overdue_for_start(args: &Value) -> EngineResult<Value> {
-    let names_homework = !truthy(&args["quick"])
+/// Whether a start names homework: not Quick focus, no day, and the block id is a homework id.
+/// Only such a start needs the overdue ids, so the window reads them only then.
+pub fn start_names_homework(args: &Value) -> EngineResult<Value> {
+    Ok(Value::Bool(names_homework(args)))
+}
+
+fn names_homework(args: &Value) -> bool {
+    !truthy(&args["quick"])
         && args["day"].is_null()
         && args["block_id"].as_str().is_some_and(|id| {
             args["assignments"]
                 .as_object()
                 .is_some_and(|map| map.contains_key(id))
-        });
-    if !names_homework {
+        })
+}
+
+pub fn overdue_for_start(args: &Value) -> EngineResult<Value> {
+    if !names_homework(args) {
         return Ok(json!([]));
     }
     let overdue = args["overdue"]

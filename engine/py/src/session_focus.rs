@@ -205,6 +205,11 @@ fn session_focus_overdue_for_start(args: &str) -> PyResult<String> {
     guard(|| run(args, focus::overdue_for_start))
 }
 
+#[pyfunction]
+fn session_focus_start_names_homework(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::start_names_homework))
+}
+
 /// Any JSON value. A non-id is None; a number the JSON parser cannot hold is ValueError,
 /// which the window turns back into None.
 #[pyfunction]
@@ -260,6 +265,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_focus_remove_kept,
         session_focus_kept_text,
         session_focus_overdue_for_start,
+        session_focus_start_names_homework,
         session_focus_canonical_account_id,
         session_focus_finish_load_result,
     );

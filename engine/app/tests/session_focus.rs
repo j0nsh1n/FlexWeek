@@ -2423,3 +2423,19 @@ fn writing_keeps_only_a_timer_the_app_would_store() {
         json!([{ "account_id": 7, "payload": running_payload() }])
     );
 }
+
+#[test]
+fn only_a_start_that_names_homework_needs_the_overdue_ids() {
+    let homework = json!({ "essay": { "id": "essay" } });
+    let ask = |quick: bool, day: Value, block: Value| {
+        focus::start_names_homework(&json!({
+            "quick": quick, "day": day, "block_id": block, "assignments": homework
+        }))
+        .unwrap()
+    };
+    assert_eq!(ask(false, Value::Null, json!("essay")), json!(true));
+    assert_eq!(ask(true, Value::Null, json!("essay")), json!(false));
+    assert_eq!(ask(false, json!(0), json!("essay")), json!(false));
+    assert_eq!(ask(false, Value::Null, json!("b1")), json!(false));
+    assert_eq!(ask(false, Value::Null, Value::Null), json!(false));
+}
