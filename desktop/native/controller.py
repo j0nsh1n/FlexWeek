@@ -44,12 +44,14 @@ from desktop.native.focus import (
     finish_after_load,
     finish_focused_plan,
     finish_intent_on_request,
+    finish_load_result,
     focus_candidates,
     focus_spotify_decision,
     focus_spotify_open_failed,
     mutes_alerts,
     now_and_next,
     now_next_line,
+    overdue_for_start,
     persist_payload,
     quick_focus_homework,
     rebase_state,
@@ -78,7 +80,6 @@ from desktop.native.reuse import (
 from desktop.native.weekmodel import (
     WeekModel,
     build_week,
-    homework_time_sentence,
 )
 
 WEEK_OVER = str(flexweek_engine.PLAN_WEEK_OVER)
@@ -146,30 +147,19 @@ ROUTINE_STATUS = frozenset(
     ("Saving…", "Saved.", "Saving preferences…", "Saved preferences.", "Loading…", "This week.")
 )
 
-# The focus file's account key is the decimal form of a Rust i64. Sign-out hands the id as an int.
-# Deleting an account hands it as that decimal text. A bool is an int in Python and is neither.
-_FOCUS_ID_MIN = -9223372036854775808
-_FOCUS_ID_MAX = 9223372036854775807
-
-
 def _canonical_account_id(account_id: object) -> int | None:
     """The id the focus file stores, or None when this value is not that id."""
-    if isinstance(account_id, bool):
+    try:
+        text = json.dumps(account_id)
+    except (TypeError, ValueError):
         return None
-    if isinstance(account_id, int):
-        parsed = account_id
-    elif isinstance(account_id, str):
-        try:
-            parsed = int(account_id)
-        except ValueError:
-            return None
-        if str(parsed) != account_id:
-            return None
-    else:
+    try:
+        found = flexweek_engine.session_focus_canonical_account_id(text)
+    except ValueError:
         return None
-    if parsed < _FOCUS_ID_MIN or parsed > _FOCUS_ID_MAX:
+    if found is None:
         return None
-    return parsed
+    return int(found)
 
 
 def _late_summary(moved: int) -> str:
@@ -1156,9 +1146,7 @@ class NativeSession(QObject):
         self, week_start: str | None = None, *, discard: bool = False, said: str | None = None
     ) -> None:
         """Load a week from the server. `said` is what the status line says once it is loaded."""
-        if self.account is None:
-            return
-        if self.busy:
+        if flexweek_engine.week_load_skipped(self.account is not None, self.busy):
             return
         # A finish waiting for its own week is dropped when the student asks for a different one.
         # The press itself asks for the timer's week, which keeps the wait. A request for another
@@ -1506,8 +1494,11 @@ class NativeSession(QObject):
     def place_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
         """Let a block go at a time. A save already on its way keeps this move and applies it once
         that save has landed, so the reply cannot put the block back where it was."""
-        if self.busy:
-            self._hand_waiting = (block_id, from_day, day, start, end)
+        held = flexweek_engine.place_block_hold_json(
+            self.busy, block_id, from_day, day, start, end
+        )
+        if held is not None:
+            self._hand_waiting = tuple(json.loads(held))
             return
         before = json.dumps(self.blocks)
         if not flexweek_engine.has_block_json(before, block_id):
@@ -1915,10 +1906,12 @@ class NativeSession(QObject):
             "delete_start", assignment_id=assignment_id, operation_id=operation_id,
             key=key, ticket=ticket,
         )
-        self._say("Deleting " + first["title"] + "…")
+        self._say(first["status"])
 
         def received(answer: dict) -> None:
-            if answer.get("deleted") and self.first_weekday:
+            if flexweek_engine.session_delete_clears_reminder(
+                bool(answer.get("deleted")), self.first_weekday
+            ):
                 self._reminder_week = None
             if answer["action"] == "request":
                 self._send_week_effect(answer["effect"], received)
@@ -2028,9 +2021,9 @@ class NativeSession(QObject):
         join: bool = False,
         plan: bool = False,
     ) -> None:
-        if self.account is None or self.conflict:
-            return
-        if self.busy:
+        if flexweek_engine.session_save_skipped(
+            self.account is not None, self.conflict, self.busy
+        ):
             return
         self._draft_command(
             "save", snapshot_label=snapshot_label, operation_id=operation_id,
@@ -2098,7 +2091,9 @@ class NativeSession(QObject):
         self._send_week_effect(post["effect"], received)
 
     def retry_save(self) -> None:
-        if self.pending_save is not None and not self.conflict:
+        if flexweek_engine.session_retry_save_goes(
+            self.pending_save is not None, self.conflict
+        ):
             self.save()
 
     def drop_refused_save(self) -> None:
@@ -2168,7 +2163,7 @@ class NativeSession(QObject):
             if earlier:
                 ticket = self._begin(planning=True)
                 fetched: dict[str, dict] = {}
-                self._say("Gathering homework from earlier weeks…")
+                self._say(prepared["progress"])
 
                 def fail(error: ApiError) -> None:
                     self._fail(ticket, error)
@@ -2201,10 +2196,14 @@ class NativeSession(QObject):
 
         if prepared["kind"] == "empty":
             # The window keeps a visible Undo toast when this is only Plan finding nothing new.
-            self._plan_idle = True
+            self._plan_idle = bool(prepared["keep_undo"])
             try:
-                needed = self.homework_time_needed()
-                self._say(homework_time_sentence(self.unfinished(), needed))
+                self._say(
+                    flexweek_engine.session_homework_time_sentence(
+                        json.dumps(self.unfinished()),
+                        json.dumps(self.homework_time_needed()),
+                    )
+                )
             finally:
                 self._plan_idle = False
             # Homework left in an earlier week is not this plan's to move; the window offers it.
@@ -2215,7 +2214,7 @@ class NativeSession(QObject):
         shares = prepared["shares"]
         week = prepared["week"]
         ticket = self._begin(planning=True)
-        self._say("Planning…")
+        self._say(prepared["progress"])
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
@@ -2517,7 +2516,7 @@ class NativeSession(QObject):
         return (destination["day"], destination["start"])
 
     def copy_block(self, block_id: str, day: int | None, scope: str = "auto", *, say: bool = True) -> bool:
-        if self.account is None:
+        if flexweek_engine.session_copy_block_skipped(self.account is not None):
             return False
         decision = json.loads(
             flexweek_engine.clipboard_block_json(
@@ -3006,7 +3005,9 @@ class NativeSession(QObject):
     def plan_left(self, assignment_ids: list[str]) -> None:
         """"Plan into this week": each one gets a session in this week for the time it has left, and Plan
         finds those times as it does any homework's. The time left in the earlier week stays where it was."""
-        if self.busy or self.conflict or self.pending_save is not None:
+        if flexweek_engine.session_plan_left_skipped(
+            self.busy, self.conflict, self.pending_save is not None
+        ):
             return
         ids = list(assignment_ids)
         plan = json.loads(
@@ -3276,7 +3277,9 @@ class NativeSession(QObject):
 
     def confirm_spread(self) -> bool:
         preview = self.spread_preview
-        if preview is None or self.account is None:
+        if flexweek_engine.session_confirm_spread_skipped(
+            preview is not None, self.account is not None
+        ):
             return False
         key = flexweek_engine.session_spread_operation_key(
             int(self.account["id"]),
@@ -3519,8 +3522,6 @@ class NativeSession(QObject):
     ) -> bool:
         if not start_allowed(self.account is not None, self.busy, self._focus_busy):
             return False
-        # Only a homework's title says whether it is overdue, so the clock is read only for one.
-        names_homework = not quick and day is None and block_id in self.assignments
         planned = start_target(
             block_id=block_id,
             day=day,
@@ -3529,7 +3530,13 @@ class NativeSession(QObject):
             assignments=self.assignments,
             blocks=self.blocks,
             trace=self.trace,
-            overdue=sorted(self._overdue_assignment_ids()) if names_homework else [],
+            overdue=overdue_for_start(
+                quick=quick,
+                day=day,
+                block_id=block_id,
+                assignments=self.assignments,
+                overdue=list(self._overdue_assignment_ids()),
+            ),
         )
         if "refuse" in planned:
             self._say(planned["refuse"])
@@ -3608,9 +3615,8 @@ class NativeSession(QObject):
             self._credit_waiting_sessions()
             # Crediting can save, which can change or end the timer: decide again on what is left.
             step = tick_step(self.focus, credits_waiting=False, busy=self.busy, now_ms=self.now_ms())
-        if step["action"] == "ended" and self.focus is not None:
-            self.focus["running"] = False
-            self.focus["remainingMs"] = 0
+        if step["action"] == "ended":
+            self.focus = step["state"]
             self.advance_focus(completed=True)
         elif step["action"] == "changed":
             self.focus_changed.emit()
@@ -3748,15 +3754,18 @@ class NativeSession(QObject):
             self._finish_focus_waiting = True
             self._finish_focus_week = plan["week"]
             self.load_week(plan["week"])
-            if self.account is None:
-                self._clear_finish_intent()
             # A synchronous restore finishes before this returns. A fetch is still in flight.
             # A load that stayed on the open week has already cleared the wait.
-            if self.focus is None:
-                return "finished"
-            if self._finish_focus_waiting:
-                return "queued"
-            return False
+            answered = finish_load_result(
+                focus=self.focus,
+                waiting=self._finish_focus_waiting,
+                signed_in=self.account is not None,
+            )
+            if answered["clear"]:
+                self._clear_finish_intent()
+            if answered["result"] is None:
+                return False
+            return answered["result"]
         self._apply_focused_finish(plan)
         return "finished"
 
@@ -4376,7 +4385,7 @@ class NativeSession(QObject):
 
     def import_week_file(self, raw: str, *, replace: bool | None = None) -> bool:
         parsed = parse_import_payload(raw)
-        target = parsed.get("week_start") or self.week_start
+        target = flexweek_engine.import_target_week(json.dumps(parsed), self.week_start)
         decision = json.loads(
             flexweek_engine.import_week_decision_json(
                 json.dumps(parsed),
