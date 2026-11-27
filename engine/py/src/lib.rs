@@ -40,6 +40,7 @@ mod sync;
 mod views_copy;
 mod views_hours;
 mod views_look_file;
+mod views_sheet_block;
 mod views_theme;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
@@ -402,6 +403,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     views_copy::add(m)?;
     views_hours::add(m)?;
     views_look_file::add(m)?;
+    views_sheet_block::add(m)?;
     views_theme::add(m)?;
     Ok(())
 }
