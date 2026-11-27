@@ -14,6 +14,10 @@ const HOMEWORK_NOT_LOADED: &str = "This homework did not load, so the focus time
 Reload the week and try again.";
 const TIMER_STOPPED: &str =
     "Schedule restored. The focus timer stopped because its homework session no longer exists.";
+const BREAK_ENDED: &str = "The break ended while FlexWeek was closed. Press Resume to focus again.";
+const SPOTIFY_MISSING: &str = "Focus started without Spotify. Add a link under Settings > Alerts.";
+const SPOTIFY_FAILED: &str = "Focus started without Spotify because the app didn't open.";
+const MORE_TIME: &str = "Choose how much more time it needs.";
 
 /// A shared null, since a borrowed `Value::Null` temporary would not live long enough.
 static NULL: Value = Value::Null;
@@ -459,4 +463,533 @@ pub fn rebase(args: &Value) -> EngineResult<Value> {
         moved["day"] = json!(grid::due_day_of(&json!(anchor), &week)?);
     }
     Ok(json!({ "state": moved }))
+}
+
+/// `isinstance(value, int)`, and a bool is one.
+fn py_whole(value: &Value) -> Option<i64> {
+    match value {
+        Value::Bool(flag) => Some(i64::from(*flag)),
+        Value::Number(number) if !number.to_string().contains(['.', 'e', 'E']) => number.as_i64(),
+        _ => None,
+    }
+}
+
+fn py_is_int(value: &Value) -> bool {
+    py_whole(value).is_some()
+}
+
+/// `int(value or 0)`. A truthy value that is not a whole number is refused.
+fn whole_or_zero(value: &Value) -> EngineResult<i64> {
+    if !truthy(value) {
+        return Ok(0);
+    }
+    py_whole(value).ok_or_else(|| EngineError::value("a whole number is required"))
+}
+
+fn json_int(value: i128) -> EngineResult<Value> {
+    i64::try_from(value)
+        .map(|number| json!(number))
+        .map_err(|_| EngineError::overflow("integer too large for the engine"))
+}
+
+fn field_or_null(state: &Value, key: &str) -> Value {
+    state.get(key).cloned().unwrap_or(Value::Null)
+}
+
+/// The blocks the week shows: with no trace, the locked blocks and the flexible ones that have a
+/// time; with a trace, each placed row over the block it names (days and start from the placement).
+/// Arguments: `blocks`, `trace`.
+pub fn scheduled_blocks(args: &Value) -> EngineResult<Value> {
+    let blocks = args["blocks"]
+        .as_array()
+        .ok_or_else(|| EngineError::value("blocks is a list"))?;
+    if !truthy(&args["trace"]) {
+        let shown: Vec<&Value> = blocks
+            .iter()
+            .filter(|block| {
+                block["kind"] == "locked"
+                    || (block["kind"] == "flexible" && truthy(&block["start"]))
+            })
+            .collect();
+        return Ok(json!(shown));
+    }
+    // A number or a list has no placements. Python's `trace.get` refused it; returning
+    // nothing would hide that the trace was the wrong shape.
+    if !args["trace"].is_object() {
+        return Err(EngineError::value("trace is an object"));
+    }
+    let placed = match args["trace"].get("placed") {
+        None | Some(Value::Null) => &NULL,
+        Some(value) => value,
+    };
+    let placed: &[Value] = if truthy(placed) {
+        placed
+            .as_array()
+            .ok_or_else(|| EngineError::value("placed is a list"))?
+    } else {
+        &[]
+    };
+    let mut merged = Vec::with_capacity(placed.len());
+    for row in placed {
+        let id = &row["id"];
+        let source = blocks.iter().rev().find(|block| block["id"] == *id);
+        let Some(source) = source else {
+            merged.push(row.clone());
+            continue;
+        };
+        let mut item = source.clone();
+        item["days"] = listed_days(&row["days"], &source["days"])?;
+        item["start"] = field_or_null(row, "start");
+        merged.push(item);
+    }
+    Ok(json!(merged))
+}
+
+/// `placed.days or source.days or []`, as a new list.
+fn listed_days(placed: &Value, source: &Value) -> EngineResult<Value> {
+    let chosen = if truthy(placed) {
+        placed
+    } else if truthy(source) {
+        source
+    } else {
+        &NULL
+    };
+    match chosen {
+        Value::Null => Ok(json!([])),
+        Value::Array(items) => Ok(json!(items)),
+        _ => Err(EngineError::value("days is a list")),
+    }
+}
+
+/// What a saved timer becomes when the week opens. `drop` forgets the save. `active` keeps `state`.
+/// `advance_work` keeps it and the session then completes the work phase. `paused_work` is a break
+/// that ran out while FlexWeek was closed: `state` is the restored break, `paused` is that timer
+/// put back on work and paused, and `say` is the sentence the student sees.
+/// Arguments: `saved`, `assignments`, `blocks`, `prefs`, `now_ms`.
+pub fn restore_decision(args: &Value) -> EngineResult<Value> {
+    // `plain` writes NaN as a one-key object and a lone surrogate as a private-use character.
+    // Reading either as a timer would raise; a save that cannot be read is forgotten.
+    if saved_is_corrupt(&args["saved"]) {
+        return Ok(json!({ "action": "drop" }));
+    }
+    let now = now_of(args)?;
+    let Some(mut state) =
+        timer::restore_state(&args["saved"], &args["assignments"], &args["blocks"], now)?
+    else {
+        return Ok(json!({ "action": "drop" }));
+    };
+    let expired = state.get("expired").is_some_and(truthy);
+    if let Some(fields) = state.as_object_mut() {
+        fields.shift_remove("expired");
+    }
+    if !expired {
+        return Ok(json!({ "action": "active", "state": state }));
+    }
+    if state["phase"] == "work" {
+        return Ok(json!({ "action": "advance_work", "state": state }));
+    }
+    let mut paused = timer::set_phase(&state, &json!("work"), &args["prefs"], now)?;
+    paused["running"] = json!(false);
+    let remaining = timer::remaining_ms(&paused, now)?;
+    paused["remainingMs"] = json_int(remaining)?;
+    Ok(json!({
+        "action": "paused_work",
+        "state": state,
+        "paused": paused,
+        "say": BREAK_ENDED,
+    }))
+}
+
+/// Whether starting focus may open Spotify. `skip`, `say` (no link), or `open` with the link.
+/// Arguments: `prefs`, `link`.
+pub fn focus_spotify_decision(args: &Value) -> EngineResult<Value> {
+    let prefs = &args["prefs"];
+    // None is no preferences. A truthy value that is not a dict has no `get`, so it is refused
+    // rather than treated as "not Spotify".
+    if truthy(prefs) && !prefs.is_object() {
+        return Err(EngineError::value("prefs is an object"));
+    }
+    let audio = if prefs.is_object() {
+        prefs.get("focus_audio").unwrap_or(&NULL)
+    } else {
+        &NULL
+    };
+    if audio != "spotify" {
+        return Ok(json!({ "action": "skip" }));
+    }
+    if !truthy(&args["link"]) {
+        return Ok(json!({ "action": "say", "say": SPOTIFY_MISSING }));
+    }
+    Ok(json!({ "action": "open", "link": args["link"] }))
+}
+
+/// The sentence when the Spotify app does not open. Focus still carries on.
+pub fn focus_spotify_open_failed(_args: &Value) -> EngineResult<Value> {
+    Ok(json!(SPOTIFY_FAILED))
+}
+
+/// A signed-in session that is not busy and not already moving the timer may start one.
+/// Arguments: `signed_in`, `busy`, `focus_busy`.
+pub fn start_allowed(args: &Value) -> EngineResult<Value> {
+    let allowed =
+        truthy(&args["signed_in"]) && !truthy(&args["busy"]) && !truthy(&args["focus_busy"]);
+    Ok(json!(allowed))
+}
+
+/// Pause or resume, or `ignore` when there is nothing to toggle.
+/// Arguments: `focus`, `focus_busy`, `busy`, `now_ms`.
+pub fn toggle_pause_decision(args: &Value) -> EngineResult<Value> {
+    let state = &args["focus"];
+    if state.is_null()
+        || truthy(&args["focus_busy"])
+        || truthy(&args["busy"])
+        || state["phase"] == "ended"
+    {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    let paused = timer::pause_state(state, now_of(args)?)?;
+    Ok(json!({ "action": "apply", "state": paused }))
+}
+
+/// Whether End session credits the minutes already worked. `minutes` is that count; `credit` is
+/// whether it is at least one. Arguments: `focus`, `week_start`, `prefs`, `now_ms`.
+pub fn end_early_decision(args: &Value) -> EngineResult<Value> {
+    let minutes = elapsed_min(args)?;
+    let credit = minutes.as_i64().is_some_and(|count| count > 0);
+    Ok(json!({ "credit": credit, "minutes": minutes }))
+}
+
+/// Where one finished phase's minutes go while a save may be replacing the homework: `ignore`,
+/// `enqueue` (keep the credit until the save lands) or `apply` now.
+/// Arguments: `focus`, `prefs`, `minutes` (null uses the phase's own length), `finished`, `busy`.
+pub fn credit_enqueue_decision(args: &Value) -> EngineResult<Value> {
+    let state = &args["focus"];
+    if state.is_null() || !(truthy(&state["blockId"]) || truthy(&state["assignmentId"])) {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    let work_min = if args["minutes"].is_null() {
+        json_int(timer::work_minutes(state, &args["prefs"])?)?
+    } else {
+        json_int(
+            args["minutes"]
+                .as_i64()
+                .ok_or_else(|| EngineError::value("minutes is a whole number"))?
+                .into(),
+        )?
+    };
+    let credit = json!({
+        "state": state,
+        "work_min": work_min,
+        "finished": truthy(&args["finished"]),
+    });
+    let action = if truthy(&args["busy"]) {
+        "enqueue"
+    } else {
+        "apply"
+    };
+    Ok(json!({ "action": action, "credit": credit }))
+}
+
+/// The credit written onto the open week: the homework, or the blocks with that one block replaced.
+/// Arguments: `to` ("assignment" or "block"), `updated`, `blocks`.
+pub fn apply_credit_blocks(args: &Value) -> EngineResult<Value> {
+    if args["to"] == "assignment" {
+        return Ok(json!({ "homework": args["updated"], "blocks": null }));
+    }
+    let updated = &args["updated"];
+    let mut blocks = args["blocks"]
+        .as_array()
+        .cloned()
+        .ok_or_else(|| EngineError::value("blocks is a list"))?;
+    for block in &mut blocks {
+        if block["id"] == updated["id"] {
+            *block = updated.clone();
+        }
+    }
+    Ok(json!({ "homework": null, "blocks": blocks }))
+}
+
+/// The blocks after Auto-complete marks the one session Done. `changed` is false when there is
+/// nothing to mark. Arguments: `blocks`, `done` (`{id, start, completed_day}` or null).
+pub fn apply_auto_complete_blocks(args: &Value) -> EngineResult<Value> {
+    if args["done"].is_null() {
+        return Ok(json!({ "changed": false, "blocks": null }));
+    }
+    let done = &args["done"];
+    let mut blocks = args["blocks"]
+        .as_array()
+        .cloned()
+        .ok_or_else(|| EngineError::value("blocks is a list"))?;
+    for block in &mut blocks {
+        if block["id"] == done["id"] {
+            block["start"] = done["start"].clone();
+            block["completed"] = json!(true);
+            block["completed_day"] = done["completed_day"].clone();
+        }
+    }
+    Ok(json!({ "changed": true, "blocks": blocks }))
+}
+
+/// Split notices into those focus keeps back and those to show now.
+/// Arguments: `notices`, `focus`, `prefs`, `material_owns`.
+pub fn split_held(args: &Value) -> EngineResult<Value> {
+    // A string would be walked one character at a time and then fail. An empty split would hide that.
+    let notices = args["notices"]
+        .as_array()
+        .cloned()
+        .ok_or_else(|| EngineError::value("notices is a list"))?;
+    let muting = mutes(args);
+    let mut show = Vec::new();
+    let mut hold = Vec::new();
+    for item in notices {
+        let kind = item.get("kind").unwrap_or(&NULL);
+        if muting && kind != "focus" {
+            hold.push(item);
+        } else {
+            show.push(item);
+        }
+    }
+    Ok(json!({ "show": show, "hold": hold }))
+}
+
+/// Whether the notices kept during focus can be shown now.
+/// Arguments: `held` (the kept list), `focus`, `prefs`, `material_owns`.
+pub fn release_held(args: &Value) -> EngineResult<Value> {
+    Ok(json!(truthy(&args["held"]) && !mutes(args)))
+}
+
+/// A private-use character in the range `plain` uses for a lone surrogate.
+fn mapped_surrogate(ch: char) -> bool {
+    ('\u{10F800}'..='\u{10FFFF}').contains(&ch)
+}
+
+/// NaN, infinity, or a lone surrogate anywhere in a saved timer. Those are not values a timer holds.
+fn saved_is_corrupt(value: &Value) -> bool {
+    if flexweek_engine::stored::nonfinite(value).is_some() {
+        return true;
+    }
+    match value {
+        Value::String(text) => text.chars().any(mapped_surrogate),
+        Value::Array(items) => items.iter().any(saved_is_corrupt),
+        Value::Object(map) => map
+            .iter()
+            .any(|(key, item)| key.chars().any(mapped_surrogate) || saved_is_corrupt(item)),
+        _ => false,
+    }
+}
+
+fn ended_blocked(state: &Value, busy: bool, focus_busy: bool, check_busy: bool) -> bool {
+    state.is_null() || state["phase"] != "ended" || focus_busy || (check_busy && busy)
+}
+
+fn holds_day(block: &Value, day: &Value) -> EngineResult<bool> {
+    if !py_is_int(day) {
+        return Ok(false);
+    }
+    let days = block.get("days").unwrap_or(&NULL);
+    let days = if truthy(days) { days } else { &NULL };
+    match days {
+        Value::Null => Ok(false),
+        Value::Array(items) => Ok(items.iter().any(|item| py_whole(item) == py_whole(day))),
+        _ => Err(EngineError::value("days is a list")),
+    }
+}
+
+/// The open week's blocks after Mark finished writes the session it ran, when that session is a
+/// flexible block of this week.
+fn finished_blocks(blocks: &Value, state: &Value) -> EngineResult<Value> {
+    let mut blocks = blocks
+        .as_array()
+        .cloned()
+        .ok_or_else(|| EngineError::value("blocks is a list"))?;
+    let Some(index) = blocks
+        .iter()
+        .position(|item| item["id"] == state["blockId"])
+    else {
+        return Ok(json!(blocks));
+    };
+    if blocks[index]["kind"] != "flexible" {
+        return Ok(json!(blocks));
+    }
+    if truthy(&state["start"]) && holds_day(&blocks[index], &state["day"])? {
+        // A finished day is only valid on a finished block. The homework check refuses a
+        // finished day written onto a session that is still open.
+        blocks[index]["start"] = state["start"].clone();
+        blocks[index]["completed"] = json!(true);
+        blocks[index]["completed_day"] = state["day"].clone();
+    } else if !py_is_int(&blocks[index]["completed_day"]) {
+        blocks[index]["start"] = Value::Null;
+    }
+    Ok(json!(blocks))
+}
+
+fn assignment_known(assignments: &Value, id: &Value) -> bool {
+    let Some(key) = id.as_str().filter(|text| !text.is_empty()) else {
+        return false;
+    };
+    assignments
+        .as_object()
+        .is_some_and(|map| map.contains_key(key))
+}
+
+/// Mark finished on a timer that has ended. `ignore` does nothing. `finish` is the block list and
+/// the homework to complete, on the week already open. `load_then_finish` names the timer's week:
+/// one press opens it, and the finish waits until that load lands (`finish_after_load`).
+/// Arguments: `focus`, `busy`, `focus_busy`, `week_start`, `blocks`, `assignments`.
+pub fn finish_focused_plan(args: &Value) -> EngineResult<Value> {
+    let state = &args["focus"];
+    if ended_blocked(
+        state,
+        truthy(&args["busy"]),
+        truthy(&args["focus_busy"]),
+        true,
+    ) {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    let assignment_id = &state["assignmentId"];
+    if !assignment_known(&args["assignments"], assignment_id) {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    if state["weekStart"] != args["week_start"] {
+        // Opening the week used to return before the homework was marked, so the student pressed
+        // again. The press now waits for that week and finishes once, as it would have there.
+        return Ok(json!({ "action": "load_then_finish", "week": state["weekStart"] }));
+    }
+    Ok(json!({
+        "action": "finish",
+        "blocks": finished_blocks(&args["blocks"], state)?,
+        "assignment_id": assignment_id,
+    }))
+}
+
+/// What a pending Mark finished does once a week load ends. `none` when nothing is waiting.
+/// `drop` when the load failed, or the week that landed is not the timer's (the student went
+/// elsewhere). Otherwise the same answer as pressing Mark finished on that week.
+/// Arguments: `waiting`, `pending` (the week the press named), `load_ok`, and the same fields as
+/// `finish_focused_plan` with `week_start` the week now open.
+pub fn finish_after_load(args: &Value) -> EngineResult<Value> {
+    if !truthy(&args["waiting"]) {
+        return Ok(json!({ "action": "none" }));
+    }
+    if !truthy(&args["load_ok"]) || args["week_start"] != args["pending"] {
+        return Ok(json!({ "action": "drop" }));
+    }
+    finish_focused_plan(args)
+}
+
+/// A navigation while Mark finished is waiting for its week. `keep` when this request is that
+/// week (or nothing is waiting); `drop` when the student asked for a different week first.
+/// Arguments: `waiting`, `pending`, `requested`.
+pub fn finish_intent_on_request(args: &Value) -> EngineResult<Value> {
+    let action = if !truthy(&args["waiting"]) || args["requested"] == args["pending"] {
+        "keep"
+    } else {
+        "drop"
+    };
+    Ok(json!(action))
+}
+
+/// Start again on a timer that has run out: `ignore`, or `begin` with the new work phase.
+/// Arguments: `focus`, `busy`, `focus_busy`, `prefs`, `now_ms`.
+pub fn restart_finished_plan(args: &Value) -> EngineResult<Value> {
+    let state = &args["focus"];
+    if ended_blocked(
+        state,
+        truthy(&args["busy"]),
+        truthy(&args["focus_busy"]),
+        true,
+    ) {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    let target = json!({
+        "weekStart": field_or_null(state, "weekStart"),
+        "blockId": field_or_null(state, "blockId"),
+        "assignmentId": field_or_null(state, "assignmentId"),
+        "day": field_or_null(state, "day"),
+        "start": field_or_null(state, "start"),
+        "title": field_or_null(state, "title"),
+    });
+    let begun = timer::begin_state(&target, &args["prefs"], now_of(args)?)?;
+    Ok(json!({ "action": "begin", "state": begun }))
+}
+
+fn refuse_more_time() -> Value {
+    json!({ "action": "refuse", "say": MORE_TIME })
+}
+
+/// More time on a finished timer: `ignore`, `refuse` (the minutes are not one of the choices), or
+/// `apply` with the homework, the break the timer enters, its notice and the history label.
+/// Arguments: `focus`, `busy`, `focus_busy`, `assignments`, `minutes`, `prefs`, `now_ms`.
+pub fn add_focus_time_plan(args: &Value) -> EngineResult<Value> {
+    let state = &args["focus"];
+    if ended_blocked(
+        state,
+        truthy(&args["busy"]),
+        truthy(&args["focus_busy"]),
+        true,
+    ) {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    let Some(assignment) = state["assignmentId"]
+        .as_str()
+        .and_then(|id| args["assignments"].get(id))
+        .filter(|item| !item.is_null())
+    else {
+        return Ok(refuse_more_time());
+    };
+    let minutes = args["minutes"]
+        .as_i64()
+        .ok_or_else(|| EngineError::value("minutes is a whole number"))?;
+    let estimate = match assignment.get("estimate_min") {
+        Some(value) if truthy(value) => {
+            py_whole(value).ok_or_else(|| EngineError::value("estimate_min is a whole number"))?
+        }
+        _ => 0,
+    };
+    if !timer::more_time_choices(estimate).contains(&minutes) {
+        return Ok(refuse_more_time());
+    }
+    let base = match assignment.get("estimate_min") {
+        Some(value) => {
+            py_whole(value).ok_or_else(|| EngineError::value("estimate_min is a whole number"))?
+        }
+        None => return Err(EngineError::key("estimate_min")),
+    };
+    let sum = base
+        .checked_add(minutes)
+        .ok_or_else(|| EngineError::overflow("integer too large for the engine"))?;
+    let title = assignment
+        .get("title")
+        .and_then(Value::as_str)
+        .ok_or_else(|| EngineError::key("title"))?;
+    let mut homework = assignment.clone();
+    homework["estimate_min"] = json!(sum);
+    let now = now_of(args)?;
+    let phase = timer::break_phase(whole_or_zero(&state["cycles"])?, &args["prefs"])?;
+    let moved = entered(state, phase, &args["prefs"], now)?;
+    Ok(json!({
+        "action": "apply",
+        "homework": homework,
+        "state": moved["state"],
+        "alert": moved["alert"],
+        "history_label": format!("adding time to {title}"),
+    }))
+}
+
+/// A break after a finished timer, without adding time. Busy does not block it.
+/// `ignore`, or `apply` with the timer and the notice. Arguments: `focus`, `focus_busy`, `prefs`,
+/// `now_ms`.
+pub fn take_break_plan(args: &Value) -> EngineResult<Value> {
+    let state = &args["focus"];
+    if ended_blocked(state, false, truthy(&args["focus_busy"]), false) {
+        return Ok(json!({ "action": "ignore" }));
+    }
+    let now = now_of(args)?;
+    let phase = timer::break_phase(whole_or_zero(&state["cycles"])?, &args["prefs"])?;
+    let moved = entered(state, phase, &args["prefs"], now)?;
+    Ok(json!({
+        "action": "apply",
+        "state": moved["state"],
+        "alert": moved["alert"],
+    }))
 }

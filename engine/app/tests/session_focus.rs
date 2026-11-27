@@ -679,3 +679,863 @@ fn a_timer_with_no_day_keeps_no_day_and_one_with_no_week_is_not_moved() {
     weekless["weekStart"] = Value::Null;
     assert_eq!(rebased(&weekless, 6), Value::Null);
 }
+
+const NEXT_WEEK: &str = "2026-10-05";
+const BREAK_ENDED: &str = "The break ended while FlexWeek was closed. Press Resume to focus again.";
+const SPOTIFY_MISSING: &str = "Focus started without Spotify. Add a link under Settings > Alerts.";
+const SPOTIFY_FAILED: &str = "Focus started without Spotify because the app didn't open.";
+const MORE_TIME: &str = "Choose how much more time it needs.";
+
+fn call(decide: fn(&Value) -> flexweek_engine::EngineResult<Value>, args: Value) -> Value {
+    decide(&args).unwrap()
+}
+
+fn shown_blocks() -> Value {
+    json!([
+        {"id": "locked", "kind": "locked", "start": null, "days": [0]},
+        {"id": "flex", "kind": "flexible", "start": "09:00", "days": [0], "title": "Essay"},
+        {"id": "open", "kind": "flexible", "start": null, "days": [1]},
+        {"id": "blank", "kind": "flexible", "start": "", "days": [2]}
+    ])
+}
+
+#[test]
+fn scheduled_blocks_without_a_trace_keep_locked_and_timed_flexible_blocks() {
+    let blocks = shown_blocks();
+    let kept = json!([
+        {"id": "locked", "kind": "locked", "start": null, "days": [0]},
+        {"id": "flex", "kind": "flexible", "start": "09:00", "days": [0], "title": "Essay"}
+    ]);
+    for trace in [Value::Null, json!({}), json!(false)] {
+        assert_eq!(
+            call(
+                focus::scheduled_blocks,
+                json!({ "blocks": blocks, "trace": trace })
+            ),
+            kept
+        );
+    }
+}
+
+#[test]
+fn a_trace_overlays_each_placed_row_and_the_last_block_with_an_id_wins() {
+    let blocks = json!([
+        {"id": "b", "kind": "flexible", "start": "09:00", "days": [0], "title": "First"},
+        {"id": "b", "kind": "locked", "start": null, "days": [3], "title": "Second"},
+        {"id": "open", "kind": "flexible", "start": "08:00", "days": [1], "title": "Open"}
+    ]);
+    let trace = json!({
+        "placed": [
+            {"id": "b", "days": [1, 2], "start": "10:00"},
+            {"id": "gone", "days": [0], "start": "11:00", "title": "Extra"},
+            {"id": "open"}
+        ]
+    });
+    assert_eq!(
+        call(
+            focus::scheduled_blocks,
+            json!({ "blocks": blocks, "trace": trace })
+        ),
+        json!([
+            {"id": "b", "kind": "locked", "start": "10:00", "days": [1, 2], "title": "Second"},
+            {"id": "gone", "days": [0], "start": "11:00", "title": "Extra"},
+            {"id": "open", "kind": "flexible", "start": null, "days": [1], "title": "Open"}
+        ])
+    );
+}
+
+#[test]
+fn a_trace_with_nothing_placed_shows_nothing_and_empty_days_fall_through() {
+    let blocks = json!([{"id": "flex", "kind": "flexible", "start": "09:00", "days": [4]}]);
+    assert_eq!(
+        call(
+            focus::scheduled_blocks,
+            json!({ "blocks": blocks, "trace": {"placed": []} })
+        ),
+        json!([])
+    );
+    let overlaid = call(
+        focus::scheduled_blocks,
+        json!({
+            "blocks": blocks,
+            "trace": {"placed": [{"id": "flex", "days": [], "start": "12:00"}]}
+        }),
+    );
+    assert_eq!(overlaid[0]["days"], json!([4]));
+    assert_eq!(overlaid[0]["start"], "12:00");
+    let missing_days = call(
+        focus::scheduled_blocks,
+        json!({
+            "blocks": [{"id": "flex", "kind": "flexible"}],
+            "trace": {"placed": [{"id": "flex", "start": "12:00"}]}
+        }),
+    );
+    assert_eq!(missing_days[0]["days"], json!([]));
+}
+
+#[test]
+fn days_that_are_not_a_list_are_refused() {
+    let err = focus::scheduled_blocks(&json!({
+        "blocks": [{"id": "flex", "days": [0]}],
+        "trace": {"placed": [{"id": "flex", "days": "01"}]}
+    }))
+    .unwrap_err();
+    assert_eq!(err, flexweek_engine::EngineError::value("days is a list"));
+}
+
+fn saved_timer(phase: &str, ends_at: i64) -> Value {
+    json!({
+        "assignmentId": null,
+        "sessionId": "b1",
+        "weekStart": WEEK,
+        "day": 0,
+        "start": "09:00",
+        "phase": phase,
+        "cycles": 0,
+        "endsAt": ends_at,
+        "remainingMs": 4000
+    })
+}
+
+fn restored(saved: Value, now_ms: i64) -> Value {
+    call(
+        focus::restore_decision,
+        json!({
+            "saved": saved,
+            "assignments": {},
+            "blocks": [{"id": "b1", "title": "Essay"}],
+            "prefs": null,
+            "now_ms": now_ms
+        }),
+    )
+}
+
+#[test]
+fn a_saved_timer_that_is_still_running_comes_back_active() {
+    let decision = restored(saved_timer("work", 5000), 1000);
+    assert_eq!(decision["action"], "active");
+    assert_eq!(
+        decision["state"],
+        json!({
+            "weekStart": WEEK,
+            "blockId": "b1",
+            "assignmentId": null,
+            "day": 0,
+            "start": "09:00",
+            "title": "Essay",
+            "phase": "work",
+            "cycles": 0,
+            "running": true,
+            "endsAt": 5000,
+            "remainingMs": 4000
+        })
+    );
+}
+
+#[test]
+fn a_saved_work_phase_that_ran_out_is_advanced() {
+    let decision = restored(saved_timer("work", 500), 1000);
+    assert_eq!(decision["action"], "advance_work");
+    assert_eq!(decision["state"]["phase"], "work");
+    assert_eq!(decision["state"]["running"], false);
+    assert_eq!(decision["state"]["remainingMs"], 0);
+    assert!(decision["state"].get("expired").is_none());
+}
+
+#[test]
+fn a_saved_break_that_ran_out_pauses_on_work_and_says_so() {
+    let decision = restored(saved_timer("break", 500), 1000);
+    assert_eq!(decision["action"], "paused_work");
+    assert_eq!(decision["say"], BREAK_ENDED);
+    assert_eq!(decision["state"]["phase"], "break");
+    assert_eq!(decision["state"]["running"], false);
+    assert_eq!(decision["state"]["remainingMs"], 0);
+    assert!(decision["state"].get("expired").is_none());
+    assert_eq!(decision["paused"]["phase"], "work");
+    assert_eq!(decision["paused"]["running"], false);
+    assert_eq!(decision["paused"]["remainingMs"], 1_800_000);
+    assert_eq!(decision["paused"]["endsAt"], 1_801_000);
+    assert_eq!(decision["paused"]["workMin"], 30);
+    assert_eq!(decision["paused"]["title"], "Essay");
+}
+
+#[test]
+fn a_save_that_is_not_a_timer_is_dropped() {
+    assert_eq!(restored(Value::Null, 1000), json!({ "action": "drop" }));
+    assert_eq!(restored(json!({}), 1000), json!({ "action": "drop" }));
+}
+
+#[test]
+fn spotify_opens_only_for_the_focus_sound_and_only_with_a_link() {
+    assert_eq!(
+        call(
+            focus::focus_spotify_decision,
+            json!({ "prefs": {}, "link": "spotify:track:1" })
+        ),
+        json!({ "action": "skip" })
+    );
+    assert_eq!(
+        call(
+            focus::focus_spotify_decision,
+            json!({ "prefs": null, "link": "spotify:track:1" })
+        ),
+        json!({ "action": "skip" })
+    );
+    assert_eq!(
+        call(
+            focus::focus_spotify_decision,
+            json!({ "prefs": {"focus_audio": "rain"}, "link": "spotify:track:1" })
+        ),
+        json!({ "action": "skip" })
+    );
+    assert_eq!(
+        call(
+            focus::focus_spotify_decision,
+            json!({ "prefs": {"focus_audio": "spotify"}, "link": "" })
+        ),
+        json!({ "action": "say", "say": SPOTIFY_MISSING })
+    );
+    assert_eq!(
+        call(
+            focus::focus_spotify_decision,
+            json!({ "prefs": {"focus_audio": "spotify"}, "link": null })
+        ),
+        json!({ "action": "say", "say": SPOTIFY_MISSING })
+    );
+    assert_eq!(
+        call(
+            focus::focus_spotify_decision,
+            json!({ "prefs": {"focus_audio": "spotify"}, "link": "spotify:track:1" })
+        ),
+        json!({ "action": "open", "link": "spotify:track:1" })
+    );
+    assert_eq!(
+        call(focus::focus_spotify_open_failed, json!({})),
+        json!(SPOTIFY_FAILED)
+    );
+}
+
+#[test]
+fn a_start_needs_a_signed_in_session_that_is_not_busy() {
+    let allowed = |signed_in, busy, focus_busy| {
+        call(
+            focus::start_allowed,
+            json!({ "signed_in": signed_in, "busy": busy, "focus_busy": focus_busy }),
+        )
+    };
+    assert_eq!(allowed(true, false, false), json!(true));
+    assert_eq!(allowed(false, false, false), json!(false));
+    assert_eq!(allowed(true, true, false), json!(false));
+    assert_eq!(allowed(true, false, true), json!(false));
+}
+
+fn ended_homework() -> Value {
+    let mut state = work_timer(true);
+    state["phase"] = json!("ended");
+    state["running"] = json!(false);
+    state["remainingMs"] = json!(0);
+    state
+}
+
+#[test]
+fn pause_toggles_a_running_timer_and_ignores_one_that_has_ended() {
+    let paused = call(
+        focus::toggle_pause_decision,
+        json!({ "focus": work_timer(true), "focus_busy": false, "busy": false, "now_ms": 600_000 }),
+    );
+    assert_eq!(paused["action"], "apply");
+    let mut expected = work_timer(true);
+    expected["running"] = json!(false);
+    expected["remainingMs"] = json!(1_200_000);
+    assert_eq!(paused["state"], expected);
+    assert_eq!(
+        call(
+            focus::toggle_pause_decision,
+            json!({ "focus": ended_homework(), "focus_busy": false, "busy": false, "now_ms": 0 })
+        ),
+        json!({ "action": "ignore" })
+    );
+    assert_eq!(
+        call(
+            focus::toggle_pause_decision,
+            json!({ "focus": work_timer(true), "focus_busy": true, "busy": false, "now_ms": 0 })
+        )["action"],
+        "ignore"
+    );
+    assert_eq!(
+        call(
+            focus::toggle_pause_decision,
+            json!({ "focus": null, "focus_busy": false, "busy": false, "now_ms": 0 })
+        )["action"],
+        "ignore"
+    );
+}
+
+#[test]
+fn ending_early_credits_only_a_whole_minute_already_worked() {
+    assert_eq!(
+        call(
+            focus::end_early_decision,
+            json!({ "focus": work_timer(true), "week_start": WEEK, "prefs": {}, "now_ms": 600_000 })
+        ),
+        json!({ "credit": true, "minutes": 10 })
+    );
+    assert_eq!(
+        call(
+            focus::end_early_decision,
+            json!({ "focus": work_timer(true), "week_start": WEEK, "prefs": {}, "now_ms": 0 })
+        ),
+        json!({ "credit": false, "minutes": 0 })
+    );
+    let mut resting = work_timer(true);
+    resting["phase"] = json!("break");
+    assert_eq!(
+        call(
+            focus::end_early_decision,
+            json!({ "focus": resting, "week_start": WEEK, "prefs": {}, "now_ms": 600_000 })
+        ),
+        json!({ "credit": false, "minutes": 0 })
+    );
+}
+
+fn credit_of(state: Value, minutes: Value, finished: bool, busy: bool) -> Value {
+    call(
+        focus::credit_enqueue_decision,
+        json!({
+            "focus": state,
+            "prefs": {},
+            "minutes": minutes,
+            "finished": finished,
+            "busy": busy
+        }),
+    )
+}
+
+#[test]
+fn a_credit_waits_while_a_save_is_busy_and_is_ignored_with_nothing_to_credit() {
+    let waiting = credit_of(work_timer(true), Value::Null, true, true);
+    assert_eq!(waiting["action"], "enqueue");
+    assert_eq!(waiting["credit"]["work_min"], 30);
+    assert_eq!(waiting["credit"]["finished"], true);
+    assert_eq!(waiting["credit"]["state"]["assignmentId"], "a1");
+    let now = credit_of(work_timer(true), json!(12), false, false);
+    assert_eq!(now["action"], "apply");
+    assert_eq!(now["credit"]["work_min"], 12);
+    assert_eq!(now["credit"]["finished"], false);
+    assert_eq!(
+        credit_of(Value::Null, Value::Null, true, false)["action"],
+        "ignore"
+    );
+    let mut quick = work_timer(false);
+    quick["blockId"] = Value::Null;
+    assert_eq!(
+        credit_of(quick, Value::Null, true, false)["action"],
+        "ignore"
+    );
+}
+
+#[test]
+fn applying_a_credit_replaces_the_homework_or_every_block_with_that_id() {
+    let updated = json!({"id": "b1", "title": "Essay", "focus_minutes": 30});
+    assert_eq!(
+        call(
+            focus::apply_credit_blocks,
+            json!({ "to": "assignment", "updated": updated, "blocks": [] })
+        ),
+        json!({ "homework": updated, "blocks": null })
+    );
+    let blocks = json!([
+        {"id": "b1", "title": "Old"},
+        {"id": "b2", "title": "Other"},
+        {"id": "b1", "title": "Also old"}
+    ]);
+    assert_eq!(
+        call(
+            focus::apply_credit_blocks,
+            json!({ "to": "block", "updated": updated, "blocks": blocks })
+        ),
+        json!({
+            "homework": null,
+            "blocks": [updated, {"id": "b2", "title": "Other"}, updated]
+        })
+    );
+}
+
+#[test]
+fn auto_complete_marks_only_the_one_block_and_does_nothing_without_one() {
+    assert_eq!(
+        call(
+            focus::apply_auto_complete_blocks,
+            json!({ "blocks": [], "done": null })
+        ),
+        json!({ "changed": false, "blocks": null })
+    );
+    let blocks = json!([
+        {"id": "b1", "start": "09:00", "completed": false, "title": "Essay"},
+        {"id": "b2", "start": "10:00", "completed": false}
+    ]);
+    assert_eq!(
+        call(
+            focus::apply_auto_complete_blocks,
+            json!({ "blocks": blocks, "done": {"id": "b1", "start": "16:00", "completed_day": 0} })
+        ),
+        json!({
+            "changed": true,
+            "blocks": [
+                {"id": "b1", "start": "16:00", "completed": true, "completed_day": 0, "title": "Essay"},
+                {"id": "b2", "start": "10:00", "completed": false}
+            ]
+        })
+    );
+}
+
+fn split(kinds_and_bodies: Value, phase: &str, material: bool) -> Value {
+    let mut focus = work_timer(false);
+    focus["phase"] = json!(phase);
+    call(
+        focus::split_held,
+        json!({
+            "notices": kinds_and_bodies,
+            "focus": focus,
+            "prefs": {},
+            "material_owns": material
+        }),
+    )
+}
+
+#[test]
+fn focus_holds_back_notices_that_are_not_about_focus() {
+    let notices = json!([
+        {"kind": "reminder", "title": "Due"},
+        {"kind": "focus", "title": "Break"},
+        {"kind": "alarm", "title": "Bell"},
+        {"title": "No kind"}
+    ]);
+    let held = split(notices.clone(), "work", true);
+    assert_eq!(held["show"], json!([{"kind": "focus", "title": "Break"}]));
+    assert_eq!(
+        held["hold"],
+        json!([
+            {"kind": "reminder", "title": "Due"},
+            {"kind": "alarm", "title": "Bell"},
+            {"title": "No kind"}
+        ])
+    );
+    let shown = split(notices, "break", true);
+    assert_eq!(shown["hold"], json!([]));
+    assert_eq!(shown["show"].as_array().unwrap().len(), 4);
+}
+
+#[test]
+fn held_notices_are_released_only_when_focus_is_not_muting() {
+    let mut work = work_timer(false);
+    let args = |held: Value, state: &Value| json!({ "held": held, "focus": state, "prefs": {}, "material_owns": true });
+    assert_eq!(
+        call(focus::release_held, args(json!([]), &work)),
+        json!(false)
+    );
+    assert_eq!(
+        call(
+            focus::release_held,
+            args(json!([{"kind": "reminder"}]), &work)
+        ),
+        json!(false)
+    );
+    work["phase"] = json!("break");
+    assert_eq!(
+        call(
+            focus::release_held,
+            args(json!([{"kind": "reminder"}]), &work)
+        ),
+        json!(true)
+    );
+}
+
+fn essay_blocks() -> Value {
+    json!([
+        {"id": "b1", "kind": "flexible", "days": [0], "start": "09:00", "title": "Essay"},
+        {"id": "b2", "kind": "locked", "days": [1], "start": "10:00"}
+    ])
+}
+
+fn essay_assignments() -> Value {
+    json!({ "a1": {"id": "a1", "title": "Essay", "estimate_min": 60} })
+}
+
+fn finish_args(state: Value, week: &str, busy: bool) -> Value {
+    json!({
+        "focus": state,
+        "busy": busy,
+        "focus_busy": false,
+        "week_start": week,
+        "blocks": essay_blocks(),
+        "assignments": essay_assignments()
+    })
+}
+
+#[test]
+fn mark_finished_on_the_open_week_writes_the_session_it_ran() {
+    let mut state = ended_homework();
+    state["start"] = json!("16:00");
+    let plan = call(focus::finish_focused_plan, finish_args(state, WEEK, false));
+    assert_eq!(plan["action"], "finish");
+    assert_eq!(plan["assignment_id"], "a1");
+    assert_eq!(
+        plan["blocks"][0],
+        json!({
+            "id": "b1",
+            "kind": "flexible",
+            "days": [0],
+            "start": "16:00",
+            "title": "Essay",
+            "completed": true,
+            "completed_day": 0
+        })
+    );
+    assert_eq!(plan["blocks"][1]["id"], "b2");
+    assert_eq!(plan["blocks"][1].get("completed"), None);
+}
+
+#[test]
+fn mark_finished_on_another_week_waits_and_finishes_once_that_week_loads() {
+    let plan = call(
+        focus::finish_focused_plan,
+        finish_args(ended_homework(), NEXT_WEEK, false),
+    );
+    assert_eq!(plan, json!({ "action": "load_then_finish", "week": WEEK }));
+    let mut state = ended_homework();
+    state["start"] = json!("16:00");
+    let mut args = finish_args(state, WEEK, false);
+    args["waiting"] = json!(true);
+    args["pending"] = json!(WEEK);
+    args["load_ok"] = json!(true);
+    let landed = call(focus::finish_after_load, args);
+    assert_eq!(landed["action"], "finish");
+    assert_eq!(landed["assignment_id"], "a1");
+    assert_eq!(landed["blocks"][0]["completed"], true);
+    assert_eq!(landed["blocks"][0]["completed_day"], 0);
+    assert_eq!(landed["blocks"][0]["start"], "16:00");
+}
+
+#[test]
+fn a_failed_load_or_a_different_week_finishes_nothing() {
+    let mut args = finish_args(ended_homework(), NEXT_WEEK, false);
+    args["waiting"] = json!(true);
+    args["pending"] = json!(WEEK);
+    args["load_ok"] = json!(false);
+    assert_eq!(
+        call(focus::finish_after_load, args.clone())["action"],
+        "drop"
+    );
+    args["load_ok"] = json!(true);
+    args["week_start"] = json!(NEXT_WEEK);
+    assert_eq!(
+        call(focus::finish_after_load, args.clone())["action"],
+        "drop"
+    );
+    args["waiting"] = json!(false);
+    assert_eq!(call(focus::finish_after_load, args)["action"], "none");
+    assert_eq!(
+        call(
+            focus::finish_intent_on_request,
+            json!({ "waiting": true, "pending": WEEK, "requested": NEXT_WEEK })
+        ),
+        json!("drop")
+    );
+    assert_eq!(
+        call(
+            focus::finish_intent_on_request,
+            json!({ "waiting": true, "pending": WEEK, "requested": WEEK })
+        ),
+        json!("keep")
+    );
+    assert_eq!(
+        call(
+            focus::finish_intent_on_request,
+            json!({ "waiting": false, "pending": null, "requested": NEXT_WEEK })
+        ),
+        json!("keep")
+    );
+}
+
+#[test]
+fn mark_finished_does_nothing_when_it_cannot_and_clears_a_flexible_block_without_a_day() {
+    assert_eq!(
+        call(
+            focus::finish_focused_plan,
+            finish_args(work_timer(true), WEEK, false)
+        )["action"],
+        "ignore"
+    );
+    assert_eq!(
+        call(
+            focus::finish_focused_plan,
+            finish_args(ended_homework(), WEEK, true)
+        )["action"],
+        "ignore"
+    );
+    let mut unknown = ended_homework();
+    unknown["assignmentId"] = json!("missing");
+    assert_eq!(
+        call(
+            focus::finish_focused_plan,
+            finish_args(unknown, WEEK, false)
+        )["action"],
+        "ignore"
+    );
+    let mut state = ended_homework();
+    state["start"] = Value::Null;
+    let plan = call(focus::finish_focused_plan, finish_args(state, WEEK, false));
+    assert_eq!(plan["action"], "finish");
+    assert_eq!(plan["blocks"][0]["start"], Value::Null);
+    assert_eq!(plan["blocks"][0].get("completed"), None);
+    let mut kept = essay_blocks();
+    kept[0]["completed_day"] = json!(2);
+    let mut state = ended_homework();
+    state["start"] = Value::Null;
+    let plan = call(
+        focus::finish_focused_plan,
+        json!({
+            "focus": state,
+            "busy": false,
+            "focus_busy": false,
+            "week_start": WEEK,
+            "blocks": kept,
+            "assignments": essay_assignments()
+        }),
+    );
+    assert_eq!(plan["blocks"][0]["start"], "09:00");
+    assert_eq!(plan["blocks"][0]["completed_day"], 2);
+}
+
+#[test]
+fn a_bool_day_counts_as_a_whole_day_the_way_python_does() {
+    let mut state = ended_homework();
+    state["day"] = json!(true);
+    state["start"] = json!("16:00");
+    let mut blocks = essay_blocks();
+    blocks[0]["days"] = json!([1]);
+    let plan = call(
+        focus::finish_focused_plan,
+        json!({
+            "focus": state,
+            "busy": false,
+            "focus_busy": false,
+            "week_start": WEEK,
+            "blocks": blocks,
+            "assignments": essay_assignments()
+        }),
+    );
+    assert_eq!(plan["blocks"][0]["completed"], true);
+    assert_eq!(plan["blocks"][0]["completed_day"], true);
+    assert_eq!(plan["blocks"][0]["start"], "16:00");
+}
+
+#[test]
+fn restart_begins_the_same_homework_again() {
+    let plan = call(
+        focus::restart_finished_plan,
+        json!({
+            "focus": ended_homework(),
+            "busy": false,
+            "focus_busy": false,
+            "prefs": {},
+            "now_ms": 0
+        }),
+    );
+    assert_eq!(plan["action"], "begin");
+    assert_eq!(
+        plan["state"],
+        json!({
+            "weekStart": WEEK,
+            "blockId": "b1",
+            "assignmentId": "a1",
+            "day": 0,
+            "start": "09:00",
+            "title": "Essay",
+            "phase": "work",
+            "cycles": 0,
+            "running": true,
+            "remainingMs": 1_800_000,
+            "endsAt": 1_800_000,
+            "workMin": 30
+        })
+    );
+    assert_eq!(
+        call(
+            focus::restart_finished_plan,
+            json!({
+                "focus": ended_homework(),
+                "busy": true,
+                "focus_busy": false,
+                "prefs": {},
+                "now_ms": 0
+            })
+        )["action"],
+        "ignore"
+    );
+}
+
+fn more_time(minutes: i64, assignment: Value, busy: bool) -> flexweek_engine::EngineResult<Value> {
+    let mut state = ended_homework();
+    state["assignmentId"] = json!("a1");
+    focus::add_focus_time_plan(&json!({
+        "focus": state,
+        "busy": busy,
+        "focus_busy": false,
+        "assignments": {"a1": assignment},
+        "minutes": minutes,
+        "prefs": {},
+        "now_ms": 0
+    }))
+}
+
+#[test]
+fn more_time_adds_a_choice_and_starts_a_break() {
+    let plan = more_time(
+        15,
+        json!({"id": "a1", "title": "Essay", "estimate_min": 60}),
+        false,
+    )
+    .unwrap();
+    assert_eq!(plan["action"], "apply");
+    assert_eq!(plan["homework"]["estimate_min"], 75);
+    assert_eq!(plan["homework"]["title"], "Essay");
+    assert_eq!(plan["history_label"], "adding time to Essay");
+    assert_eq!(plan["state"]["phase"], "break");
+    assert_eq!(plan["state"]["running"], true);
+    assert_eq!(plan["state"]["remainingMs"], 900_000);
+    assert_eq!(plan["state"]["endsAt"], 900_000);
+    assert_eq!(plan["state"]["workMin"], 30);
+    assert_eq!(
+        plan["alert"],
+        json!({ "title": "Break", "body": "Essay", "kind": "focus", "tone": "soft" })
+    );
+    assert_eq!(
+        more_time(
+            10,
+            json!({"id": "a1", "title": "Essay", "estimate_min": 60}),
+            false
+        )
+        .unwrap(),
+        json!({ "action": "refuse", "say": MORE_TIME })
+    );
+    assert_eq!(
+        more_time(
+            15,
+            json!({"id": "a1", "title": "Essay", "estimate_min": 1440}),
+            false
+        )
+        .unwrap()["action"],
+        "refuse"
+    );
+    assert_eq!(
+        more_time(
+            15,
+            json!({"id": "a1", "title": "Essay", "estimate_min": 60}),
+            true
+        )
+        .unwrap()["action"],
+        "ignore"
+    );
+}
+
+#[test]
+fn more_time_keeps_the_key_error_when_the_estimate_or_the_title_is_not_there() {
+    let missing = more_time(15, json!({"id": "a1", "title": "Essay"}), false).unwrap_err();
+    assert_eq!(missing, flexweek_engine::EngineError::key("estimate_min"));
+    let title = more_time(
+        15,
+        json!({"id": "a1", "title": 1, "estimate_min": 60}),
+        false,
+    )
+    .unwrap_err();
+    assert_eq!(title, flexweek_engine::EngineError::key("title"));
+}
+
+#[test]
+fn a_break_after_a_finished_timer_does_not_care_that_a_save_is_busy() {
+    let mut state = ended_homework();
+    state["cycles"] = json!(4);
+    let plan = call(
+        focus::take_break_plan,
+        json!({
+            "focus": state,
+            "busy": true,
+            "focus_busy": false,
+            "prefs": {},
+            "now_ms": 0
+        }),
+    );
+    assert_eq!(plan["action"], "apply");
+    assert_eq!(plan["state"]["phase"], "long_break");
+    assert_eq!(plan["state"]["remainingMs"], 1_800_000);
+    assert_eq!(plan["state"]["endsAt"], 1_800_000);
+    assert_eq!(
+        plan["alert"],
+        json!({ "title": "Long break", "body": "Essay", "kind": "focus", "tone": "soft" })
+    );
+    assert_eq!(
+        call(
+            focus::take_break_plan,
+            json!({ "focus": work_timer(true), "focus_busy": false, "prefs": {}, "now_ms": 0 })
+        )["action"],
+        "ignore"
+    );
+    assert_eq!(
+        call(
+            focus::take_break_plan,
+            json!({ "focus": ended_homework(), "focus_busy": true, "prefs": {}, "now_ms": 0 })
+        )["action"],
+        "ignore"
+    );
+}
+
+#[test]
+fn a_truthy_trace_that_is_not_an_object_is_refused() {
+    for trace in [json!(1), json!([1]), json!("placed")] {
+        let err = focus::scheduled_blocks(&json!({ "blocks": [], "trace": trace })).unwrap_err();
+        assert_eq!(
+            err,
+            flexweek_engine::EngineError::value("trace is an object")
+        );
+    }
+}
+
+#[test]
+fn prefs_that_are_not_an_object_are_refused() {
+    let err =
+        focus::focus_spotify_decision(&json!({ "prefs": "spotify", "link": "spotify:track:1" }))
+            .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("prefs is an object")
+    );
+}
+
+#[test]
+fn notices_that_are_not_a_list_are_refused() {
+    let err = focus::split_held(&json!({
+        "notices": "bad",
+        "focus": Value::Null,
+        "prefs": {},
+        "material_owns": false
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("notices is a list")
+    );
+}
+
+#[test]
+fn a_saved_timer_with_nan_or_a_lone_surrogate_is_dropped() {
+    // `plain` writes NaN as this one-key object, and a lone surrogate as a private-use character.
+    let mut nan_timer = saved_timer("work", 0);
+    nan_timer["endsAt"] = json!({ "\u{0}float": "nan" });
+    assert_eq!(restored(nan_timer, 1000)["action"], "drop");
+
+    let mut surrogate = saved_timer("work", 5000);
+    surrogate["start"] = json!(format!("09:00{}", char::from_u32(0x10F800).unwrap()));
+    assert_eq!(restored(surrogate, 1000)["action"], "drop");
+}
