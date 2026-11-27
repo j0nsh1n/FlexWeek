@@ -280,22 +280,7 @@ def read_material_choice(stored: object) -> dict[str, str]:
     A missing file, a missing object, or a value this build does not know falls back to Slate,
     follow system, standard contrast, and comfortable. Nothing here raises.
     """
-    material = stored.get("material") if isinstance(stored, dict) else None
-    raw = material if isinstance(material, dict) else {}
-    preset = raw.get("preset")
-    mode = raw.get("mode")
-    contrast_name = raw.get("contrast")
-    density = raw.get("density")
-    return {
-        "preset": preset if isinstance(preset, str) and preset in PRESETS else DEFAULT_PRESET,
-        "mode": mode if isinstance(mode, str) and mode in SAVED_MODES else DEFAULT_MODE,
-        "contrast": (
-            contrast_name
-            if isinstance(contrast_name, str) and contrast_name in CONTRASTS
-            else DEFAULT_CONTRAST
-        ),
-        "density": density if isinstance(density, str) and density in DENSITY else DEFAULT_DENSITY,
-    }
+    return json.loads(flexweek_engine.views_look_read_material_choice(stored))
 
 
 def resolved_mode(mode: str, worn_dark: bool) -> str:
@@ -310,9 +295,7 @@ def mode_of(choice: dict[str, str], worn_dark: bool) -> str:
 
 def read_font(stored: object) -> str:
     """The student's own font from the look file's `material` object; "" means the preset's own."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    font = material.get("font") if isinstance(material, dict) else None
-    return font if isinstance(font, str) and font in FONTS else ""
+    return str(flexweek_engine.views_look_read_font(stored))
 
 
 def shown_font(preset: str, font: str) -> str:
@@ -385,154 +368,45 @@ _CATEGORY_ROLE = {"school": "school", "sports": "soccer", "study": "reading", "h
 
 def advanced_default() -> dict[str, Any]:
     """The advanced draft before anyone moves a dial."""
-    return {
-        "corner": None,
-        "hour": None,
-        "padding": None,
-        "rail": True,
-        "scale": 1.0,
-        "motion": "Normal",
-        "shadow": None,
-        "block": "Edge",
-        "lines": "Faint",
-        "today": True,
-        "times": True,
-        "lengths": False,
-        "now": None,
-        "cat": {key: None for key in CATEGORY_KEYS},
-    }
+    return json.loads(flexweek_engine.views_look_advanced_default())
 
 
 def _hex(value: object) -> str | None:
-    if not isinstance(value, str) or len(value) != 7 or not value.startswith("#"):
-        return None
-    try:
-        int(value[1:], 16)
-    except ValueError:
-        return None
-    return value.lower()
+    return flexweek_engine.views_look_hex_color(value)
 
 
 def _int_in(value: object, bounds: tuple[int, int]) -> int | None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        return None
-    low, high = bounds
-    if low <= value <= high:
-        return value
-    return None
+    return flexweek_engine.views_look_int_in(value, bounds)
 
 
 def _float_in(value: object, bounds: tuple[float, float]) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    number = round(float(value), 2)
-    low, high = bounds
-    if low - 1e-9 <= number <= high + 1e-9:
-        return number
-    return None
+    return flexweek_engine.views_look_float_in(value, bounds)
 
 
 def read_advanced(stored: object) -> dict[str, Any]:
     """Advanced dials from the look file. A missing or unknown value stays at the default."""
-    found = advanced_default()
-    material = stored.get("material") if isinstance(stored, dict) else None
-    raw = material.get("advanced") if isinstance(material, dict) else None
-    if not isinstance(raw, dict):
-        return found
-    corner = _int_in(raw.get("corner"), CORNER_RANGE)
-    if corner is not None:
-        found["corner"] = corner
-    hour = _int_in(raw.get("hour"), HOUR_RANGE)
-    if hour is not None:
-        found["hour"] = hour
-    padding = _int_in(raw.get("padding"), PAD_RANGE)
-    if padding is not None:
-        found["padding"] = padding
-    if isinstance(raw.get("rail"), bool):
-        found["rail"] = raw["rail"]
-    scale = _float_in(raw.get("scale"), SCALE_RANGE)
-    if scale is not None:
-        found["scale"] = scale
-    if raw.get("motion") in MOTION_SPEEDS:
-        found["motion"] = raw["motion"]
-    shadow = _int_in(raw.get("shadow"), SHADOW_RANGE)
-    if shadow is not None:
-        found["shadow"] = shadow
-    if raw.get("block") in BLOCK_STYLES:
-        found["block"] = raw["block"]
-    if raw.get("lines") in HOUR_LINES:
-        found["lines"] = raw["lines"]
-    if isinstance(raw.get("today"), bool):
-        found["today"] = raw["today"]
-    if isinstance(raw.get("times"), bool):
-        found["times"] = raw["times"]
-    if isinstance(raw.get("lengths"), bool):
-        found["lengths"] = raw["lengths"]
-    now = _hex(raw.get("now"))
-    if now is not None:
-        found["now"] = now
-    cats = raw.get("cat")
-    if isinstance(cats, dict):
-        for key in CATEGORY_KEYS:
-            colour = _hex(cats.get(key))
-            if colour is not None:
-                found["cat"][key] = colour
-    return found
+    return json.loads(flexweek_engine.views_look_read_advanced(stored))
 
 
 def read_shortcuts(stored: object) -> bool:
     """The number keys (1 to 5) stay on unless the look file turns them off."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    if isinstance(material, dict) and isinstance(material.get("shortcuts"), bool):
-        return bool(material["shortcuts"])
-    return True
+    return bool(flexweek_engine.views_look_read_shortcuts(stored))
 
 
 def read_letter_keys(stored: object) -> bool:
     """The P, Z and F keys are off unless the look file turns them on. The number keys' own switch does
     not carry over: nobody has used these keys yet, so none starts on."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    return isinstance(material, dict) and material.get("letters") is True
+    return bool(flexweek_engine.views_look_read_letter_keys(stored))
 
 
 def read_saved_material(stored: object) -> list[dict[str, Any]]:
     """Named material looks kept beside the preset. A broken entry is left out."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    raw = material.get("saved") if isinstance(material, dict) else None
-    if not isinstance(raw, list):
-        return []
-    kept: list[dict[str, Any]] = []
-    for item in raw:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"].strip():
-            continue
-        choice = read_material_choice({"material": item})
-        kept.append(
-            {
-                "name": item["name"].strip(),
-                "preset": choice["preset"],
-                "mode": choice["mode"],
-                "contrast": choice["contrast"],
-                "density": choice["density"],
-                "advanced": read_advanced({"material": {"advanced": item.get("advanced")}}),
-            }
-        )
-    return kept
+    return json.loads(flexweek_engine.views_look_read_saved_material(stored))
 
 
 def advanced_overrides(advanced: dict[str, Any]) -> dict[str, Any]:
     """Only the dials that differ from the default, so a preset can stay in charge of the rest."""
-    default = advanced_default()
-    changed: dict[str, Any] = {}
-    for key, value in advanced.items():
-        if key == "cat":
-            colours = {
-                name: colour for name, colour in (value or {}).items() if name in CATEGORY_KEYS and colour
-            }
-            if colours:
-                changed["cat"] = colours
-        elif value != default.get(key):
-            changed[key] = value
-    return changed
+    return json.loads(flexweek_engine.views_look_advanced_overrides(json.dumps(advanced)))
 
 
 LOOK_TIERS = ("simple", "more", "all")
@@ -545,25 +419,17 @@ SETTINGS_NAV_DEFAULT = 220
 def read_look_tier(stored: object) -> str:
     """How many Look controls the Advanced page shows on this computer: simple, more or all. An empty string
     means nobody chose yet, so the page starts on simple (or on all after a setup that read as power)."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    tier = material.get("lookTier") if isinstance(material, dict) else None
-    return tier if isinstance(tier, str) and tier in LOOK_TIERS else ""
+    return str(flexweek_engine.views_look_read_look_tier(stored))
 
 
 def read_day_side_width(stored: object) -> int:
     """Remembered width of the Day right sidebar (Now card + mini month) on this computer."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    raw = material.get("daySideWidth") if isinstance(material, dict) else None
-    found = _int_in(raw, DAY_SIDE_RANGE)
-    return found if found is not None else DAY_SIDE_DEFAULT
+    return int(flexweek_engine.views_look_read_day_side_width(stored))
 
 
 def read_settings_nav_width(stored: object) -> int:
     """Remembered width of the Settings section list on this computer."""
-    material = stored.get("material") if isinstance(stored, dict) else None
-    raw = material.get("settingsNavWidth") if isinstance(material, dict) else None
-    found = _int_in(raw, SETTINGS_NAV_RANGE)
-    return found if found is not None else SETTINGS_NAV_DEFAULT
+    return int(flexweek_engine.views_look_read_settings_nav_width(stored))
 
 
 def pack_material(
@@ -578,49 +444,42 @@ def pack_material(
     settings_nav_width: int | None = None,
 ) -> dict[str, Any]:
     """The `material` object written into the look file."""
-    body: dict[str, Any] = {
-        "preset": choice["preset"],
-        "mode": choice["mode"],
-        "contrast": choice["contrast"],
-        "density": choice["density"],
-        "shortcuts": bool(shortcuts),
-        "letters": bool(letters),
-        "advanced": advanced,
-    }
-    if saved:
-        body["saved"] = saved
-    if font in FONTS:
-        body["font"] = font
-    if tier in LOOK_TIERS:
-        body["lookTier"] = tier
-    if day_side_width is not None and _int_in(day_side_width, DAY_SIDE_RANGE) is not None:
-        body["daySideWidth"] = int(day_side_width)
-    if settings_nav_width is not None and _int_in(settings_nav_width, SETTINGS_NAV_RANGE) is not None:
-        body["settingsNavWidth"] = int(settings_nav_width)
-    return body
+    return json.loads(
+        flexweek_engine.views_look_pack_material(
+            json.dumps(choice),
+            json.dumps(advanced),
+            bool(shortcuts),
+            bool(letters),
+            json.dumps(saved),
+            font,
+            tier,
+            day_side_width,
+            settings_nav_width,
+        )
+    )
 
 
 def store_material(path: Path, material: dict[str, Any]) -> None:
     """Put `material` on the look file and leave every other key where it was."""
     try:
-        stored = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        stored = {}
-    if not isinstance(stored, dict):
-        stored = {}
-    stored["material"] = material
+        existing = path.read_text(encoding="utf-8")
+    except OSError:
+        existing = None
+    text = str(flexweek_engine.views_look_merge_material(existing, json.dumps(material)))
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(stored) + "\n", encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
 
 
 def kept_material(path: Path) -> dict[str, Any] | None:
     """The material object already in the look file, so a later save of the widgets look keeps it."""
     try:
-        stored = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = path.read_text(encoding="utf-8")
+    except OSError:
         return None
-    material = stored.get("material") if isinstance(stored, dict) else None
-    return material if isinstance(material, dict) else None
+    found = flexweek_engine.views_look_extract_kept_material(text)
+    if found is None:
+        return None
+    return json.loads(found)
 
 
 def hour_row_px(density: str, advanced: dict[str, Any]) -> int:
@@ -640,31 +499,15 @@ def dress_theme(
 
 def export_document(choice: dict[str, str], advanced: dict[str, Any]) -> str:
     """The advanced page's export: the basic look and the draft, for a later import."""
-    return json.dumps(
-        {
-            "kind": LOOK_KIND,
-            "version": LOOK_VERSION,
-            "preset": choice["preset"],
-            "mode": choice["mode"],
-            "contrast": choice["contrast"],
-            "density": choice["density"],
-            "advanced": advanced,
-        },
-        indent=2,
-    )
+    return str(flexweek_engine.views_look_export_document(json.dumps(choice), json.dumps(advanced)))
 
 
 def import_document(text: str) -> tuple[dict[str, Any] | None, str]:
     """A document from `export_document`, or a sentence saying why it was refused."""
-    try:
-        raw = json.loads(text)
-    except ValueError:
-        return None, "That file isn't a FlexWeek material look."
-    if not isinstance(raw, dict) or raw.get("kind") != LOOK_KIND or raw.get("version") != LOOK_VERSION:
-        return None, "That file isn't a FlexWeek material look."
-    choice = read_material_choice({"material": raw})
-    advanced = read_advanced({"material": {"advanced": raw.get("advanced")}})
-    return {"choice": choice, "advanced": advanced}, ""
+    found, error = flexweek_engine.views_look_import_document(text)
+    if found is None:
+        return None, str(error)
+    return json.loads(found), str(error)
 
 
 def reading_problems(mode: str, advanced: dict[str, Any]) -> list[dict[str, Any]]:
