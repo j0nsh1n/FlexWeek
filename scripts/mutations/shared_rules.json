@@ -42,67 +42,67 @@
   "test": "desktop/tests/month/test_month_dates_and_chips.py::test_the_open_week_is_read_from_what_the_student_has_now_not_from_the_reply"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "a stored due time is not shown when the homework is opened again",
-  "old": "        self.due_time: str = due_text[11:16] if len(due_text) >= 16 and due_text[11:16] != \"23:59\" else \"\"\n",
-  "new": "        self.due_time: str = \"\"\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_a_stored_due_time_shows_when_the_homework_is_opened_and_saving_keeps_it"
+  "old": "        let due_time = if due_chars.len() >= 16 && clock != \"23:59\" {\n",
+  "new": "        let due_time = if false {\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:a_stored_due_time_shows_when_the_homework_is_opened_and_saving_keeps_it"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "no due time picked is the start of the day, not the end",
-  "old": "        chosen = f\"{self.due_date}T{self.due_time or '23:59'}\"\n",
-  "new": "        chosen = f\"{self.due_date}T{self.due_time or '00:00'}\"\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_no_time_means_the_end_of_the_day"
+  "old": "        let end = \"23:59\";\n",
+  "new": "        let end = \"00:00\";\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:no_time_means_the_end_of_the_day"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "an old end-of-day deadline is rewritten when the homework is saved",
-  "old": "            return before if parse_due(chosen) == parse_due(before) else chosen\n",
-  "new": "            return chosen\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_an_old_end_of_day_deadline_stays_as_stored_until_the_deadline_is_changed"
+  "old": "            (Ok(now), Ok(then)) if now == then => before,\n",
+  "new": "            (Ok(now), Ok(then)) if false => before,\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:an_old_end_of_day_deadline_stays_as_stored_until_the_deadline_is_changed"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "homework due today with no time is refused as passed",
-  "old": "        return (day, minute) < (self.now.date(), self.now.hour * 60 + self.now.minute)\n",
-  "new": "        return (day, minute) <= (self.now.date(), 24 * 60)\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_homework_due_today_with_no_time_is_accepted"
+  "old": "        (day.as_str(), minute) < (self.today.as_str(), self.minute_now)\n",
+  "new": "        (day.as_str(), minute) <= (self.today.as_str(), 24 * 60)\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:homework_due_today_with_no_time_is_accepted"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "old overdue homework cannot be saved with its deadline untouched",
-  "old": "        if chosen == self.original[\"due\"]:\n            return False\n        try:\n",
-  "new": "        try:\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_old_overdue_homework_can_be_saved_while_its_deadline_is_untouched"
+  "old": "        if self.original.get(\"due\") == Some(&Value::String(chosen.clone())) {\n",
+  "new": "        if false {\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:old_overdue_homework_can_be_saved_while_its_deadline_is_untouched"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "a changed deadline that has passed is not checked",
-  "old": "        return (day, minute) < (self.now.date(), self.now.hour * 60 + self.now.minute)\n",
-  "new": "        return False\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_a_changed_deadline_that_has_passed_is_refused"
+  "old": "        (day.as_str(), minute) < (self.today.as_str(), self.minute_now)\n",
+  "new": "        false\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:a_changed_deadline_that_has_passed_is_refused"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "spreading is offered below 60 minutes",
-  "old": "        return self.estimate() >= SPREAD_MIN and not self.spread_out and self.when != \"fixed\"\n",
-  "new": "        return self.estimate() >= 15 and not self.spread_out and self.when != \"fixed\"\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_spreading_is_offered_only_from_sixty_minutes"
+  "old": "        self.estimate() >= SPREAD_MIN && !self.spread_out && self.when != \"fixed\"\n",
+  "new": "        self.estimate() >= 15 && !self.spread_out && self.when != \"fixed\"\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:spreading_is_offered_only_from_sixty_minutes"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "spreading is offered with a pinned time",
-  "old": "        return self.estimate() >= SPREAD_MIN and not self.spread_out and self.when != \"fixed\"\n",
-  "new": "        return self.estimate() >= SPREAD_MIN and not self.spread_out\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_spreading_is_not_offered_with_a_pinned_time"
+  "old": "        self.estimate() >= SPREAD_MIN && !self.spread_out && self.when != \"fixed\"\n",
+  "new": "        self.estimate() >= SPREAD_MIN && !self.spread_out\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:spreading_is_not_offered_with_a_pinned_time"
  },
  {
-  "file": "desktop/native/material/sheet_homework.py",
+  "file": "engine/app/src/views/sheet_homework.rs",
   "name": "spreading is offered when the homework already has sessions",
-  "old": "        return self.estimate() >= SPREAD_MIN and not self.spread_out and self.when != \"fixed\"\n",
-  "new": "        return self.estimate() >= SPREAD_MIN and self.when != \"fixed\"\n",
-  "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_spreading_is_not_offered_when_the_homework_already_has_sessions"
+  "old": "        self.estimate() >= SPREAD_MIN && !self.spread_out && self.when != \"fixed\"\n",
+  "new": "        self.estimate() >= SPREAD_MIN && self.when != \"fixed\"\n",
+  "test": "cargo:flexweek-app:views_sheet_homework:spreading_is_not_offered_when_the_homework_already_has_sessions"
  },
  {
   "file": "desktop/native/material/sheet_block.py",

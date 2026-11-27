@@ -34,6 +34,9 @@ LOCKED: dict[str, dict[str, str]] = {
         "WeekBridge._connect_session": "connects Qt signals on the session to this bridge's slots",
         "WeekBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
     },
+    "desktop/native/material/sheet_homework.py": {
+        "HomeworkDraft._stamp": "reads the session wall clock as a local date and minute for the engine"
+    },
     "desktop/native/material/theme.py": {
         "tokens_path": "reads the computer's font and theme locations for the engine",
         "qml_path": "locates the QML files the Qt shell loads",
