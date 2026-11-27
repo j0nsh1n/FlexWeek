@@ -180,6 +180,26 @@ fn session_focus_take_break_plan(args: &str) -> PyResult<String> {
     guard(|| run(args, focus::take_break_plan))
 }
 
+#[pyfunction]
+fn session_focus_load_kept(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::load_kept))
+}
+
+#[pyfunction]
+fn session_focus_merge_kept(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::merge_kept))
+}
+
+#[pyfunction]
+fn session_focus_remove_kept(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::remove_kept))
+}
+
+#[pyfunction]
+fn session_focus_kept_text(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::kept_text))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -214,6 +234,10 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_focus_restart_finished_plan,
         session_focus_add_focus_time_plan,
         session_focus_take_break_plan,
+        session_focus_load_kept,
+        session_focus_merge_kept,
+        session_focus_remove_kept,
+        session_focus_kept_text,
     );
     Ok(())
 }

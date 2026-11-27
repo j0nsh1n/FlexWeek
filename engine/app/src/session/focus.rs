@@ -4,6 +4,8 @@
 //! applies what comes back; the timer's own arithmetic stays in the engine (`desk::focus`). The clock and
 //! the preferences are always passed in.
 
+use std::collections::BTreeMap;
+
 use flexweek_engine::desk::{focus as timer, grid};
 use flexweek_engine::time::week_start_on;
 use flexweek_engine::{EngineError, EngineResult};
@@ -578,6 +580,11 @@ pub fn restore_decision(args: &Value) -> EngineResult<Value> {
     else {
         return Ok(json!({ "action": "drop" }));
     };
+    // Crediting happens after this answer. A session that is not this homework's must not
+    // be counted first and dropped afterwards.
+    if !session_belongs_to_assignment(&state, &args["blocks"]) {
+        return Ok(json!({ "action": "drop" }));
+    }
     let expired = state.get("expired").is_some_and(truthy);
     if let Some(fields) = state.as_object_mut() {
         fields.shift_remove("expired");
@@ -587,6 +594,10 @@ pub fn restore_decision(args: &Value) -> EngineResult<Value> {
     }
     if state["phase"] == "work" {
         return Ok(json!({ "action": "advance_work", "state": state }));
+    }
+    // An ended timer is over. A past end is not a break that ran out while FlexWeek was closed.
+    if state["phase"] == "ended" {
+        return Ok(json!({ "action": "active", "state": state }));
     }
     let mut paused = timer::set_phase(&state, &json!("work"), &args["prefs"], now)?;
     paused["running"] = json!(false);
@@ -992,4 +1003,299 @@ pub fn take_break_plan(args: &Value) -> EngineResult<Value> {
         "state": moved["state"],
         "alert": moved["alert"],
     }))
+}
+
+const KEPT_FORMAT: i64 = 1;
+/// A few accounts' timers fit under this. Anything larger is not read.
+const FOCUS_FILE_MAX_BYTES: usize = 64 * 1024;
+/// Lengths the preferences screen stores (`engine/service/src/preferences.rs`).
+const WORK_MIN_RANGE: std::ops::RangeInclusive<i64> = 1..=180;
+const BREAK_MIN_RANGE: std::ops::RangeInclusive<i64> = 1..=60;
+const LONG_BREAK_MIN_RANGE: std::ops::RangeInclusive<i64> = 1..=120;
+
+/// Read a focus-timer file. `text` is the file, or null when there is no file.
+/// A file this build cannot trust answers no timers, not an error. `sealed` is
+/// set when the format is a newer one and the file must be left on disk.
+/// Arguments: `text`.
+pub fn load_kept(args: &Value) -> EngineResult<Value> {
+    let Some(text) = args.get("text") else {
+        return Ok(empty_entries());
+    };
+    if text.is_null() {
+        return Ok(empty_entries());
+    }
+    let Some(text) = text.as_str() else {
+        return Err(EngineError::value("text is text or null"));
+    };
+    let (kept, sealed) = read_kept_file(text);
+    Ok(entries_value(kept, sealed))
+}
+
+/// Store one account's timer into the kept entries, or remove it when the timer is null.
+/// What is stored is the same shape a later read accepts. A timer outside that shape
+/// is not written.
+/// Arguments: `entries`, `account_id`, `state`.
+pub fn merge_kept(args: &Value) -> EngineResult<Value> {
+    let mut kept = read_entries(args)?;
+    let id = account_id_of(args)?;
+    let state = args
+        .get("state")
+        .ok_or_else(|| EngineError::value("state is an object or null"))?;
+    match timer::persist_payload(state)? {
+        Some(payload) => match strict_payload(&payload) {
+            Some(clean) => {
+                kept.insert(id, clean);
+            }
+            None => {
+                kept.remove(&id);
+            }
+        },
+        None => {
+            kept.remove(&id);
+        }
+    }
+    Ok(entries_value(kept, false))
+}
+
+/// Drop one account from the kept entries. An account that is not there stays absent.
+/// `changed` is false when the account had no entry, so the file can be left as it is.
+/// Arguments: `entries`, `account_id`.
+pub fn remove_kept(args: &Value) -> EngineResult<Value> {
+    let mut kept = read_entries(args)?;
+    let changed = kept.remove(&account_id_of(args)?).is_some();
+    let mut answer = entries_value(kept, false);
+    answer["changed"] = json!(changed);
+    Ok(answer)
+}
+
+/// The focus-timer file for these entries: format 1, accounts in id order.
+/// An entry this build would not read back is left out.
+/// Arguments: `entries`.
+pub fn kept_text(args: &Value) -> EngineResult<Value> {
+    let kept = read_entries(args)?;
+    let mut accounts = serde_json::Map::new();
+    for (id, payload) in kept {
+        if let Some(clean) = strict_payload(&payload) {
+            accounts.insert(id.to_string(), clean);
+        }
+    }
+    let file = json!({ "format": KEPT_FORMAT, "accounts": Value::Object(accounts) });
+    Ok(json!({ "text": file.to_string() }))
+}
+
+fn empty_entries() -> Value {
+    json!({ "entries": [] })
+}
+
+fn entries_value(kept: BTreeMap<i64, Value>, sealed: bool) -> Value {
+    let entries: Vec<Value> = kept
+        .into_iter()
+        .map(|(id, payload)| json!({ "account_id": id, "payload": payload }))
+        .collect();
+    if sealed {
+        json!({ "entries": entries, "sealed": true })
+    } else {
+        json!({ "entries": entries })
+    }
+}
+
+fn read_kept_file(text: &str) -> (BTreeMap<i64, Value>, bool) {
+    if text.len() > FOCUS_FILE_MAX_BYTES {
+        return (BTreeMap::new(), false);
+    }
+    let Ok(file) = serde_json::from_str::<Value>(text) else {
+        return (BTreeMap::new(), false);
+    };
+    let Some(file) = file.as_object() else {
+        return (BTreeMap::new(), false);
+    };
+    if newer_format(file.get("format")) {
+        return (BTreeMap::new(), true);
+    }
+    if file.get("format").and_then(Value::as_i64) != Some(KEPT_FORMAT) {
+        return (BTreeMap::new(), false);
+    }
+    let Some(accounts) = file.get("accounts").and_then(Value::as_object) else {
+        return (BTreeMap::new(), false);
+    };
+    let mut kept = BTreeMap::new();
+    for (key, payload) in accounts {
+        let Some(id) = canonical_account_key(key) else {
+            continue;
+        };
+        if let Some(clean) = strict_payload(payload) {
+            kept.insert(id, clean);
+        }
+    }
+    (kept, false)
+}
+
+/// A whole-number format other than the one this build writes is a newer file.
+fn newer_format(format: Option<&Value>) -> bool {
+    match format {
+        Some(Value::Number(number)) => number.as_i64().is_some_and(|found| found != KEPT_FORMAT),
+        _ => false,
+    }
+}
+
+fn canonical_account_key(key: &str) -> Option<i64> {
+    let Ok(id) = key.parse::<i64>() else {
+        return None;
+    };
+    (id.to_string() == key).then_some(id)
+}
+
+/// The session named on the timer is that homework's session. A timer with no session,
+/// or no homework, has nothing to cross.
+fn session_belongs_to_assignment(state: &Value, blocks: &Value) -> bool {
+    let assignment = &state["assignmentId"];
+    let block_id = &state["blockId"];
+    if !truthy(assignment) || !truthy(block_id) {
+        return true;
+    }
+    let Some(items) = blocks.as_array() else {
+        return false;
+    };
+    // Only a session seen on the open week with another homework is refused. A timer from
+    // another week (Sunday night, reopened Monday) is not on this week's blocks at all; it
+    // is kept as before, and drop_missing judges it once its own week is open.
+    match items.iter().find(|item| item.get("id") == Some(block_id)) {
+        Some(item) => item.get("assignment_id") == Some(assignment),
+        None => true,
+    }
+}
+
+/// The timer rebuilt from the fields the app writes. Extra fields are dropped. A field
+/// outside the range the app writes drops the whole timer.
+fn strict_payload(payload: &Value) -> Option<Value> {
+    if !payload.is_object() || saved_is_corrupt(payload) {
+        return None;
+    }
+    if !optional_range(payload, "breakMin", &BREAK_MIN_RANGE)
+        || !optional_range(payload, "longBreakMin", &LONG_BREAK_MIN_RANGE)
+        || !optional_range(payload, "startedAt", &(0..=i64::MAX))
+    {
+        return None;
+    }
+    let phase = payload.get("phase").and_then(Value::as_str)?;
+    if !timer::FOCUS_PHASES.contains(&phase) {
+        return None;
+    }
+    let cycles = payload.get("cycles").and_then(Value::as_i64)?;
+    if !(0..=timer::MAX_FOCUS_SESSIONS).contains(&i128::from(cycles)) {
+        return None;
+    }
+    let week = payload
+        .get("weekStart")
+        .and_then(Value::as_str)
+        .filter(|text| flexweek_engine::time::is_week_start(text))?;
+    let ends = optional_millis(payload, "endsAt")?;
+    let remaining = optional_millis(payload, "remainingMs")?;
+    if ends.is_none() && remaining.is_none() {
+        return None;
+    }
+    let work_min = optional_work_min(payload)?;
+    let mut clean = serde_json::Map::new();
+    clean.insert(
+        "assignmentId".into(),
+        text_or_null(payload, "assignmentId")?,
+    );
+    clean.insert("sessionId".into(), text_or_null(payload, "sessionId")?);
+    clean.insert("weekStart".into(), json!(week));
+    clean.insert("day".into(), kept_day(payload)?);
+    clean.insert("start".into(), text_or_null(payload, "start")?);
+    clean.insert("phase".into(), json!(phase));
+    clean.insert("cycles".into(), json!(cycles));
+    clean.insert("endsAt".into(), millis_or_null(ends));
+    clean.insert("remainingMs".into(), millis_or_null(remaining));
+    if let Some(minutes) = work_min {
+        clean.insert("workMin".into(), json!(minutes));
+    }
+    Some(Value::Object(clean))
+}
+
+fn text_or_null(payload: &Value, key: &str) -> Option<Value> {
+    match payload.get(key) {
+        None | Some(Value::Null) => Some(Value::Null),
+        Some(Value::String(text)) => Some(json!(text)),
+        Some(_) => None,
+    }
+}
+
+fn kept_day(payload: &Value) -> Option<Value> {
+    match payload.get("day") {
+        None | Some(Value::Null) => Some(Value::Null),
+        Some(Value::Number(number)) => {
+            let day = number.as_i64()?;
+            (0..=6).contains(&day).then(|| json!(day))
+        }
+        Some(_) => None,
+    }
+}
+
+fn optional_work_min(payload: &Value) -> Option<Option<i64>> {
+    match payload.get("workMin") {
+        None | Some(Value::Null) => Some(None),
+        Some(Value::Number(number)) => {
+            let minutes = number.as_i64()?;
+            WORK_MIN_RANGE.contains(&minutes).then_some(Some(minutes))
+        }
+        Some(_) => None,
+    }
+}
+
+fn optional_millis(payload: &Value, key: &str) -> Option<Option<i64>> {
+    match payload.get(key) {
+        None | Some(Value::Null) => Some(None),
+        Some(Value::Number(number)) => {
+            let number = number.as_i64()?;
+            (number >= 0).then_some(Some(number))
+        }
+        Some(_) => None,
+    }
+}
+
+fn millis_or_null(value: Option<i64>) -> Value {
+    match value {
+        Some(number) => json!(number),
+        None => Value::Null,
+    }
+}
+
+fn optional_range(payload: &Value, key: &str, range: &std::ops::RangeInclusive<i64>) -> bool {
+    match payload.get(key) {
+        None | Some(Value::Null) => true,
+        Some(Value::Number(number)) => number.as_i64().is_some_and(|found| range.contains(&found)),
+        Some(_) => false,
+    }
+}
+
+fn read_entries(args: &Value) -> EngineResult<BTreeMap<i64, Value>> {
+    let items = args
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| EngineError::value("entries is a list"))?;
+    let mut kept = BTreeMap::new();
+    for item in items {
+        let item = item
+            .as_object()
+            .ok_or_else(|| EngineError::value("an entry is an object"))?;
+        let id = item
+            .get("account_id")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| EngineError::value("account_id is a whole number"))?;
+        let payload = item
+            .get("payload")
+            .filter(|value| value.is_object())
+            .cloned()
+            .ok_or_else(|| EngineError::value("payload is an object"))?;
+        kept.insert(id, payload);
+    }
+    Ok(kept)
+}
+
+fn account_id_of(args: &Value) -> EngineResult<i64> {
+    args.get("account_id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| EngineError::value("account_id is a whole number"))
 }
