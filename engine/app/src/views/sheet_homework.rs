@@ -1186,14 +1186,6 @@ impl HomeworkDraft {
         let estimate = self.estimate();
         let mut time_options = vec![json!({"value": "", "label": "End of day"})];
         time_options.extend(quarter_hours_of(step_step)?);
-        let when_note = match &fixed {
-            Some((day, start)) => format!(
-                "Pinned to {} at {}. Plan won't move it.",
-                name_at(&names, *day)?,
-                hhmm_text(start)?
-            ),
-            None => String::new(),
-        };
         let pinned = self.when == "fixed";
         let lengths: Vec<Value> = QUICK_LENGTHS
             .iter()
@@ -1274,6 +1266,14 @@ impl HomeworkDraft {
         put("whenDay", json!(self.when_day));
         put("dayOptions", Value::Array(day_options));
         put("whenTime", json!(self.when_time));
+        let when_note = match &fixed {
+            Some((day, start)) => format!(
+                "Pinned to {} at {}. Plan won't move it.",
+                name_at(&names, *day)?,
+                hhmm_text(start)?
+            ),
+            None => String::new(),
+        };
         put("whenNote", json!(when_note));
         put("whenFrom", json!(self.now_hint(env)?));
         // The day row shows only while the homework is pinned, so a move is named only then.
