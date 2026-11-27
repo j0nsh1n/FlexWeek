@@ -160,7 +160,12 @@ impl Drafts {
         let effect = self
             .effects
             .send(request, WaitFor::Delete, epoch, Some(ticket));
-        Ok(json!({ "effect": effect, "title": begin["title"] }))
+        let title = begin["title"].as_str().unwrap_or("the homework");
+        Ok(json!({
+            "effect": effect,
+            "title": begin["title"],
+            "status": crate::session::plan_flow::deleting_status(title),
+        }))
     }
 
     pub(super) fn answer_effect(

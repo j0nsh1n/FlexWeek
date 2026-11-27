@@ -769,3 +769,30 @@ fn the_drafts_view_names_the_stored_weeks_of_a_sunday() {
     let view: Value = serde_json::from_str(&session.view("drafts.stored_weeks")).unwrap();
     assert_eq!(view, json!([["2026-10-26", 3], ["2026-11-02", 4]]));
 }
+
+#[test]
+fn deleting_says_the_title_and_clears_the_reminder_except_on_monday() {
+    assert_eq!(
+        plan_flow::deleting_status("Essay"),
+        "Deleting Essay\u{2026}"
+    );
+    assert_eq!(
+        plan_flow::deleting_status("the homework"),
+        "Deleting the homework\u{2026}"
+    );
+    assert!(plan_flow::delete_clears_reminder_week(true, 1));
+    assert!(!plan_flow::delete_clears_reminder_week(true, 0));
+    assert!(!plan_flow::delete_clears_reminder_week(false, 1));
+    assert!(plan_flow::delete_clears_reminder_week(true, 6));
+}
+
+#[test]
+fn a_save_skips_while_signed_out_conflicted_or_busy_and_a_retry_needs_a_pending_save() {
+    assert!(plan_flow::save_skipped(false, false, false));
+    assert!(plan_flow::save_skipped(true, true, false));
+    assert!(plan_flow::save_skipped(true, false, true));
+    assert!(!plan_flow::save_skipped(true, false, false));
+    assert!(plan_flow::retry_save_goes(true, false));
+    assert!(!plan_flow::retry_save_goes(true, true));
+    assert!(!plan_flow::retry_save_goes(false, false));
+}

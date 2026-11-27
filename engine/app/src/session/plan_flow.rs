@@ -851,6 +851,27 @@ fn type_error(message: impl Into<String>) -> EngineError {
     }
 }
 
+/// The status line while a delete is in flight. The ellipsis is U+2026, as the other waits are.
+pub fn deleting_status(title: &str) -> String {
+    format!("Deleting {title}\u{2026}")
+}
+
+/// A finished delete clears the reminder week except when Monday is the first day (0), which
+/// the window treats as no shift. Same rule as a save's `ClearReminderWeek`.
+pub fn delete_clears_reminder_week(deleted: bool, first_weekday: i64) -> bool {
+    deleted && first_weekday != 0
+}
+
+/// A save does not start while signed out, while the week conflicts, or while a request is busy.
+pub fn save_skipped(signed_in: bool, conflict: bool, busy: bool) -> bool {
+    !signed_in || conflict || busy
+}
+
+/// Retry only a save that is still waiting, and not while that week is in conflict.
+pub fn retry_save_goes(pending: bool, conflict: bool) -> bool {
+    pending && !conflict
+}
+
 fn kind_name(kind: ErrorKind) -> &'static str {
     match kind {
         ErrorKind::Value => "ValueError",

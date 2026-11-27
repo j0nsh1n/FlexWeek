@@ -665,6 +665,31 @@ fn session_delete_homework_guard(payload: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn session_deleting_status(title: &str) -> PyResult<String> {
+    guard(|| Ok(plan_flow::deleting_status(title)))
+}
+
+#[pyfunction]
+fn session_delete_clears_reminder(deleted: bool, first_weekday: i64) -> PyResult<bool> {
+    guard(|| {
+        Ok(plan_flow::delete_clears_reminder_week(
+            deleted,
+            first_weekday,
+        ))
+    })
+}
+
+#[pyfunction]
+fn session_save_skipped(signed_in: bool, conflict: bool, busy: bool) -> PyResult<bool> {
+    guard(|| Ok(plan_flow::save_skipped(signed_in, conflict, busy)))
+}
+
+#[pyfunction]
+fn session_retry_save_goes(pending: bool, conflict: bool) -> PyResult<bool> {
+    guard(|| Ok(plan_flow::retry_save_goes(pending, conflict)))
+}
+
+#[pyfunction]
 fn session_did_these_ids(assignments: &str, assignment_ids: &str) -> PyResult<Vec<String>> {
     guard(|| {
         let assignments = parse(assignments, "assignments")?;
@@ -685,6 +710,10 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_touch_settle,
         session_plan_notes,
         session_delete_homework_guard,
+        session_deleting_status,
+        session_delete_clears_reminder,
+        session_save_skipped,
+        session_retry_save_goes,
         session_did_these_ids,
     );
     Ok(())

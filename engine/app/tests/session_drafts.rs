@@ -179,6 +179,8 @@ impl Desk {
             "cmd": "drafts_delete_start", "ticket": ticket, "assignment_id": "essay",
             "operation_id": "delete-essay", "key": "delete-essay",
         }));
+        assert_eq!(delete["title"], "Essay");
+        assert_eq!(delete["status"], "Deleting Essay\u{2026}");
         (ticket, delete["effect"].clone())
     }
 
