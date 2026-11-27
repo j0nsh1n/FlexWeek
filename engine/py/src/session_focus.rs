@@ -90,6 +90,96 @@ fn session_focus_rebase(args: &str) -> PyResult<String> {
     guard(|| run(args, focus::rebase))
 }
 
+#[pyfunction]
+fn session_focus_scheduled_blocks(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::scheduled_blocks))
+}
+
+#[pyfunction]
+fn session_focus_restore_decision(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::restore_decision))
+}
+
+#[pyfunction]
+fn session_focus_focus_spotify_decision(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::focus_spotify_decision))
+}
+
+#[pyfunction]
+fn session_focus_focus_spotify_open_failed(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::focus_spotify_open_failed))
+}
+
+#[pyfunction]
+fn session_focus_start_allowed(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::start_allowed))
+}
+
+#[pyfunction]
+fn session_focus_toggle_pause_decision(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::toggle_pause_decision))
+}
+
+#[pyfunction]
+fn session_focus_end_early_decision(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::end_early_decision))
+}
+
+#[pyfunction]
+fn session_focus_credit_enqueue_decision(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::credit_enqueue_decision))
+}
+
+#[pyfunction]
+fn session_focus_apply_credit_blocks(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::apply_credit_blocks))
+}
+
+#[pyfunction]
+fn session_focus_apply_auto_complete_blocks(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::apply_auto_complete_blocks))
+}
+
+#[pyfunction]
+fn session_focus_split_held(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::split_held))
+}
+
+#[pyfunction]
+fn session_focus_release_held(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::release_held))
+}
+
+#[pyfunction]
+fn session_focus_finish_focused_plan(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::finish_focused_plan))
+}
+
+#[pyfunction]
+fn session_focus_finish_after_load(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::finish_after_load))
+}
+
+#[pyfunction]
+fn session_focus_finish_intent_on_request(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::finish_intent_on_request))
+}
+
+#[pyfunction]
+fn session_focus_restart_finished_plan(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::restart_finished_plan))
+}
+
+#[pyfunction]
+fn session_focus_add_focus_time_plan(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::add_focus_time_plan))
+}
+
+#[pyfunction]
+fn session_focus_take_break_plan(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::take_break_plan))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -105,7 +195,25 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_focus_mutes_alerts,
         session_focus_hold_alerts,
         session_focus_drop_missing,
-        session_focus_rebase
+        session_focus_rebase,
+        session_focus_scheduled_blocks,
+        session_focus_restore_decision,
+        session_focus_focus_spotify_decision,
+        session_focus_focus_spotify_open_failed,
+        session_focus_start_allowed,
+        session_focus_toggle_pause_decision,
+        session_focus_end_early_decision,
+        session_focus_credit_enqueue_decision,
+        session_focus_apply_credit_blocks,
+        session_focus_apply_auto_complete_blocks,
+        session_focus_split_held,
+        session_focus_release_held,
+        session_focus_finish_focused_plan,
+        session_focus_finish_after_load,
+        session_focus_finish_intent_on_request,
+        session_focus_restart_finished_plan,
+        session_focus_add_focus_time_plan,
+        session_focus_take_break_plan,
     );
     Ok(())
 }

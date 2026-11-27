@@ -242,7 +242,10 @@ class FocusBridge(QObject):
 
     @Slot()
     def markFinished(self) -> None:
-        if self._session().finish_focused_homework():
+        # Queued still closes the screen: the week is loading behind it, and the homework
+        # finishes when that load lands. A failed load leaves the ended timer for the next open.
+        outcome = self._session().finish_focused_homework()
+        if outcome == "finished" or outcome == "queued":
             self.hide()
 
     @Slot()

@@ -327,8 +327,10 @@ class DayBridge(QObject):
 
     @Slot()
     def markFinished(self) -> None:
-        """The Now card's Mark finished: the finished timer's homework is done, and the timer is cleared."""
-        self._window.session.finish_focused_homework()  # type: ignore[attr-defined]
+        """The Now card's Mark finished: done now, or queued until the timer's week loads."""
+        outcome = self._window.session.finish_focused_homework()  # type: ignore[attr-defined]
+        if outcome == "finished" or outcome == "queued":
+            self._on_timer()
 
     @Slot()
     def startAgain(self) -> None:
