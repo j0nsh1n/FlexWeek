@@ -38,6 +38,7 @@ mod session_views;
 mod session_week;
 mod sync;
 mod views_copy;
+mod views_day;
 mod views_focus;
 mod views_hours;
 mod views_look_file;
@@ -404,6 +405,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     desk_rest::add(m)?;
     sync::add(m)?;
     views_copy::add(m)?;
+    views_day::add(m)?;
     views_focus::add(m)?;
     views_hours::add(m)?;
     views_look_file::add(m)?;

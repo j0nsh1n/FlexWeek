@@ -51,6 +51,13 @@ LOCKED: dict[str, dict[str, str]] = {
         "store_material": "writes the look file with Python's JSON spelling",
     },
     "desktop/native/layout_choice.py": {},
+    "desktop/native/material/day_board.py": {},
+    "desktop/native/material/bridge_day.py": {
+        "_moment": "reads the session wall clock as local datetime for the engine",
+        "DayBridge._connect_session": "connects Qt signals on the session to this bridge's slots",
+        "DayBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
+    },
+    "desktop/native/material/bridge_myday.py": {},
     "desktop/native/material/sheet_block.py": {},
     "desktop/native/material/sheet_preview.py": {},
 }
