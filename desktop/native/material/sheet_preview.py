@@ -1,31 +1,22 @@
-"""The preview sheet: what Paste, Duplicate and the other copies propose, row by row, before saving.
+"""The preview sheet: what Paste, Duplicate and the other copies propose, row by row.
 
-The rows and their conflict rules are the Widgets dialog's own (reuse.row_conflict and its message); this
-holds the state and the words for Material's sheet."""
+The save callable and the live blocks stay here. The row rules are in the engine.
+"""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
-from copy import deepcopy
 from typing import Any
 
-from backend.slots import (
-    DAY_END_MIN,
-    DAY_START_MIN,
-    SLOT_MIN,
-    hhmm_to_minutes,
-    minutes_to_hhmm,
-)
-from desktop.native.calendar import DAYS
-from desktop.native.reuse import preview_conflict_message, row_conflict
-from desktop.native.weekmodel import hhmm_text
+import flexweek_engine  # type: ignore[import-untyped]
 
 NONE_CHOSEN = "Select at least one item before saving."
 
 
 def beside_words(clash: str) -> str:
     """What a time says when another block is already there: it is allowed, and both are drawn."""
-    return f"{clash} is at that time too. Both will stay visible and overlap slightly."
+    return flexweek_engine.preview_beside_words(clash)
 
 
 class PreviewDraft:
@@ -40,102 +31,61 @@ class PreviewDraft:
         save: Callable[[list[dict]], None],
         confirm: str = "Save preview",
     ) -> None:
-        self.confirm = confirm
-        self.title = title
-        self.summary = summary
-        self.rows = deepcopy(rows)
         self.existing = existing
         self.save = save
-        self._first = True
-        self._settle()
+        self._state = json.loads(
+            flexweek_engine.preview_draft_open(
+                json.dumps({"title": title, "summary": summary, "confirm": confirm, "rows": rows})
+            )
+        )
 
-    def _settle(self) -> None:
-        if self._first:
-            for row in self.rows:
-                if row.get("invalid"):
-                    row["checked"] = False
-        self._first = False
+    def _replace(self, state: str) -> None:
+        self._state = json.loads(state)
+
+    @property
+    def rows(self) -> list:
+        return self._state["rows"]
+
+    @property
+    def title(self) -> str:
+        return self._state["title"]
+
+    @property
+    def summary(self) -> str:
+        return self._state["summary"]
+
+    @property
+    def confirm(self) -> str:
+        return self._state["confirm"]
 
     def can_save(self) -> bool:
-        return any(row.get("checked") for row in self.rows)
+        return flexweek_engine.preview_draft_can_save(json.dumps(self._state))
 
     def check(self, index: int, checked: bool) -> None:
-        if 0 <= index < len(self.rows) and not self.rows[index].get("invalid"):
-            self.rows[index]["checked"] = checked
-
-    def _touched(self, index: int) -> None:
-        if not row_conflict(self.rows[index], self.rows, self.existing):
-            self.rows[index]["checked"] = True
+        self._replace(flexweek_engine.preview_draft_check(json.dumps(self._state), index, checked))
 
     def set_day(self, index: int, day: int) -> None:
-        if not 0 <= index < len(self.rows) or not 0 <= day < len(DAYS):
-            return
-        self.rows[index]["day"] = day
-        self.rows[index]["block"]["days"] = [day]
-        self._touched(index)
+        self._replace(
+            flexweek_engine.preview_draft_set_day(
+                json.dumps(self._state), index, day, json.dumps(self.existing)
+            )
+        )
 
     def set_start(self, index: int, start: str) -> None:
-        if not 0 <= index < len(self.rows):
-            return
-        self.rows[index]["block"]["start"] = start
-        self.rows[index]["invalid"] = ""
-        self._touched(index)
+        self._replace(
+            flexweek_engine.preview_draft_set_start(
+                json.dumps(self._state), index, start, json.dumps(self.existing)
+            )
+        )
 
     def set_duration(self, index: int, minutes: int) -> None:
-        if not 0 <= index < len(self.rows):
-            return
-        self.rows[index]["block"]["duration_min"] = int(minutes)
-        self._touched(index)
-
-    def _row_form(self, index: int, row: dict) -> dict[str, Any]:
-        conflict = row_conflict(row, self.rows, self.existing)
-        beside = conflict and not row.get("invalid")
-        detail = (
-            beside_words(conflict) if beside else preview_conflict_message(row, self.rows, self.existing)
-        )
-        form: dict[str, Any] = {
-            "index": index,
-            "title": row["block"]["title"],
-            "checked": bool(row.get("checked")),
-            "invalid": bool(row.get("invalid")),
-            "detail": detail,
-            "fixed": bool(row.get("fixed")),
-        }
-        if row.get("fixed"):
-            block = row["block"]
-            duration = int(block["duration_min"])
-            current = block.get("start") or minutes_to_hhmm(DAY_START_MIN)
-            last = DAY_END_MIN - duration
-            offered = {minutes_to_hhmm(minute) for minute in range(DAY_START_MIN, last + 1, SLOT_MIN)}
-            starts = sorted(offered | {current})
-            block["start"] = current
-            room = DAY_END_MIN - hhmm_to_minutes(current)
-            maximum = min(room, int(row.get("original_duration") or duration))
-            lengths = set(range(SLOT_MIN, maximum + 1, SLOT_MIN))
-            if duration <= maximum:
-                lengths.add(duration)
-            form.update(
-                {
-                    "day": row["day"],
-                    "dayOptions": [{"value": number, "label": name} for number, name in enumerate(DAYS)],
-                    "start": current,
-                    "startOptions": [{"value": value, "label": hhmm_text(value)} for value in starts],
-                    "duration": min(duration, maximum),
-                    "durationOptions": [
-                        {"value": minutes, "label": str(minutes)} for minutes in sorted(lengths)
-                    ],
-                }
+        self._replace(
+            flexweek_engine.preview_draft_set_duration(
+                json.dumps(self._state), index, json.dumps(minutes), json.dumps(self.existing)
             )
-        return form
+        )
 
     def form(self) -> dict[str, Any]:
-        rows = [self._row_form(index, row) for index, row in enumerate(self.rows)]
-        return {
-            "kind": "preview",
-            "heading": self.title,
-            "intro": self.summary,
-            "confirm": self.confirm,
-            "rows": rows,
-            "canSave": self.can_save(),
-            "whyOff": "" if self.can_save() else NONE_CHOSEN,
-        }
+        state, form = flexweek_engine.preview_draft_form(json.dumps(self._state), json.dumps(self.existing))
+        self._state = json.loads(state)
+        return json.loads(form)
