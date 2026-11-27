@@ -175,11 +175,11 @@
   "test": "cargo:flexweek-app:views_sheet_block:the_missed_switch_is_offered_for_one_day_of_a_block"
  },
  {
-  "file": "desktop/native/material/bridge_sheets.py",
+  "file": "engine/app/src/views/sheets_core.rs",
   "name": "ticking i missed it does not mark the day missed",
-  "old": "        if draft.recover_missed() and day is not None:\n",
-  "new": "        if False and day is not None:\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_passed_block_offers_i_missed_it_and_ticking_it_marks_the_day_missed"
+  "old": "    if recover_missed && let Some(day) = occurrence_day {\n",
+  "new": "    if false && let Some(day) = occurrence_day {\n",
+  "test": "cargo:flexweek-app:views_sheets_core:ticking_i_missed_it_marks_the_split_days_new_block_missed"
  },
  {
   "file": "engine/app/src/views/sheet_block.rs",

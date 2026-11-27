@@ -127,6 +127,17 @@ fn more_than_three_doubled_weeks_name_three_and_count_the_rest() {
 }
 
 #[test]
+fn a_fourth_doubled_week_is_counted_not_named() {
+    let said = doubled_words(
+        "Guitar",
+        &weeks(&["2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"]),
+        "2026-11-05",
+    )
+    .unwrap();
+    assert!(said.contains("weeks of 9 Nov, 16 Nov, 23 Nov and 1 more, so"));
+}
+
+#[test]
 fn a_doubled_week_in_another_year_carries_its_year() {
     let said = doubled_words("Guitar", &weeks(&["2027-01-04"]), "2026-11-05").unwrap();
     assert!(said.contains("week of 4 Jan 2027, so"));
