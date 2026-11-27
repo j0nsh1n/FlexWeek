@@ -993,3 +993,28 @@ pub fn take_break_plan(args: &Value) -> EngineResult<Value> {
         "alert": moved["alert"],
     }))
 }
+
+/// Read a focus-timer file. `text` is the file, or null when there is no file.
+/// A file this build cannot trust answers no timers, not an error.
+/// Arguments: `text`.
+pub fn load_kept(_args: &Value) -> EngineResult<Value> {
+    Err(EngineError::value("not kept yet"))
+}
+
+/// Store one account's timer into the kept entries, or remove it when the timer is null.
+/// Arguments: `entries`, `account_id`, `state`.
+pub fn merge_kept(_args: &Value) -> EngineResult<Value> {
+    Err(EngineError::value("not kept yet"))
+}
+
+/// Drop one account from the kept entries. An account that is not there stays absent.
+/// Arguments: `entries`, `account_id`.
+pub fn remove_kept(_args: &Value) -> EngineResult<Value> {
+    Err(EngineError::value("not kept yet"))
+}
+
+/// The focus-timer file for these entries.
+/// Arguments: `entries`.
+pub fn kept_text(_args: &Value) -> EngineResult<Value> {
+    Err(EngineError::value("not kept yet"))
+}
