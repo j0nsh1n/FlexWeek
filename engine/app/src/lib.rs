@@ -5,3 +5,4 @@
 
 pub mod session;
 pub mod upgrade;
+pub mod views;
