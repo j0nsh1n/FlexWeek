@@ -1079,6 +1079,11 @@ fn required_str<'a>(fields: &'a Map<String, Value>, name: &str) -> Result<&'a st
         .ok_or_else(|| format!("{name} must be text"))
 }
 
+/// Confirming a spread does nothing without the preview that is on screen, or while signed out.
+pub fn confirm_spread_skipped(has_preview: bool, signed_in: bool) -> bool {
+    !has_preview || !signed_in
+}
+
 fn first_day(fields: &Map<String, Value>) -> Result<i64, String> {
     fields
         .get("days")

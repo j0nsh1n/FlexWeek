@@ -1308,6 +1308,155 @@ fn mark_finished_does_nothing_when_it_cannot_and_clears_a_flexible_block_without
     assert_eq!(plan["blocks"][0]["completed_day"], 2);
 }
 
+fn overdue_start(quick: bool, day: Value, block_id: Value, overdue: Value) -> Value {
+    focus::overdue_for_start(&json!({
+        "quick": quick,
+        "day": day,
+        "block_id": block_id,
+        "assignments": { "a1": { "title": "Essay" } },
+        "overdue": overdue,
+    }))
+    .unwrap()
+}
+
+#[test]
+fn a_homework_start_sorts_its_overdue_ids() {
+    assert_eq!(
+        overdue_start(false, Value::Null, json!("a1"), json!(["b", "a", "a1"])),
+        json!(["a", "a1", "b"])
+    );
+    assert_eq!(
+        overdue_start(false, Value::Null, json!("a1"), json!(["b", "a", "b"])),
+        json!(["a", "b", "b"])
+    );
+}
+
+#[test]
+fn overdue_ids_are_ignored_unless_the_start_names_homework() {
+    let late = json!(["b", "a"]);
+    assert_eq!(
+        overdue_start(true, Value::Null, json!("a1"), late.clone()),
+        json!([])
+    );
+    assert_eq!(
+        overdue_start(false, json!(0), json!("a1"), late.clone()),
+        json!([])
+    );
+    assert_eq!(
+        overdue_start(false, Value::Null, json!("missing"), late.clone()),
+        json!([])
+    );
+    assert_eq!(
+        overdue_start(false, Value::Null, Value::Null, late),
+        json!([])
+    );
+    assert_eq!(
+        overdue_start(true, Value::Null, json!("a1"), json!([1])),
+        json!([])
+    );
+    assert!(
+        focus::overdue_for_start(&json!({
+            "quick": false,
+            "day": null,
+            "block_id": "a1",
+            "assignments": { "a1": {} },
+            "overdue": [1],
+        }))
+        .is_err()
+    );
+}
+
+#[test]
+fn an_ended_tick_stops_the_timer_it_returns() {
+    let running = work_timer(true);
+    let ended = tick(&running, false, false, 1_800_000);
+    assert_eq!(ended["action"], "ended");
+    assert_eq!(ended["state"]["running"], false);
+    assert_eq!(ended["state"]["remainingMs"], 0);
+    assert_eq!(ended["state"]["endsAt"], 1_800_000);
+    assert_eq!(ended["state"]["title"], "Essay");
+    assert_eq!(ended["state"]["phase"], "work");
+    let changed = tick(&running, false, false, 1_799_999);
+    assert_eq!(changed["action"], "changed");
+    assert!(changed.get("state").is_none());
+    let idle = tick(&Value::Null, false, false, 0);
+    assert_eq!(idle["action"], "none");
+    assert!(idle.get("state").is_none());
+}
+
+#[test]
+fn an_account_id_is_an_i64_or_its_decimal_text() {
+    let id = focus::canonical_account_id;
+    assert_eq!(id(&json!(true)), None);
+    assert_eq!(id(&json!(false)), None);
+    assert_eq!(id(&json!(1)), Some(1));
+    assert_eq!(id(&json!(0)), Some(0));
+    assert_eq!(id(&json!(-1)), Some(-1));
+    assert_eq!(id(&json!(i64::MAX)), Some(i64::MAX));
+    assert_eq!(id(&json!(i64::MIN)), Some(i64::MIN));
+    assert_eq!(id(&Value::Null), None);
+    assert_eq!(id(&json!(1.5)), None);
+    assert_eq!(
+        id(&Value::Number(serde_json::Number::from_f64(1.0).unwrap())),
+        None
+    );
+    let above = u64::try_from(i64::MAX).unwrap() + 1;
+    assert_eq!(id(&Value::Number(above.into())), None);
+    assert_eq!(id(&json!({})), None);
+    assert_eq!(id(&json!([])), None);
+    assert_eq!(id(&json!("1")), Some(1));
+    assert_eq!(id(&json!("-1")), Some(-1));
+    assert_eq!(id(&json!(i64::MAX.to_string())), Some(i64::MAX));
+    assert_eq!(id(&json!(i64::MIN.to_string())), Some(i64::MIN));
+    assert_eq!(id(&json!("01")), None);
+    assert_eq!(id(&json!("+1")), None);
+    assert_eq!(id(&json!("-0")), None);
+    assert_eq!(id(&json!(" 1")), None);
+    assert_eq!(id(&json!("")), None);
+    assert_eq!(id(&json!("nope")), None);
+}
+
+#[test]
+fn a_loaded_finish_clears_only_when_signed_out_and_queues_only_while_signed_in() {
+    let answered = |focus: Value, waiting: bool, signed_in: bool| {
+        focus::finish_load_result(&json!({
+            "focus": focus,
+            "waiting": waiting,
+            "signed_in": signed_in,
+        }))
+        .unwrap()
+    };
+    let timer = work_timer(true);
+    assert_eq!(
+        answered(Value::Null, true, false),
+        json!({ "clear": true, "result": "finished" })
+    );
+    assert_eq!(
+        answered(timer.clone(), true, false),
+        json!({ "clear": true, "result": null })
+    );
+    assert_eq!(
+        answered(Value::Null, true, true),
+        json!({ "clear": false, "result": "finished" })
+    );
+    assert_eq!(
+        answered(timer.clone(), true, true),
+        json!({ "clear": false, "result": "queued" })
+    );
+    assert_eq!(
+        answered(timer, false, true),
+        json!({ "clear": false, "result": null })
+    );
+    assert_eq!(
+        answered(Value::Null, false, true),
+        json!({ "clear": false, "result": "finished" })
+    );
+    assert_eq!(
+        answered(json!({}), true, true),
+        json!({ "clear": false, "result": "queued" })
+    );
+}
+
 #[test]
 fn a_bool_day_counts_as_a_whole_day_the_way_python_does() {
     let mut state = ended_homework();
@@ -2273,4 +2422,20 @@ fn writing_keeps_only_a_timer_the_app_would_store() {
         load_text(&text)["entries"],
         json!([{ "account_id": 7, "payload": running_payload() }])
     );
+}
+
+#[test]
+fn only_a_start_that_names_homework_needs_the_overdue_ids() {
+    let homework = json!({ "essay": { "id": "essay" } });
+    let ask = |quick: bool, day: Value, block: Value| {
+        focus::start_names_homework(&json!({
+            "quick": quick, "day": day, "block_id": block, "assignments": homework
+        }))
+        .unwrap()
+    };
+    assert_eq!(ask(false, Value::Null, json!("essay")), json!(true));
+    assert_eq!(ask(true, Value::Null, json!("essay")), json!(false));
+    assert_eq!(ask(false, json!(0), json!("essay")), json!(false));
+    assert_eq!(ask(false, Value::Null, json!("b1")), json!(false));
+    assert_eq!(ask(false, Value::Null, Value::Null), json!(false));
 }

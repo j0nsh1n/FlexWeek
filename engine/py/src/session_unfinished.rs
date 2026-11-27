@@ -3,8 +3,8 @@
 
 use flexweek_app::session::unfinished::{
     ClockNow, HomeworkCountsInput, UnfinishedInput, UnfinishedPlanInput, UnfinishedPreviewInput,
-    homework_counts, left_unfinished_items, overdue_ids, plan_unfinished, unfinished_items,
-    unfinished_preview,
+    homework_counts, left_unfinished_items, overdue_ids, plan_left_skipped, plan_unfinished,
+    unfinished_items, unfinished_preview,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -229,6 +229,11 @@ fn session_plan_unfinished(args: &str) -> PyResult<String> {
     })
 }
 
+#[pyfunction]
+fn session_plan_left_skipped(busy: bool, conflict: bool, pending_save: bool) -> PyResult<bool> {
+    guard(|| Ok(plan_left_skipped(busy, conflict, pending_save)))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -236,7 +241,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_overdue_assignment_ids,
         session_unfinished_items,
         session_unfinished_preview,
-        session_plan_unfinished
+        session_plan_unfinished,
+        session_plan_left_skipped,
     );
     Ok(())
 }

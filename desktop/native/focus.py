@@ -129,6 +129,32 @@ def _decide(name: str, **args: object) -> Any:
     return json.loads(ask(json.dumps(args)))
 
 
+def start_names_homework(*, quick: bool, day: int | None, block_id: str | None, assignments: dict) -> bool:
+    named: bool = _decide(
+        "start_names_homework", quick=quick, day=day, block_id=block_id, assignments=assignments
+    )
+    return named
+
+
+def overdue_for_start(
+    *,
+    quick: bool,
+    day: int | None,
+    block_id: str | None,
+    assignments: dict,
+    overdue: list[str],
+) -> list[str]:
+    found: list[str] = _decide(
+        "overdue_for_start",
+        quick=quick,
+        day=day,
+        block_id=block_id,
+        assignments=assignments,
+        overdue=overdue,
+    )
+    return found
+
+
 def start_target(
     *,
     block_id: str | None,
@@ -357,6 +383,13 @@ def release_held(held: list[dict], state: dict | None, prefs: dict | None, mater
     return bool(
         _decide("release_held", held=held, focus=state, prefs=prefs, material_owns=material_owns)
     )
+
+
+def finish_load_result(*, focus: dict | None, waiting: bool, signed_in: bool) -> dict:
+    answered: dict = _decide(
+        "finish_load_result", focus=focus, waiting=waiting, signed_in=signed_in
+    )
+    return answered
 
 
 def finish_focused_plan(

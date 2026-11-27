@@ -307,3 +307,10 @@ fn assignment_rows_without_text_ids_are_refused() {
     let result = week::refresh_assignments(invalid(), &ids(&[]), &ids(&[]), &ids(&[]));
     assert_eq!(result.unwrap_err().message, "assignment id must be text");
 }
+
+#[test]
+fn a_week_load_skips_while_signed_out_or_busy() {
+    assert!(week::load_week_skipped(false, false));
+    assert!(week::load_week_skipped(true, true));
+    assert!(!week::load_week_skipped(true, false));
+}

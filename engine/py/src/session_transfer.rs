@@ -4,10 +4,10 @@
 use flexweek_app::session::transfer::{
     ImportContext, create_restore_key, finish_apply_import_err, finish_apply_import_ok,
     finish_apply_restore_err, finish_apply_restore_ok, finish_create_restore,
-    finish_preview_import, import_key, import_week_decision, prepare_apply_import,
-    prepare_apply_restore, prepare_create_restore, prepare_export_account, prepare_preview_import,
-    prepare_preview_restore, restore_apply_guard, restore_key, restore_points_after_create,
-    restore_points_from_reply, transfer_blocked,
+    finish_preview_import, import_key, import_target_week as target_week, import_week_decision,
+    prepare_apply_import, prepare_apply_restore, prepare_create_restore, prepare_export_account,
+    prepare_preview_import, prepare_preview_restore, restore_apply_guard, restore_key,
+    restore_points_after_create, restore_points_from_reply, transfer_blocked,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -116,6 +116,18 @@ fn import_week_decision_json(
         };
         let decision = import_week_decision(&parsed, &context).map_err(raise)?;
         Ok(decision.to_json().to_string())
+    })
+}
+
+/// The week an import file is for: its own week string, or the week open now.
+#[pyfunction]
+fn import_target_week(parsed: &str, open_week: &str) -> PyResult<String> {
+    guard(|| {
+        let parsed = read(parsed)?;
+        if !parsed.is_object() {
+            return Err(PyValueError::new_err("the parsed file is a JSON object"));
+        }
+        Ok(target_week(&parsed, open_week).to_string())
     })
 }
 
@@ -292,6 +304,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         create_restore_operation_key,
         restore_operation_key,
         import_operation_key,
+        import_target_week,
         import_week_decision_json,
         session_restore_points_from_reply,
         session_prepare_create_restore,

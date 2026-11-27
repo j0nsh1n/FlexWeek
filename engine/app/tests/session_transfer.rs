@@ -5,10 +5,10 @@ use flexweek_app::session::transfer::{
     ApplyImport, ApplyRestore, CreateRestore, ExportAccount, ImportContext, ImportDecision,
     PreviewImport, PreviewRestore, create_restore_key, finish_apply_import_err,
     finish_apply_import_ok, finish_apply_restore_err, finish_apply_restore_ok,
-    finish_create_restore, finish_preview_import, import_key, import_week_decision,
-    prepare_apply_import, prepare_apply_restore, prepare_create_restore, prepare_export_account,
-    prepare_preview_import, prepare_preview_restore, restore_apply_guard, restore_key,
-    restore_points_after_create, restore_points_from_reply, transfer_blocked,
+    finish_create_restore, finish_preview_import, import_key, import_target_week,
+    import_week_decision, prepare_apply_import, prepare_apply_restore, prepare_create_restore,
+    prepare_export_account, prepare_preview_import, prepare_preview_restore, restore_apply_guard,
+    restore_key, restore_points_after_create, restore_points_from_reply, transfer_blocked,
 };
 use flexweek_engine::ErrorKind;
 use serde_json::{Value, json};
@@ -606,5 +606,16 @@ fn a_finished_import_discards_the_open_week_and_says_it_imported() {
             "reload_discard": true,
             "fetch_points": true,
         })
+    );
+}
+
+#[test]
+fn an_import_uses_the_file_week_or_the_open_week() {
+    assert_eq!(import_target_week(&json!({}), WEEK), WEEK);
+    assert_eq!(import_target_week(&json!({"week_start": null}), WEEK), WEEK);
+    assert_eq!(import_target_week(&json!({"week_start": ""}), WEEK), WEEK);
+    assert_eq!(
+        import_target_week(&json!({"week_start": "2026-09-28"}), WEEK),
+        "2026-09-28"
     );
 }

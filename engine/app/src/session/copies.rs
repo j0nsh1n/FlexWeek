@@ -1802,3 +1802,9 @@ pub fn commit_groups_batch(
         save_status: input.said.map(str::to_string),
     })
 }
+
+/// A copy does not start while signed out. The window then returns without a status line,
+/// the same as a missing clipboard.
+pub fn copy_block_skipped(signed_in: bool) -> bool {
+    !signed_in
+}
