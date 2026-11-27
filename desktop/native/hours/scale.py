@@ -33,11 +33,12 @@ class Scale:
 def opening_minute(week: WeekModel, today: int | None, now: int | None, day: int | None = None) -> int:
     """Where hours open: now, on today or on this week; otherwise the first block of the day shown,
     or of the week; otherwise the start of a school day."""
-    starts = [item.start for item in week.occurrences]
-    day_starts = None
-    if day is not None:
-        day_starts = [item.start for item in week.on_day(day)]
-    return int(flexweek_engine.hours_opening_minute(today, now, day, starts, day_starts))
+    # Only what the day shown needs: a week that is built for one day has no occurrences to read.
+    if day is None:
+        starts = [item.start for item in week.occurrences]
+        return int(flexweek_engine.hours_opening_minute(today, now, None, starts, None))
+    day_starts = [item.start for item in week.on_day(day)]
+    return int(flexweek_engine.hours_opening_minute(today, now, day, [], day_starts))
 
 
 def short_length(minutes: int) -> str:
