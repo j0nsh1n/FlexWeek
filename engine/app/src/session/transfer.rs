@@ -129,10 +129,7 @@ pub fn import_week_decision(
     {
         return say(error.clone());
     }
-    let target = match parsed.get("week_start") {
-        Some(Value::String(text)) if !text.is_empty() => text.as_str(),
-        _ => context.week_start,
-    };
+    let target = import_target_week(parsed, context.week_start);
     if target != context.week_start {
         return say(format!(
             "Nothing imported: this file is for {}. Go to that week, then import again.",
@@ -196,6 +193,15 @@ pub fn import_week_decision(
         blocks: merged,
         create,
     })
+}
+
+/// The week an import file is for. A parsed file stores a week string or nothing; anything
+/// else falls back to the week open now, as `parsed.get("week_start") or self.week_start` did.
+pub fn import_target_week<'a>(parsed: &'a Value, open_week: &'a str) -> &'a str {
+    match parsed.get("week_start") {
+        Some(Value::String(text)) if !text.is_empty() => text.as_str(),
+        _ => open_week,
+    }
 }
 
 pub const NAME_THE_SAVED_COPY: &str = "Name the saved copy.";
