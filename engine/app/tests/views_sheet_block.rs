@@ -347,6 +347,21 @@ fn scope_keeps_the_series_days_and_comes_back() {
 }
 
 #[test]
+fn an_empty_stored_series_list_falls_back_to_the_blocks_days() {
+    let clock = clock();
+    let draft = open_existing(
+        locked("soccer", "Soccer practice", "16:00", 90, &[1, 3], "sport"),
+        Some(1),
+        &clock,
+    );
+    let mut state = draft.to_value();
+    state["series_days"] = json!([]);
+    let mut draft = BlockDraft::from_value(&state).expect("state");
+    draft.set("scope", &json!("series")).expect("series");
+    assert_eq!(on_days(&form_of(&draft, &clock)), vec![1, 3]);
+}
+
+#[test]
 fn a_neighbor_at_the_same_time_is_allowed_to_overlap() {
     let neighbor = locked("piano", "Piano", "16:00", 60, &[1], "extra");
     let clock = clock_with(json!([neighbor]), json!([]));

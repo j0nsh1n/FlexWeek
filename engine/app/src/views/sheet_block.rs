@@ -18,6 +18,7 @@ use flexweek_engine::{EngineError, EngineResult, ErrorKind};
 use flexweek_service::blocks::check_block;
 use serde_json::{Map, Value, json};
 
+use super::hours::{DEFAULT_DRAG_STEP, drag_step};
 use super::sheet_preview::beside_words;
 use super::sheet_rules::{
     REPEAT_NOTE, day_range_and_words, first_day_changed, full_day_name, guess_locked_category,
@@ -29,39 +30,11 @@ use crate::session::sheet_check::{BLOCK_DAYS_PROBLEM, BLOCK_TITLE_PROBLEM, block
 const STEPS: [&str; 3] = ["What", "When", "Category"];
 const PROMPTS: [&str; 3] = ["What is it?", "When is it?", "What category is it?"];
 const DAY_END: i64 = DAY_END_MIN;
-const DRAG_STEPS: [i64; 2] = [5, 15];
-const DEFAULT_DRAG_STEP: i64 = 15;
 
 // English `%b`. `datetext` keeps this table private, and Delete must not follow the computer's locale.
 const MONTHS_SHORT: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
-
-// fwtest replaces each of these lines. The rule reads the text, so the replacement changes the sheet.
-const DELETE_ANSWER: &str = r#"                {"id": "delete", "label": "Delete", "kind": "danger"},
-"#;
-const SERIES_DAYS: &str = r#"                and len(self._active_days()) > 1
-"#;
-const REPEAT_NOTE_LINE: &str = r#"            "repeatNote": "" if locked else REPEAT_NOTE,
-"#;
-const SHOW_SCOPE_LINE: &str = r#"            "showScope": bool(self.series and self.occurrence_day is not None),
-"#;
-const MOVE_END_LINE: &str = r#"        end = min(minute + self.length, DAY_END)
-"#;
-const END_BY_HAND_LINE: &str = r#"        if self.end_by_hand:
-            self.moved = ""
-            return
-"#;
-const OPEN_END_LINE: &str = r#"        self.end: int = min(self.start + self.length, DAY_END)
-"#;
-const SHOW_MISSED_LINE: &str = r#"            "showMissed": bool(self.existing and self.occurrence_day is not None),
-"#;
-const RESTORED_LINE: &str = r#"            restored = None if self.missed else self.occurrence_day
-"#;
-const REPEAT_BODY_LINE: &str = r#"            body = deepcopy(base)
-"#;
-const LATER_LINE: &str = r#"        if changed <= {"weekly", "until"}:
-"#;
 
 /// What the sheet reads from the session on this call. Python fills it; nothing here reads a clock.
 #[derive(Clone, Debug)]
@@ -215,7 +188,7 @@ impl BlockDraft {
         };
         let start = hhmm_to_minutes(&start_text)?;
         let length = py_int(require(&original, "duration_min")?)?;
-        let end = opening_end(start, length);
+        let end = (start + length).min(DAY_END);
         let mut category = match py_get(&original, "category")? {
             Some(value) if truthy(Some(value)) => Some(py_str(value)),
             _ => category_arg,
@@ -526,7 +499,10 @@ impl BlockDraft {
             None => Vec::new(),
             Some(value) => iterate(value)?,
         };
-        let restored = restored_day(self.missed, self.occurrence_day);
+        let restored = self
+            .occurrence_day
+            .filter(|_| !self.missed)
+            .map(Value::from);
         let filtered = if self.existing && self.occurrence_day.is_some() {
             filter_missed(&missed_source, &current_days, restored.as_ref())?
         } else {
@@ -692,7 +668,10 @@ impl BlockDraft {
             return Ok(json!({"kind": "plain", "changed": changed_value}));
         }
         let repeat = self.repeat_body(made, self.repeat.as_ref(), &changed, clock, fresh_id)?;
-        if later_only(&changed) {
+        if changed
+            .iter()
+            .all(|name| *name == "weekly" || *name == "until")
+        {
             return Ok(json!({"kind": "later", "repeat": repeat, "changed": changed_value}));
         }
         Ok(json!({"kind": "ask", "repeat": repeat, "changed": changed_value}))
@@ -765,7 +744,7 @@ impl BlockDraft {
             "body": format!("{question} You can undo this."),
             "answers": [
                 {"id": "stay", "label": "Cancel", "kind": "text"},
-                {"id": "delete", "label": "Delete", "kind": delete_kind()},
+                {"id": "delete", "label": "Delete", "kind": "danger"},
             ],
         }))
     }
@@ -915,8 +894,8 @@ impl BlockDraft {
             "daysLocked": locked,
             "daysProblem": self.days_problem,
             "movedNote": self.moved_note,
-            "repeatNote": repeat_note(locked),
-            "showScope": show_scope(self),
+            "repeatNote": if locked { "" } else { REPEAT_NOTE },
+            "showScope": self.series && self.occurrence_day.is_some(),
             "scopeChoices": [
                 {"value": "occurrence", "label": "This day only"},
                 {"value": "series", "label": format!("Every {}", day_range_and_words(&scope_days, &week)?)},
@@ -934,7 +913,7 @@ impl BlockDraft {
             "category": self.category.clone().unwrap_or_default(),
             "categoryOptions": categories,
             "missed": self.missed,
-            "showMissed": show_missed(self),
+            "showMissed": self.existing && self.occurrence_day.is_some(),
             "missedLabel": missed_label,
             "showRepeat": self.show_repeat && !locked,
             "repeat": self.weekly,
@@ -1063,11 +1042,11 @@ impl BlockDraft {
         if self.guessing {
             self.category = Some(guess_locked_category(&store_clock(minute))?);
         }
-        if END_BY_HAND_LINE.contains("self.end_by_hand") && self.end_by_hand {
+        if self.end_by_hand {
             self.moved.clear();
             return Ok(());
         }
-        let end = moved_end(minute, self.length);
+        let end = (minute + self.length).min(DAY_END);
         let kept = end - minute;
         self.moved.clear();
         if (end != old_end || kept < self.length) && minute != before {
@@ -1085,7 +1064,14 @@ impl BlockDraft {
             self.series_days = Some(self.days.clone());
             self.days = vec![self.occurrence_day.unwrap_or(0)];
         } else if scope == "series" && self.scope == "occurrence" {
-            let mut days = self.series_days.clone().unwrap_or(self.active_days()?);
+            let mut days = match self
+                .series_days
+                .as_ref()
+                .filter(|stored| !stored.is_empty())
+            {
+                Some(stored) => stored.clone(),
+                None => self.active_days()?,
+            };
             days.sort();
             self.days = days;
             self.series_days = None;
@@ -1175,7 +1161,7 @@ impl BlockDraft {
     fn series_note(&self) -> EngineResult<String> {
         let active = self.active_days()?;
         let covered = self.series && self.occurrence_day.is_some();
-        if self.existing && active.len() > series_min() && !covered {
+        if self.existing && active.len() > 1 && !covered {
             Ok("Changes apply to every selected day in this series.".to_string())
         } else {
             Ok(String::new())
@@ -1250,16 +1236,7 @@ impl BlockDraft {
         fresh_id: &str,
     ) -> EngineResult<Value> {
         let mut body = if let Some(base) = base {
-            if REPEAT_BODY_LINE.contains("deepcopy(base)") {
-                base.clone()
-            } else {
-                let mut copied = made.clone();
-                if REPEAT_BODY_LINE.contains("_week_to_monday") {
-                    let days = week_to_monday(&self.days, &clock.first_weekday)?;
-                    object_mut(&mut copied)?.insert("days".into(), json!(days));
-                }
-                copied
-            }
+            base.clone()
         } else {
             let mut copied = object_owned(made)?;
             copied.shift_remove("missed_days");
@@ -1342,92 +1319,6 @@ struct Stamp {
     day_name: String,
     day: i64,
     month: String,
-}
-
-fn delete_kind() -> String {
-    let marker = "\"kind\": \"";
-    DELETE_ANSWER
-        .find(marker)
-        .and_then(|start| DELETE_ANSWER[start + marker.len()..].split('"').next())
-        .unwrap_or("")
-        .to_string()
-}
-
-fn series_min() -> usize {
-    SERIES_DAYS
-        .split('>')
-        .nth(1)
-        .and_then(|rest| {
-            rest.trim()
-                .chars()
-                .take_while(|ch| ch.is_ascii_digit())
-                .collect::<String>()
-                .parse()
-                .ok()
-        })
-        .unwrap_or(1)
-}
-
-fn repeat_note(locked: bool) -> String {
-    if REPEAT_NOTE_LINE.contains("if locked else REPEAT_NOTE") && !locked {
-        REPEAT_NOTE.to_string()
-    } else {
-        String::new()
-    }
-}
-
-fn show_scope(draft: &BlockDraft) -> bool {
-    if SHOW_SCOPE_LINE.contains("self.series and") {
-        draft.series && draft.occurrence_day.is_some()
-    } else if SHOW_SCOPE_LINE.contains("self.existing") {
-        draft.existing
-    } else {
-        false
-    }
-}
-
-fn show_missed(draft: &BlockDraft) -> bool {
-    SHOW_MISSED_LINE.contains("self.existing and self.occurrence_day")
-        && draft.existing
-        && draft.occurrence_day.is_some()
-}
-
-fn restored_day(missed: bool, occurrence: Option<i64>) -> Option<Value> {
-    if RESTORED_LINE.contains("self.missed") {
-        if missed {
-            None
-        } else {
-            occurrence.map(Value::from)
-        }
-    } else if RESTORED_LINE.contains("self.occurrence_day") {
-        occurrence.map(Value::from)
-    } else {
-        None
-    }
-}
-
-fn later_only(changed: &[&str]) -> bool {
-    LATER_LINE.contains("changed")
-        && changed
-            .iter()
-            .all(|name| *name == "weekly" || *name == "until")
-}
-
-fn opening_end(start: i64, length: i64) -> i64 {
-    let cap = if OPEN_END_LINE.contains("DAY_END - 1") {
-        DAY_END - 1
-    } else {
-        DAY_END
-    };
-    (start + length).min(cap)
-}
-
-fn moved_end(minute: i64, length: i64) -> i64 {
-    if MOVE_END_LINE.contains("min(") {
-        (minute + length).min(DAY_END)
-    } else {
-        minute + length
-    }
 }
 
 fn moved_sentence(end: i64, kept: i64, length: i64) -> String {
@@ -1514,21 +1405,15 @@ fn week_to_monday(days: &[i64], first_weekday: &Value) -> EngineResult<Vec<i64>>
 }
 
 fn chosen_step(preferences: &Value) -> EngineResult<i64> {
-    // `hours/geometry.py` stays with another slice. A JSON number with a decimal point is a float,
-    // and Python's `int` check rejects it.
+    // A JSON number with a decimal point is a float, and Python's `int` check rejects it.
     if !truthy(Some(preferences)) {
         return Ok(DEFAULT_DRAG_STEP);
     }
-    let chosen = dict(preferences)?.get("drag_step_min");
-    if let Some(chosen) = chosen
-        && is_json_int(chosen)
-    {
-        let step = py_int(chosen)?;
-        if DRAG_STEPS.contains(&step) {
-            return Ok(step);
-        }
-    }
-    Ok(DEFAULT_DRAG_STEP)
+    let chosen = match dict(preferences)?.get("drag_step_min") {
+        Some(chosen) if is_json_int(chosen) => Some(py_int(chosen)?),
+        _ => None,
+    };
+    Ok(drag_step(chosen))
 }
 
 fn is_json_int(value: &Value) -> bool {

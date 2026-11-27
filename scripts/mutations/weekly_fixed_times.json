@@ -9,15 +9,15 @@
  {
   "file": "engine/app/src/views/sheet_block.rs",
   "name": "an edit builds the repeat from this week's copy",
-  "old": "            body = deepcopy(base)\n",
-  "new": "            body = deepcopy(made)\n            body[\"days\"] = self._week_to_monday(self.days)\n",
+  "old": "            base.clone()\n",
+  "new": "            { let mut copied = made.clone(); object_mut(&mut copied)?.insert(\"days\".into(), json!(week_to_monday(&self.days, &clock.first_weekday)?)); copied }\n",
   "test": "cargo:flexweek-app:views_sheet_block:an_edit_builds_the_repeat_from_the_repeat_not_the_week_copy"
  },
  {
   "file": "engine/app/src/views/sheet_block.rs",
   "name": "only Until changed asks the question anyway",
-  "old": "        if changed <= {\"weekly\", \"until\"}:\n",
-  "new": "        if False:\n",
+  "old": "        if changed.iter().all(|name| *name == \"weekly\" || *name == \"until\") {\n",
+  "new": "        if false {\n",
   "test": "cargo:flexweek-app:views_sheet_block:only_until_changed_is_later"
  }
 ]
