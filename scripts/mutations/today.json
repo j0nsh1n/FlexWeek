@@ -84,11 +84,11 @@
   "test": "cargo:flexweek-app:session_drafts:deleting_homework_keeps_other_weeks_for_undo"
  },
  {
-  "file": "desktop/native/layout_choice.py",
+  "file": "engine/app/src/views/look_file.rs",
   "name": "a missing look choice falls back to the account's look instead of the first curated one",
-  "old": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")), shipped=\"your\")\n",
-  "new": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")))\n",
-  "test": "desktop/tests/week/test_design_registry.py::test_missing_design_looks_keep_the_account_look"
+  "old": "        shipped: \"your\",\n",
+  "new": "        shipped: \"\",\n",
+  "test": "cargo:flexweek-app:views_look_file:missing_design_looks_keep_the_account_look"
  },
  {
   "file": "desktop/native/window.py",

@@ -34,6 +34,14 @@ LOCKED: dict[str, dict[str, str]] = {
         "WeekBridge._connect_session": "connects Qt signals on the session to this bridge's slots",
         "WeekBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
     },
+    "desktop/native/material/theme.py": {
+        "tokens_path": "reads the computer's font and theme locations for the engine",
+        "qml_path": "locates the QML files the Qt shell loads",
+        "_schemes": "keeps the engine's theme answers in a cache",
+        "register_fonts": "registers the bundled fonts with Qt",
+        "store_material": "writes the look file with Python's JSON spelling",
+    },
+    "desktop/native/layout_choice.py": {},
 }
 
 # Files that still hold other decisions. Only these functions moved.
