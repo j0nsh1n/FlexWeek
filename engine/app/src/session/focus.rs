@@ -217,7 +217,15 @@ pub fn tick_step(args: &Value) -> EngineResult<Value> {
     } else {
         "changed"
     };
-    Ok(json!({ "credit": credit, "action": action }))
+    let mut answer = json!({ "credit": credit, "action": action });
+    if action == "ended" {
+        // The window used to stop the same dict in place. A copy matches every other focus update.
+        let mut stopped = object_of(state)?;
+        stopped["running"] = json!(false);
+        stopped["remainingMs"] = json!(0);
+        answer["state"] = stopped;
+    }
+    Ok(answer)
 }
 
 /// Before a phase moves on: `go` says whether there is a timer to move, and `credit` whether the work
@@ -1298,4 +1306,61 @@ fn account_id_of(args: &Value) -> EngineResult<i64> {
     args.get("account_id")
         .and_then(Value::as_i64)
         .ok_or_else(|| EngineError::value("account_id is a whole number"))
+}
+
+/// Overdue ids a homework start sorts. Empty unless this start names homework: not a quick
+/// start, no day, and the id is a homework on the open week. Arguments: `quick`, `day`,
+/// `block_id`, `assignments`, `overdue`.
+pub fn overdue_for_start(args: &Value) -> EngineResult<Value> {
+    let names_homework = !truthy(&args["quick"])
+        && args["day"].is_null()
+        && args["block_id"].as_str().is_some_and(|id| {
+            args["assignments"]
+                .as_object()
+                .is_some_and(|map| map.contains_key(id))
+        });
+    if !names_homework {
+        return Ok(json!([]));
+    }
+    let overdue = args["overdue"]
+        .as_array()
+        .ok_or_else(|| EngineError::value("overdue is a list of ids"))?;
+    let mut ids = overdue
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(str::to_string)
+                .ok_or_else(|| EngineError::value("an overdue id is text"))
+        })
+        .collect::<EngineResult<Vec<_>>>()?;
+    ids.sort();
+    Ok(json!(ids))
+}
+
+/// The focus file's account key, or nothing when the value is not that id. A bool is not an
+/// int here. A string counts only when it is the decimal form of the number it parses to.
+pub fn canonical_account_id(value: &Value) -> Option<i64> {
+    match value {
+        Value::Bool(_) | Value::Null => None,
+        Value::Number(number) => number.as_i64(),
+        Value::String(text) => canonical_account_key(text),
+        _ => None,
+    }
+}
+
+/// After the week a Mark finished press asked for has loaded: whether to drop that press,
+/// and what the button returns (`finished`, `queued`, or nothing). `focus` null is an empty
+/// timer, not a false one. Waiting counts only while signed in, because a signed-out window
+/// clears the press first. Arguments: `focus`, `waiting`, `signed_in`.
+pub fn finish_load_result(args: &Value) -> EngineResult<Value> {
+    let signed_in = truthy(&args["signed_in"]);
+    let waiting = truthy(&args["waiting"]) && signed_in;
+    let result = if args["focus"].is_null() {
+        json!("finished")
+    } else if waiting {
+        json!("queued")
+    } else {
+        Value::Null
+    };
+    Ok(json!({ "clear": !signed_in, "result": result }))
 }

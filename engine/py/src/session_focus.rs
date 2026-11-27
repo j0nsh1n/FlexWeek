@@ -200,6 +200,27 @@ fn session_focus_kept_text(args: &str) -> PyResult<String> {
     guard(|| run(args, focus::kept_text))
 }
 
+#[pyfunction]
+fn session_focus_overdue_for_start(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::overdue_for_start))
+}
+
+/// Any JSON value. A non-id is None; a number the JSON parser cannot hold is ValueError,
+/// which the window turns back into None.
+#[pyfunction]
+fn session_focus_canonical_account_id(text: &str) -> PyResult<Option<i64>> {
+    guard(|| {
+        let value: Value =
+            serde_json::from_str(text).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(focus::canonical_account_id(&value))
+    })
+}
+
+#[pyfunction]
+fn session_focus_finish_load_result(args: &str) -> PyResult<String> {
+    guard(|| run(args, focus::finish_load_result))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
@@ -238,6 +259,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_focus_merge_kept,
         session_focus_remove_kept,
         session_focus_kept_text,
+        session_focus_overdue_for_start,
+        session_focus_canonical_account_id,
+        session_focus_finish_load_result,
     );
     Ok(())
 }
