@@ -37,6 +37,7 @@ mod session_unfinished;
 mod session_views;
 mod session_week;
 mod sync;
+mod views_look_file;
 mod views_theme;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
@@ -396,6 +397,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     desk::add(m)?;
     desk_rest::add(m)?;
     sync::add(m)?;
+    views_look_file::add(m)?;
     views_theme::add(m)?;
     Ok(())
 }
