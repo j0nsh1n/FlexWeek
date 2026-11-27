@@ -8,6 +8,9 @@ Keep me signed in was ticked, and renews that length on each use.
 Beside it sits a second small file: the text size and whether High contrast was on in the last look
 worn, so the screens shown before sign-in read as the student left them. Log out keeps it; it holds
 no colours, no accent and nothing about a person.
+
+A third file keeps each account's focus timer, so closing FlexWeek does not lose it. Signing out,
+a session ending, and deleting the account remove that account's timer. It holds no name.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ class KeptSession:
         # The text size and High contrast of the last look worn here, for the screens shown while nobody
         # is signed in. The account id is only there so deleting that account can clear the file.
         self.look = path.with_name(path.stem + ".look.json")
+        self.focus = path.with_name(path.stem + ".focus.json")
 
     def signed_in_before(self) -> bool:
         return self.seen.exists() or self.path.exists()
@@ -65,6 +69,41 @@ class KeptSession:
 
     def forget(self) -> None:
         self.path.unlink(missing_ok=True)
+
+    def read_focus(self) -> str | None:
+        try:
+            return self.focus.read_text()
+        except (OSError, UnicodeDecodeError):
+            return None
+
+    def write_focus(self, text: str) -> None:
+        self.focus.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.focus.with_name(self.focus.name + ".tmp")
+        with contextlib.suppress(FileNotFoundError):
+            temporary.unlink()
+        handle = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(handle, "w") as out:
+            out.write(text)
+        os.replace(temporary, self.focus)
+
+    def forget_focus(self, account_id: int) -> None:
+        # No file yet means this account has nothing to remove, and sign-out should not create one.
+        text = self.read_focus()
+        if text is None:
+            return
+        import flexweek_engine
+
+        loaded = json.loads(flexweek_engine.session_focus_load_kept(json.dumps({"text": text})))
+        removed = json.loads(
+            flexweek_engine.session_focus_remove_kept(
+                json.dumps({"entries": loaded["entries"], "account_id": account_id})
+            )
+        )
+        body = json.loads(flexweek_engine.session_focus_kept_text(json.dumps(removed)))
+        self.write_focus(body["text"])
+
+    def forget_all_focus(self) -> None:
+        self.focus.unlink(missing_ok=True)
 
     def carry_look(self, account: str, text: str, contrast: bool) -> None:
         if self.carried_look() == (text, contrast) and self._look_owner() == account:

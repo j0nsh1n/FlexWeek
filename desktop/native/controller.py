@@ -338,6 +338,7 @@ class NativeSession(QObject):
         self._reminder_week: str | None = None
         self._reminder_blocks: list[dict] = []
         self._reminder_trace: dict | None = None
+        self._load_focus_file()
 
     week_start = _draft_field("week_start", writable=True)
     blocks = _draft_field("blocks", writable=True)
@@ -541,7 +542,7 @@ class NativeSession(QObject):
 
     def _clear_local(self) -> None:
         if self.account is not None:
-            self.focus_store.pop(self.account["id"], None)
+            self._drop_stored_focus(self.account["id"])
         self._credits_waiting.clear()
         self.account = None
         self._drop_setup()
@@ -988,7 +989,7 @@ class NativeSession(QObject):
             self.status.emit(self.message)
         elif kind == "signed_out":
             if event["account_id"] is not None:
-                self.focus_store.pop(event["account_id"], None)
+                self._drop_stored_focus(event["account_id"])
             self._clear_local()
             self.busy_changed.emit(False)
             self.account_changed.emit(None)
@@ -3275,14 +3276,64 @@ class NativeSession(QObject):
         if decision["say"]:
             self._say(decision["say"])
 
+    def _focus_entries(self) -> list[dict]:
+        entries = []
+        for account_id, payload in self.focus_store.items():
+            if payload is not None:
+                entries.append({"account_id": account_id, "payload": payload})
+        return entries
+
+    def _set_focus_entries(self, entries: list) -> None:
+        self.focus_store.clear()
+        for entry in entries:
+            self.focus_store[entry["account_id"]] = entry["payload"]
+
+    def _load_focus_file(self) -> None:
+        if self.kept is None:
+            return
+        loaded = json.loads(
+            flexweek_engine.session_focus_load_kept(json.dumps({"text": self.kept.read_focus()}))
+        )
+        self._set_focus_entries(loaded["entries"])
+
+    def _write_focus_file(self, kept: dict) -> None:
+        if self.kept is None:
+            return
+        body = json.loads(flexweek_engine.session_focus_kept_text(json.dumps(kept)))
+        self.kept.write_focus(body["text"])
+
+    def _drop_stored_focus(self, account_id: object) -> None:
+        if isinstance(account_id, bool) or not isinstance(account_id, int):
+            return
+        if self.kept is None:
+            self.focus_store.pop(account_id, None)
+            return
+        self.kept.forget_focus(account_id)
+        self._load_focus_file()
+
     def _persist_focus(self) -> None:
         if self.account is None:
             return
-        payload = persist_payload(self.focus)
-        if payload is None:
-            self.focus_store.pop(self.account["id"], None)
-        else:
-            self.focus_store[self.account["id"]] = payload
+        if self.kept is None:
+            payload = persist_payload(self.focus)
+            if payload is None:
+                self.focus_store.pop(self.account["id"], None)
+            else:
+                self.focus_store[self.account["id"]] = payload
+            return
+        merged = json.loads(
+            flexweek_engine.session_focus_merge_kept(
+                json.dumps(
+                    {
+                        "entries": self._focus_entries(),
+                        "account_id": self.account["id"],
+                        "state": self.focus,
+                    }
+                )
+            )
+        )
+        self._set_focus_entries(merged["entries"])
+        self._write_focus_file(merged)
 
     def _clear_finish_intent(self) -> None:
         self._finish_focus_waiting = False
@@ -3309,7 +3360,7 @@ class NativeSession(QObject):
             now_ms=self.now_ms(),
         )
         if decision["action"] == "drop":
-            self.focus_store.pop(self.account["id"], None)
+            self._drop_stored_focus(self.account["id"])
             return
         # Persist and tell, then either finish the work phase or replace it with the paused one.
         self.focus = decision["state"]
