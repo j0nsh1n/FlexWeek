@@ -85,8 +85,11 @@ list, all shipped).
 - Status (2026-11-26): P4 groups 2 (saving and the week state, #188, #190), 3 (undo rules), 4 (homework and block
   edits, copies: #185, #186, #189) and 5 (Plan, Running late and previews, Unfinished counts: #194-#196) are merged,
   with the first slices of groups 6-9 (focus, reminders and Spotify, preferences, restore and files: #181, #184).
-  Left in P4: the rest of groups 6-9. Pydantic and the adapters nothing imports any more are removed with the closing
-  slice; controller.py stays a forwarder plus the Qt, request, file and clock methods its lock test names.
+  Left in P4: only 6C (#208) and these controller decisions: delete_homework, start_focus, solve,
+  tick_focus, import_week_file, and the entry guards (place_block, load_week, save, retry_save,
+  plan_left, confirm_spread, copy_block, finish_focused_homework). Pydantic and the adapters nothing
+  imports any more are removed with the closing slice; controller.py stays a forwarder plus the Qt,
+  request, file and clock methods its lock test names.
   P5-P8 [ ] planned.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
