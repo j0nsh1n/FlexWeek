@@ -15,6 +15,12 @@ use flexweek_engine::time::{self, DAY_END_MIN, SLOT_MIN, hhmm_to_minutes};
 use flexweek_engine::{EngineError, EngineResult, ErrorKind};
 use serde_json::{Map, Value, json};
 
+use crate::session::sheet_check::{
+    BLOCK_DAYS_PROBLEM, BLOCK_SPOTIFY_PROBLEM, BLOCK_TITLE_PROBLEM, HOMEWORK_COMPLETED_AT_PROBLEM,
+    HOMEWORK_COURSE_PROBLEM, HOMEWORK_DUE_PROBLEM, HOMEWORK_ENERGY_PROBLEM, HOMEWORK_NOTES_PROBLEM,
+    HOMEWORK_PRIORITY_PROBLEM, HOMEWORK_SPOTIFY_PROBLEM,
+};
+
 pub const SPREAD_NOTHING: &str =
     "Nothing left to spread: all of this homework is already done or has focus time recorded.";
 
@@ -22,36 +28,29 @@ pub const SPREAD_NOTHING: &str =
 pub const SLOT_HINT: &str = "Use a multiple of 15 minutes, such as 15, 30, or\u{00a0}45.";
 
 pub const DUE_PASSED: &str = "That due time has passed. Choose a later one.";
-pub const ESTIMATE_ERROR: &str = "That time isn't a multiple of 15 minutes.";
+pub use crate::session::sheet_check::HOMEWORK_ESTIMATE_PROBLEM as ESTIMATE_ERROR;
 pub const ESTIMATE_SHORT: &str = "Give it at least 15 minutes.";
 pub const ESTIMATE_LONG: &str =
     "That's more than 24 hours. Split it into parts and add each part as its own homework.";
-pub const HOMEWORK_REFUSED: &str = "Check the homework details and try again.";
+pub use crate::session::sheet_check::HOMEWORK_REFUSED;
 pub const REPEAT_NOTE: &str = "Pick every day it happens.";
 pub const LATE_WAIT: &str = "Press Preview first to see what moves.";
-pub const BLOCK_REFUSED: &str =
-    "FlexWeek can't keep this block as it is. Check its title, days and times.";
+pub use crate::session::sheet_check::BLOCK_REFUSED;
 
 pub const HOMEWORK_PROBLEMS: &[(&str, &str)] = &[
-    ("due", "Choose a valid due date."),
-    ("course", "Keep the course name under 40 characters."),
-    (
-        "spotify_url",
-        "Paste a Spotify share link from open.spotify.com.",
-    ),
-    ("notes", "Keep notes under 4,000 characters."),
-    ("priority", "Choose a type from the list."),
-    ("energy", "Choose a time of day from the list."),
-    ("completed_at", "Set a valid time for finished homework."),
+    ("due", HOMEWORK_DUE_PROBLEM),
+    ("course", HOMEWORK_COURSE_PROBLEM),
+    ("spotify_url", HOMEWORK_SPOTIFY_PROBLEM),
+    ("notes", HOMEWORK_NOTES_PROBLEM),
+    ("priority", HOMEWORK_PRIORITY_PROBLEM),
+    ("energy", HOMEWORK_ENERGY_PROBLEM),
+    ("completed_at", HOMEWORK_COMPLETED_AT_PROBLEM),
 ];
 
 pub const BLOCK_PROBLEMS: &[(&str, &str)] = &[
-    ("title", "Give it a title."),
-    ("days", "Tick at least one day."),
-    (
-        "spotify_url",
-        "That's not a Spotify share link. Paste one that starts with https://open.spotify.com, or leave it empty.",
-    ),
+    ("title", BLOCK_TITLE_PROBLEM),
+    ("days", BLOCK_DAYS_PROBLEM),
+    ("spotify_url", BLOCK_SPOTIFY_PROBLEM),
 ];
 
 pub const CUTOFFS: [&str; 7] = [
@@ -72,6 +71,13 @@ struct Preset {
     start: Option<(&'static str, &'static str)>,
     duration_min: Option<i64>,
     days: Option<&'static [i64]>,
+}
+
+fn class_hours() -> EngineResult<(i64, i64)> {
+    let (start, end) = preset_for("class")
+        .and_then(|info| info.start)
+        .ok_or_else(|| type_error("class preset has no hours"))?;
+    Ok((hhmm_to_minutes(start)?, hhmm_to_minutes(end)?))
 }
 
 fn preset_for(category: &str) -> Option<Preset> {
@@ -166,8 +172,7 @@ pub fn guess_locked_category(start: &str) -> EngineResult<String> {
             return Ok("meals".to_string());
         }
     }
-    let school_start = 8 * 60;
-    let school_end = 14 * 60 + 30;
+    let (school_start, school_end) = class_hours()?;
     if school_start <= minute && minute < school_end {
         return Ok("class".to_string());
     }

@@ -1,5 +1,8 @@
 //! Shared sheet rules, settings copy and the sign-in checks (P5-C1). Expected sentences are the
-//! ones today's Python and the desktop tests already pin. The clock stays on 24-hour time.
+//! ones today's Python and the desktop tests already pin. Clock-reading tests share `CLOCK_LOCK`
+//! and leave the engine on the 24-hour clock.
+
+use std::sync::{Mutex, MutexGuard};
 
 use flexweek_app::views::copy::{
     self, ACCOUNT_SAVED, CREATE_NOTE, HELP_PLANNING, HELP_PLANNING_MATERIAL, RECOVERY_SAVE,
@@ -9,7 +12,28 @@ use flexweek_app::views::sheet_rules::{
     self, BLOCK_REFUSED, CUTOFFS, REPEAT_NOTE, SLOT_HINT, SPREAD_NOTHING,
 };
 use flexweek_engine::ErrorKind;
+use flexweek_engine::desk::weekmodel::set_clock_24h;
 use serde_json::{Value, json};
+
+/// The engine clock is one process-wide flag. These tests take it in turn and put 24-hour time back.
+struct ClockGuard {
+    _held: MutexGuard<'static, ()>,
+}
+
+fn clock_lock() -> ClockGuard {
+    static CLOCK_LOCK: Mutex<()> = Mutex::new(());
+    let held = CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    set_clock_24h(true);
+    ClockGuard { _held: held }
+}
+
+impl Drop for ClockGuard {
+    fn drop(&mut self) {
+        set_clock_24h(true);
+    }
+}
 
 fn kind_message(error: flexweek_engine::EngineError) -> (ErrorKind, String) {
     (error.kind, error.message)
@@ -381,6 +405,7 @@ fn spread_words_name_the_sessions_and_the_due_day() {
 
 #[test]
 fn today_from_words_rounds_up_to_the_next_quarter_hour() {
+    let _clock = clock_lock();
     assert_eq!(
         sheet_rules::today_from_words(15 * 60 + 7),
         "Today from 15:15 onward."
@@ -414,6 +439,7 @@ fn late_summary_treats_only_zero_as_nothing() {
 
 #[test]
 fn a_late_move_on_the_24_hour_clock_names_both_ends() {
+    let _clock = clock_lock();
     let said = sheet_rules::late_move(
         &json!({"from_start": "16:45", "to_start": "07:00", "from_day": 0, "to_day": 1}),
         &json!({"duration_min": 60}),
@@ -456,6 +482,67 @@ fn a_late_move_on_the_24_hour_clock_names_both_ends() {
     assert_eq!(
         sheet_rules::late_move(&json!({}), &json!({}), "Club", "").unwrap(),
         "Club: not placed"
+    );
+}
+
+#[test]
+fn the_twelve_hour_clock_keeps_am_and_pm_with_the_time() {
+    let _clock = clock_lock();
+    set_clock_24h(false);
+    assert_eq!(
+        sheet_rules::today_from_words(15 * 60 + 7),
+        "Today from 3:15 PM onward."
+    );
+    assert_eq!(
+        sheet_rules::today_from_words(5 * 60 + 10),
+        "Today from 5:15 AM onward."
+    );
+    assert_eq!(
+        sheet_rules::spread_words(
+            &json!([{"duration_min": 60, "date": "2026-10-09"}]),
+            "2026-10-11T15:00",
+            "2026-10-09"
+        )
+        .unwrap(),
+        "60 min in one session before it's due Sun 11 Oct, 3:00 PM."
+    );
+    assert_eq!(
+        sheet_rules::late_move(
+            &json!({"from_start": "11:30", "to_start": "23:00", "from_day": 0, "to_day": 1}),
+            &json!({"duration_min": 60}),
+            "Club",
+            ""
+        )
+        .unwrap(),
+        "Club: Mon 11:30\u{00a0}AM\u{2013}12:30\u{00a0}PM \u{2192} Tue 11\u{00a0}PM\u{2013}12\u{00a0}AM"
+    );
+    assert_eq!(
+        sheet_rules::late_move(
+            &json!({"from_start": "16:45", "to_start": "07:00"}),
+            &json!({}),
+            "Club",
+            ""
+        )
+        .unwrap(),
+        "Club: from 4:45\u{00a0}PM to 7:00\u{00a0}AM"
+    );
+    assert_eq!(
+        sheet_rules::late_move(
+            &json!({"to_start": "07:00", "to_day": 1}),
+            &json!({}),
+            "Club",
+            ""
+        )
+        .unwrap(),
+        "Club, placed Tue 7:00\u{00a0}AM"
+    );
+    assert_eq!(
+        sheet_rules::late_move(&json!({"to_start": "15:00"}), &json!({}), "Club", "").unwrap(),
+        "Club: placed at 3:00\u{00a0}PM"
+    );
+    assert_eq!(
+        sheet_rules::late_move(&json!({"from_start": "23:00"}), &json!({}), "Club", "").unwrap(),
+        "Club: moves off 11:00\u{00a0}PM and isn't placed"
     );
 }
 

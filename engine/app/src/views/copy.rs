@@ -66,20 +66,41 @@ pub const PLANNING_STYLES: [(&str, &str, &str); 3] = [
         "The planning button becomes Suggest times.",
     ),
 ];
-pub const SPOTIFY_LINK_HINT: &str = concat!(
-    "Plays when a block starts if the alarm sound is Spotify, or when focus starts if the focus sound",
-    " is Spotify."
-);
-pub const SPOTIFY_TONE_REST: &str = concat!(
-    "It plays in your Spotify app, and stopping the alarm stops it. Reminders before a block and the",
-    " end of a focus session play Chime. Without the Spotify app, the link opens and Chime rings too."
-);
-pub const SPOTIFY_TONE_NOTE: &str = concat!(
-    "Plays when a block starts if the alarm sound is Spotify, or when focus starts if the focus sound",
-    " is Spotify. ",
-    "It plays in your Spotify app, and stopping the alarm stops it. Reminders before a block and the",
-    " end of a focus session play Chime. Without the Spotify app, the link opens and Chime rings too."
-);
+// `concat!` accepts only literals, so each sentence is one macro and the note joins those macros.
+macro_rules! string_parts {
+    ($($part:literal),+ $(,)?) => {
+        concat!($($part),+)
+    };
+}
+
+macro_rules! spotify_hint {
+    ($next:ident) => {
+        $next!(
+            "Plays when a block starts if the alarm sound is Spotify, or when focus starts if the focus sound",
+            " is Spotify."
+        )
+    };
+}
+
+macro_rules! spotify_rest {
+    ($next:ident $(, $prefix:literal)*) => {
+        $next!(
+            $($prefix,)*
+            "It plays in your Spotify app, and stopping the alarm stops it. Reminders before a block and the",
+            " end of a focus session play Chime. Without the Spotify app, the link opens and Chime rings too."
+        )
+    };
+}
+
+macro_rules! spotify_note {
+    ($($hint:literal),+) => {
+        spotify_rest!(string_parts, $($hint),+, " ")
+    };
+}
+
+pub const SPOTIFY_LINK_HINT: &str = spotify_hint!(string_parts);
+pub const SPOTIFY_TONE_REST: &str = spotify_rest!(string_parts);
+pub const SPOTIFY_TONE_NOTE: &str = spotify_hint!(spotify_note);
 pub const STUDY_HOURS_LINE: &str =
     "Choose when FlexWeek may plan homework, including hours kept for one class.";
 pub const SCHOOL_HOURS_NOTE: &str =
@@ -123,21 +144,30 @@ pub const HELP_SCREENS: [(&str, &str); 4] = [
         "What is on now and what comes next, to follow once your plan is made.",
     ),
 ];
-pub const HELP_PLANNING: &str = concat!(
-    "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for ",
-    "it in your study hours, around your fixed times, before it's due. Homework that already has a time ",
-    "keeps it, unless that time has passed, the work isn't finished and you didn't pin it. Replan all ",
-    "starts fresh but keeps pinned homework. Anything that doesn't ",
-    "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
-);
 // Material has no command bar, so its Help ends before the Ctrl+K sentence.
-pub const HELP_PLANNING_MATERIAL: &str = concat!(
-    "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for ",
-    "it in your study hours, around your fixed times, before it's due. Homework that already has a time ",
-    "keeps it, unless that time has passed, the work isn't finished and you didn't pin it. Replan all ",
-    "starts fresh but keeps pinned homework. Anything that doesn't ",
-    "fit stays under Not placed yet, and Details says why."
-);
+macro_rules! planning_body {
+    ($next:ident) => {
+        $next!(
+            "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for ",
+            "it in your study hours, around your fixed times, before it's due. Homework that already has a time ",
+            "keeps it, unless that time has passed, the work isn't finished and you didn't pin it. Replan all ",
+            "starts fresh but keeps pinned homework. Anything that doesn't ",
+            "fit stays under Not placed yet, and Details says why."
+        )
+    };
+}
+
+macro_rules! planning_with_keys {
+    ($($body:literal),+) => {
+        string_parts!(
+            $($body),+,
+            " From the keyboard, press Ctrl+K and type Plan."
+        )
+    };
+}
+
+pub const HELP_PLANNING_MATERIAL: &str = planning_body!(string_parts);
+pub const HELP_PLANNING: &str = planning_body!(planning_with_keys);
 pub const HELP_NUMBER_KEYS: &[(&str, &str)] =
     &[("[1] to [5]", "Day, Week, Month, My day, Settings")];
 pub const HELP_LETTER_KEYS: &[(&str, &str)] = &[
@@ -223,7 +253,6 @@ const SIGN_IN_BAD_USERNAME: &str = "No FlexWeek username looks like that. Userna
 const SIGN_IN_SHORT_PASSWORD: &str =
     "Passwords have at least 12 characters. Try again, or choose Forgot password.";
 const SIGN_UP_NO_USERNAME: &str = "Choose a username.";
-const USERNAME_ERROR: &str = "Use 3 to 32 letters, numbers or underscores, with no spaces.";
 const SIGN_UP_NO_PASSWORD: &str = "Choose a password with at least 12 characters.";
 const SIGN_UP_LONG_PASSWORD: &str = "Use 128 characters or fewer.";
 
@@ -676,7 +705,7 @@ pub fn sign_up_problem(name: &str, password: &str) -> EngineResult<String> {
         return Ok(SIGN_UP_NO_USERNAME.to_string());
     }
     if !username_ok(name) {
-        return Ok(USERNAME_ERROR.to_string());
+        return Ok(crate::session::words::USERNAME_ERROR.to_string());
     }
     if password.is_empty() {
         return Ok(SIGN_UP_NO_PASSWORD.to_string());
