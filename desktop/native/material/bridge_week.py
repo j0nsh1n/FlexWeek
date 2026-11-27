@@ -1,35 +1,25 @@
 """The week screen: rows, and every action the Week can take.
 
 The core bridge calls `reload` and re-emits the signals the shell already listens
-for. This object does not touch HTTP, SQL, or the engine. It reads and acts only
-through NativeSession.
+for. Decisions and view state live in `flexweek_engine.WeekView`; this object
+forwards values into Qt models, properties, signals and slots.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, Protocol
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
-from desktop.native.calendar import day_names, week_columns
-from desktop.native.hours.geometry import drag_step, snap
 from desktop.native.material.bridge_rows import Labels, Rows
-from desktop.native.material.theme import event_category, paint_for_category
-from desktop.native.weekmodel import (
-    clock_label,
-    due_in_minutes,
-    due_label,
-    homework_time_sentence,
-    length_label,
-    range_label,
-    set_clock_24h,
-    short_clock,
-)
+from desktop.native.weekmodel import set_clock_24h
 
-EVERYTHING_TIMED = "Everything has a time."
+EVERYTHING_TIMED = str(flexweek_engine.VIEWS_WEEK_EVERYTHING_TIMED)
 DAY_ROLES = ("label", "name", "date", "today", "day")
 BLOCK_ROLES = (
     "title",
@@ -53,51 +43,14 @@ BLOCK_ROLES = (
 )
 
 
-def occurrence_row(
-    item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool, missed: bool = False
-) -> dict:
+def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool, missed: bool = False) -> dict:
     """One QML block row from a week occurrence. Day and Week share this shape."""
-    fill, ink = paint_for_category(item.category, mode)
-    end = int(item.end)
-    return {
-        "title": item.title,
-        "day": int(item.day),
-        "start": int(item.start),
-        "end": end,
-        "fill": fill,
-        "ink": ink,
-        "category": event_category(item.category),
-        "detail": range_label(int(item.start), end),
-        "detailStart": short_clock(int(item.start)),
-        # A session the planner calls missed is still to do, so it is not dimmed as over.
-        "past": dim and (bool(item.done) or (gone and not missed)),
-        "blockId": item.block_id,
-        "assignmentId": item.assignment_id or "",
-        "homework": bool(item.work and item.assignment_id),
-        "done": bool(item.done),
-        "fresh": fresh,
-        "indent": 0,
-        "under": [],
-    }
+    return json.loads(flexweek_engine.views_week_occurrence_row(item, mode, dim, gone, fresh, missed))
 
 
 def overlapped(rows: list[dict]) -> list[dict]:
-    """Items that share time overlap instead of splitting the lane (Jonathan, 2026-11-08).
-
-    Rows come back in time order, the longer first on a tie, which is also their Tab order and the
-    order they are drawn in, so a later item lies on top of the earlier ones it shares time with.
-    Every item keeps its own time. `indent` is how many steps right it sits: one past the deepest item
-    it covers. `under` lists, by place in the returned list, the items it lies on, so the view can keep
-    their names in sight and step this one past their uncovered strips."""
-    rows.sort(key=lambda row: (row["day"], row["start"], row["start"] - row["end"]))
-    for at, row in enumerate(rows):
-        under = [
-            place
-            for place, other in enumerate(rows[:at])
-            if other["day"] == row["day"] and other["end"] > row["start"]
-        ]
-        row["indent"] = max((rows[place]["indent"] + 1 for place in under), default=0)
-        row["under"] = under
+    """Items that share time overlap instead of splitting the lane (Jonathan, 2026-11-08)."""
+    rows[:] = json.loads(flexweek_engine.views_week_overlapped(json.dumps(rows)))
     return rows
 
 
@@ -105,18 +58,18 @@ def overlapped(rows: list[dict]) -> list[dict]:
 LENGTH_GAP = re.compile(r"(\d) (h|min)\b")
 HOMEWORK_ROLES = ("title", "minutes", "blockId", "assignmentId", "detail", "tag", "tagKind", "reason")
 # The solver's own lines: at most an hour of room is "Cutting it close", at most three is "Tight".
-DANGER_SLACK_MIN = 60
-TIGHT_SLACK_MIN = 3 * 60
+DANGER_SLACK_MIN = int(flexweek_engine.VIEWS_WEEK_DANGER_SLACK_MIN)
+TIGHT_SLACK_MIN = int(flexweek_engine.VIEWS_WEEK_TIGHT_SLACK_MIN)
 SLACK_TAGS = {
     "danger": ("Cutting it close", "cutting"),
     "tight": ("Tight", "tight"),
     "ok": ("Plenty of time", "plenty"),
 }
-DAY_MIN = 24 * 60
+DAY_MIN = int(flexweek_engine.VIEWS_WEEK_DAY_MIN)
 # A status line after Plan my homework counts as its answer for this long.
-PLAN_WINDOW_S = 30.0
+PLAN_WINDOW_S = float(flexweek_engine.VIEWS_WEEK_PLAN_WINDOW_S)
 # A block that just landed keeps its landing motion this long, across the refreshes a save causes.
-FRESH_S = 1.0
+FRESH_S = float(flexweek_engine.VIEWS_WEEK_FRESH_S)
 
 
 class _Session(Protocol):
@@ -140,8 +93,22 @@ class _Window(Protocol):
 
 def _bool_pref(prefs: dict, key: str, default: bool) -> bool:
     """A preference another lane may not have landed yet. Only an explicit false turns it off."""
-    value = prefs.get(key)
-    return value if isinstance(value, bool) else default
+    return bool(flexweek_engine.views_week_bool_pref(prefs, key, default))
+
+
+def _steady_ms() -> int:
+    return int(time.monotonic() * 1000)
+
+
+def _moment(session: Any) -> datetime:
+    return datetime.fromtimestamp(session.now_ms() / 1000)
+
+
+def _call_optional(owner: Any, name: str, default: Any) -> Any:
+    fn = getattr(owner, name, None)
+    if fn is None:
+        return default
+    return fn()
 
 
 class WeekBridge(QObject):
@@ -158,38 +125,14 @@ class WeekBridge(QObject):
         super().__init__(parent)
         self.setObjectName("weekBridge")
         self._window = window
-        self._block_rows: list[dict] = []
-        self._homework_rows: list[dict] = []
-        self._time_words = EVERYTHING_TIMED
-        self._all_timed = True
-        self._can_plan = False
-        self._listed_count = 0
-        self._day_rows: list[dict] = []
-        self._leftover_words = ""
-        self._left_words = ""
-        self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
+        self._view = flexweek_engine.WeekView()
         self._blocks = Rows(BLOCK_ROLES, self)
         self._homework = Rows(HOMEWORK_ROLES, self)
         self._days = Rows(DAY_ROLES, self)
         self._hours = Labels(self)
-        self._hours.set_rows(self._hour_labels)
-        self._now_day = -1
-        self._now_column = -1
-        self._now_minute = 0
-        self._columns = 7
-        # The days of the week that have a column, in order: with the weekend hidden, Saturday and Sunday
-        # are left out wherever the week's first day puts them.
-        self._shown_days: list[int] = list(range(7))
-        self._drag_step = drag_step(None)
-        self._week_key = ""
-        self._seen: set[tuple[str, int]] = set()
-        self._fresh_until: dict[tuple[str, int], float] = {}
-        self._done_after_save = ""
-        self._said_plan = 0.0
         self._published: dict[str, object] = {}
-        self._target_week: str | None = None
-        self._loading_week: str | None = None
-        self._weekend_save = 0
+        self._apply_snapshot()
+        self._hours.set_rows(self._hour_labels)
         self._connect_session()
 
     def _connect_session(self) -> None:
@@ -206,170 +149,86 @@ class WeekBridge(QObject):
             if signal is not None and hasattr(signal, "connect"):
                 signal.connect(slot)
 
+    @property
+    def _target_week(self) -> str | None:
+        return self._view.target_week()
+
+    @_target_week.setter
+    def _target_week(self, value: str | None) -> None:
+        self._view.set_target_week(value)
+
+    @property
+    def _loading_week(self) -> str | None:
+        return self._view.loading_week()
+
+    @_loading_week.setter
+    def _loading_week(self, value: str | None) -> None:
+        self._view.set_loading_week(value)
+
+    def _apply_snapshot(self) -> None:
+        snap = json.loads(self._view.snapshot_json())
+        self._block_rows: list[dict] = snap["blockRows"]
+        self._homework_rows: list[dict] = snap["homeworkRows"]
+        self._day_rows: list[dict] = snap["dayRows"]
+        self._day_headers: list[str] = snap["dayHeaders"]
+        self._hour_labels: list[str] = snap["hourLabels"]
+        self._time_words: str = snap["timeWords"]
+        self._all_timed: bool = snap["allTimed"]
+        self._can_plan: bool = snap["canPlan"]
+        self._listed_count: int = snap["listedCount"]
+        self._leftover_words: str = snap["leftoverWords"]
+        self._left_words: str = snap["leftWords"]
+        self._now_day: int = snap["nowDay"]
+        self._now_column: int = snap["nowColumn"]
+        self._now_minute: int = snap["nowMinute"]
+        self._columns: int = snap["columns"]
+        self._shown_days: list[int] = snap["shownDays"]
+        self._drag_step: int = snap["dragStep"]
+
     # -- reading the week ------------------------------------------------
 
     def reload(self, mode: str) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
         session = self._window.session  # type: ignore[attr-defined]
-        prefs = session.preferences or {}
-        set_clock_24h(bool(prefs.get("clock_24h")))
-        self._hour_labels = [clock_label(hour * 60) for hour in range(24)]
-        weekends = _bool_pref(prefs, "show_weekends", True)
-        start_day = session.week_start
-        self._shown_days = week_columns(start_day, weekends) if start_day else list(range(7))
-        self._columns = len(self._shown_days)
-        self._drag_step = drag_step(prefs.get("drag_step_min"))
-        dim = _bool_pref(prefs, "dim_completed", True)
-        block_rows: list[dict] = []
-        homework_rows: list[dict] = []
-        day_rows: list[dict] = []
-        self._now_day = -1
-        self._now_column = -1
-        self._now_minute = 0
-        if session.account is None or not session.week_start:
-            self._block_rows, self._homework_rows, self._day_rows = [], [], []
-            self._leftover_words = ""
-            self._listed_count = 0
-            self._left_words = ""
-            self._seen = set()
+        ready = self._view.prepare_reload(
+            session.preferences, session.week_start, session.account is not None
+        )
+        set_clock_24h(self._view.clock_24h())
+        if ready is None:
+            self._apply_snapshot()
             self._publish()
             return
-        start = date.fromisoformat(session.week_start)
-        moment = datetime.fromtimestamp(session.now_ms() / 1000)
-        today = moment.date()
-        offset = (today - start).days
-        if 0 <= offset <= 6:
-            self._now_day = offset
-            self._now_minute = moment.hour * 60 + moment.minute
-            if offset in self._shown_days:
-                self._now_column = self._shown_days.index(offset)
-        names = day_names(session.week_start)
-        for index in self._shown_days:
-            day = start + timedelta(days=index)
-            day_rows.append(
-                {
-                    "label": f"{names[index]} {day.day}",
-                    "name": names[index],
-                    "date": str(day.day),
-                    "today": index == self._now_day,
-                    "day": index,
-                }
-            )
-        week = session.built_week()
-        missed = session.missed_block_ids()
-        # A week that ended is all past, a week ahead has nothing past, this week goes by the clock.
-        keys: set[tuple[str, int]] = set()
-        fresh_ok = self._week_key == session.week_start and bool(self._seen)
-        clock = time.monotonic()
-        for item in week.occurrences:
-            day = int(item.day)
-            if day not in self._shown_days:
-                continue
-            end = int(item.end)
-            if offset > 6:
-                gone = True
-            elif offset < 0:
-                gone = False
-            else:
-                gone = day < offset or (day == offset and end <= self._now_minute)
-            key = (item.block_id, day)
-            keys.add(key)
-            if fresh_ok and key not in self._seen:
-                self._fresh_until[key] = clock + FRESH_S
-            row = occurrence_row(
-                item,
-                mode,
-                dim=dim,
-                gone=gone,
-                fresh=self._fresh_until.get(key, 0.0) > clock,
-                missed=item.block_id in missed,
-            )
-            row["column"] = self._shown_days.index(day)
-            block_rows.append(row)
-        for item in getattr(week, "waiting", ()):
-            tag, kind = self._tag_for(item, start, moment)
-            parts = []
-            if item.due:
-                parts.append(f"Due {due_label(item.due, today)}")
-            parts.append(LENGTH_GAP.sub("\\1\u00a0\\2", length_label(int(item.minutes))))
-            homework_rows.append(
-                {
-                    "title": item.title,
-                    "minutes": int(item.minutes),
-                    "blockId": item.block_id,
-                    "assignmentId": item.assignment_id or "",
-                    "detail": " · ".join(parts),
-                    "tag": tag,
-                    "tagKind": kind,
-                    "reason": item.reason,
-                }
-            )
-        # The same count every screen reads, so a missed session is not "has a time" here either.
-        needed = session.homework_time_needed()
-        self._time_words = homework_time_sentence([], needed)
-        self._all_timed = not needed
-        can_place = getattr(session, "plan_can_place", None)
-        # A card the drawer lists is something Plan places, even a task that is not homework.
-        self._can_plan = bool(homework_rows) or (bool(can_place()) if can_place else False)
-        remainders = getattr(session, "homework_remainders", None)
-        uncovered = remainders() if remainders else []
-        missed_items = [item for item in needed if item.get("missed_min") or item.get("pinned_min")]
-        # Each homework once, by id: its card and its line are one; two homework with one title are two.
-        self._listed_count = len(
-            {row["assignmentId"] or row["blockId"] for row in homework_rows}
-            | {homework for _title, _minutes, homework in uncovered}
-            | {item["assignment_id"] for item in missed_items}
+        moment = _moment(session)
+        self._view.finish_reload(
+            mode,
+            session.built_week(),
+            session.missed_block_ids(),
+            json.dumps(session.homework_time_needed()),
+            bool(_call_optional(session, "plan_can_place", False)),
+            _call_optional(session, "homework_remainders", ()),
+            json.dumps(self._window._unfinished_items()),  # type: ignore[attr-defined]
+            moment.date().isoformat(),
+            moment.hour,
+            moment.minute,
+            _steady_ms(),
+            FRESH_S,
         )
-        self._leftover_words = "\n".join(
-            [
-                *(f"{title} · {length_label(minutes)} with no time" for title, minutes, _id in uncovered),
-                # Only a week that is over has these: its missed time is planned from this week.
-                *(
-                    f"{item['title']} · {length_label(item[key])} {words}"
-                    for item in missed_items
-                    for key, words in (("missed_min", "missed"), ("pinned_min", "pinned, in the past"))
-                    if item.get(key)
-                ),
-            ]
-        )
-        self._left_words = self._left_line()
-        self._week_key = session.week_start
-        self._seen = keys
-        self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
-        self._block_rows, self._homework_rows, self._day_rows = (
-            overlapped(block_rows),
-            homework_rows,
-            day_rows,
-        )
+        self._apply_snapshot()
         self._publish()
 
     def _left_line(self) -> str:
         """The Widgets line above the week: "N overdue · N left from last week", from the same list."""
-        left = self._window._unfinished_items()  # type: ignore[attr-defined]
-        overdue = sum(item.get("left_over_state") == "overdue" for item in left)
-        carried = len(left) - overdue
-        parts = []
-        if overdue:
-            parts.append(f"{overdue} overdue")
-        if carried:
-            parts.append(f"{carried} left from last week")
-        return " · ".join(parts)
+        return str(flexweek_engine.views_week_left_line(json.dumps(self._window._unfinished_items())))  # type: ignore[attr-defined]
 
     @staticmethod
     def _tag_for(item: Any, start: date, moment: datetime) -> tuple[str, str]:
         """How much room this homework has before it is due. No deadline, no tag."""
         del start
-        if not item.due:
-            return "", "plain"
-        due_in = due_in_minutes(str(item.due), moment)
-        if due_in is None:
-            return SLACK_TAGS["ok"]
-        room = due_in - int(item.minutes)
-        if room <= DANGER_SLACK_MIN:
-            return SLACK_TAGS["danger"]
-        if room <= TIGHT_SLACK_MIN or 0 <= due_in < DAY_MIN:
-            return SLACK_TAGS["tight"]
-        return SLACK_TAGS["ok"]
+        return tuple(
+            flexweek_engine.views_week_tag_for(
+                item.due, int(item.minutes), moment.date().isoformat(), moment.hour, moment.minute
+            )
+        )
 
     def _publish(self) -> None:
         # A clock tick reads the same week again. Rebuilding the models would drop hover and focus.
@@ -389,30 +248,26 @@ class WeekBridge(QObject):
     # -- the snackbar ----------------------------------------------------
 
     def _note(self, text: str, *, action: str = "UNDO") -> None:
-        shell = self.parent()
-        if shell is None or not hasattr(shell, "note"):
-            return
-        shell.note(text, action=action)
+        note = getattr(self.parent(), "note", None)
+        if note is not None:
+            note(text, action=action)
 
     @Slot(str)
     def _on_status(self, message: str) -> None:
         """What a plan the student asked for says when it placed nothing new."""
-        if not self._said_plan or not message or message.endswith("…"):
-            return
-        asked, self._said_plan = self._said_plan, 0.0
-        if time.monotonic() - asked < PLAN_WINDOW_S:
+        if self._view.on_status(message, _steady_ms(), PLAN_WINDOW_S) is not None:
             # The window puts the words on the snackbar, with no Undo and keeping an Undo already there.
             self.planFinished.emit()
 
     @Slot(str)
     def _on_planned(self, _said: str) -> None:
-        self._said_plan = 0.0
+        self._view.on_planned()
         self.planFinished.emit()
 
     @Slot(bool, str)
     def _on_save_finished(self, ok: bool, _message: str) -> None:
-        words, self._done_after_save = self._done_after_save, ""
-        if ok and words:
+        words = self._view.on_save_finished(ok)
+        if words is not None:
             self._note(words)
 
     # -- actions ---------------------------------------------------------
@@ -420,10 +275,8 @@ class WeekBridge(QObject):
     @Slot()
     def plan(self) -> None:
         """Plan my homework: the window's own call, so Widgets and Material plan the same way."""
-        if not self._can_plan:
-            return
-        self._said_plan = time.monotonic()
-        self._window._plan_with_left_over()  # type: ignore[attr-defined]
+        if self._view.begin_plan(_steady_ms()) is not None:
+            self._window._plan_with_left_over()  # type: ignore[attr-defined]
 
     @Slot()
     def planLeft(self) -> None:
@@ -440,20 +293,21 @@ class WeekBridge(QObject):
         """A drawer card let go on `day` at minute `start`: the same hand move the Widgets week makes,
         on the student's drag step."""
         session = self._window.session  # type: ignore[attr-defined]
-        block = next((item for item in session.blocks if item["id"] == block_id), None)
-        if block is None or day not in self._shown_days:
+        plan = self._view.place_homework_plan(
+            json.dumps(session.blocks), block_id, day, start, bool(session.busy)
+        )
+        if plan is None:
             return
-        length = int(block.get("duration_min") or 0)
-        if length <= 0:
-            return
-        start = max(0, min(snap(start, self._drag_step), DAY_MIN - length))
-        if not session.busy:
-            answer = session.judge_hand_move(block_id, -1, day, start, start + length)
-            if not answer["moved"]:
+        snapped, end, judge = plan
+        if judge is not None:
+            problem = flexweek_engine.views_week_hand_move_problem(
+                json.dumps(session.judge_hand_move(block_id, -1, day, snapped, end))
+            )
+            if problem is not None:
                 # Nothing is changed, so there is nothing for UNDO to take back.
-                self._note(answer["problem"], action="")
+                self._note(problem, action="")
                 return
-        session.place_block(block_id, -1, day, start, start + length)
+        session.place_block(block_id, -1, day, snapped, end)
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def dayRows(self) -> list:
@@ -465,17 +319,21 @@ class WeekBridge(QObject):
         """A block let go by the mouse, or sent by Move to day..., on `day` from `start` to `end`: the one
         hand-move rule the plain look uses, one Undo step, and the same words in the notice."""
         session = self._window.session  # type: ignore[attr-defined]
-        block = next((item for item in session.blocks if item["id"] == block_id), None)
-        # Day moves a block on a day the week hides too, so any day of the week is taken here.
-        if block is None or not 0 <= day <= 6 or end <= start:
+        plan = self._view.move_block_plan(
+            json.dumps(session.blocks), block_id, day, start, end, bool(session.busy)
+        )
+        if plan is None:
             return
-        if not session.busy:
-            answer = session.judge_hand_move(block_id, from_day, day, start, end)
-            if not answer["moved"]:
+        move_start, move_end, judge = plan
+        if judge is not None:
+            problem = flexweek_engine.views_week_hand_move_problem(
+                json.dumps(session.judge_hand_move(block_id, from_day, day, move_start, move_end))
+            )
+            if problem is not None:
                 # Nothing is changed, so there is nothing for UNDO to take back.
-                self._note(answer["problem"], action="")
+                self._note(problem, action="")
                 return
-        session.place_block(block_id, from_day, day, start, end)
+        session.place_block(block_id, from_day, day, move_start, move_end)
 
     @Slot(str, int)
     def duplicateBlock(self, block_id: str, day: int) -> None:
@@ -484,7 +342,7 @@ class WeekBridge(QObject):
         session = window.session  # type: ignore[attr-defined]
         kept = (session.selected_block_id, session.selected_occurrence_day)
         session.selected_block_id = block_id
-        session.selected_occurrence_day = day if day >= 0 else None
+        session.selected_occurrence_day = flexweek_engine.views_week_optional_day(day)
         try:
             window._duplicate_selected()  # type: ignore[attr-defined]
         finally:
@@ -493,7 +351,7 @@ class WeekBridge(QObject):
     @Slot(str, int)
     def copyBlock(self, block_id: str, day: int) -> None:
         """The plain look's Copy: the block goes on the clipboard, for Ctrl+V."""
-        self._window.session.copy_block(block_id, day if day >= 0 else None)  # type: ignore[attr-defined]
+        self._window.session.copy_block(block_id, flexweek_engine.views_week_optional_day(day))  # type: ignore[attr-defined]
 
     @Slot()
     def pasteCopied(self) -> None:
@@ -505,7 +363,7 @@ class WeekBridge(QObject):
         """Something is on the clipboard and no save is under way (the plain look greys Paste then), so
         the free-time menu offers Paste here."""
         session = self._window.session  # type: ignore[attr-defined]
-        return session.clipboard is not None and not session.busy
+        return bool(flexweek_engine.views_week_has_copied(session.clipboard, bool(session.busy)))
 
     @Slot(int, int)
     def pasteHere(self, day: int, start_min: int) -> None:
@@ -516,33 +374,21 @@ class WeekBridge(QObject):
     def planOne(self, identifier: str) -> None:
         """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
         session = self._window.session  # type: ignore[attr-defined]
-        # A homework id names its waiting session first: its other sessions may have a time already, and a
-        # pinned one that passed cannot be placed again.
-        target = next(
-            (
-                block["id"]
-                for block in sorted(session.blocks, key=lambda item: bool(item.get("start")))
-                if block["id"] == identifier or block.get("assignment_id") == identifier
-            ),
-            None,
-        )
-        if target:
-            self._said_plan = time.monotonic()
+        target = self._view.plan_one_target(json.dumps(session.blocks), identifier, _steady_ms())
+        if target is not None:
             session.solve(only={target}, earliest_first=True)
 
     @Slot(str)
     def toggleDone(self, assignment_id: str) -> None:
         """Click homework to mark it finished, or to open it again. Undo takes it back."""
         session = self._window.session  # type: ignore[attr-defined]
-        item = session.assignments.get(assignment_id)
-        if item is None or session.busy:
+        plan = self._view.toggle_done_plan(json.dumps(session.assignments), assignment_id, bool(session.busy))
+        if plan is None:
             return
-        title = item.get("title") or "Homework"
-        finished = not bool(item.get("completed"))
+        finished, words = plan
         session.complete_homework(assignment_id, finished)
         session.save()
-        if session.busy:
-            self._done_after_save = f"Finished {title}." if finished else f"{title} is back."
+        self._view.record_done_after_save(words, bool(session.busy))
 
     @Slot()
     def previous(self) -> None:
@@ -555,8 +401,7 @@ class WeekBridge(QObject):
     @Slot(result=str)
     def pickerAnchor(self) -> str:
         """The Monday of the week on view: the month the Go to date picker opens on."""
-        session = self._window.session  # type: ignore[attr-defined]
-        return self._target_week or session.week_start or ""
+        return str(self._view.picker_anchor(self._window.session.week_start))  # type: ignore[attr-defined]
 
     @Slot(result=str)
     def todayIso(self) -> str:
@@ -565,99 +410,71 @@ class WeekBridge(QObject):
     @Slot(str)
     def goToDate(self, iso: str) -> None:
         """A day picked in the Go to date month: the week that holds it."""
-        session = self._window.session  # type: ignore[attr-defined]
-        try:
-            picked = date.fromisoformat(iso)
-        except ValueError:
-            return
-        self._load_target(session.shown_week_of(picked.isoformat()))
+        picked = flexweek_engine.views_week_parse_date(iso)
+        if picked is not None:
+            self._load_target(self._window.session.shown_week_of(picked))  # type: ignore[attr-defined]
 
     @Slot()
     def toggleWeekends(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]
-        previous = dict(session.preferences or {})
-        current = _bool_pref(previous, "show_weekends", True)
-        wanted = not current
-        self._weekend_save += 1
-        ticket = self._weekend_save
-        session.preferences = {**previous, "show_weekends": wanted}
+        ticket, wanted, updated_json = self._view.toggle_weekends_start(json.dumps(session.preferences))
+        session.preferences = json.loads(updated_json)
         self._window._material_page.publish()  # type: ignore[attr-defined]
 
         def kept(ok: bool) -> None:
-            if ok or ticket != self._weekend_save:
+            rollback = self._view.toggle_weekends_finish(ticket, ok, json.dumps(session.preferences))
+            if rollback is None:
                 return
-            latest = dict(session.preferences or {})
-            if "show_weekends" in previous:
-                latest["show_weekends"] = previous["show_weekends"]
-            else:
-                latest.pop("show_weekends", None)
-            session.preferences = latest
+            restored_json, message = rollback
+            session.preferences = json.loads(restored_json)
             self._window._material_page.publish()  # type: ignore[attr-defined]
-            self._note("Couldn't save the weekend setting. Try again.", action="")
+            self._note(message, action="")
 
-        if not session.save_preferences({"show_weekends": wanted}, kept):
-            kept(False)
+        kept(bool(session.save_preferences({"show_weekends": wanted}, kept)))
 
     @Slot()
     def today(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]
-        moment = datetime.fromtimestamp(session.now_ms() / 1000).date()
-        target = session.shown_week_of(moment.isoformat())
+        target = session.shown_week_of(_moment(session).date().isoformat())
         self._load_target(target)
         self.todayAsked.emit()
 
     def _shift(self, days: int) -> None:
-        session = self._window.session  # type: ignore[attr-defined]
-        base = self._target_week or session.week_start
-        if not base:
-            return
-        monday = (date.fromisoformat(base) + timedelta(days=days)).isoformat()
-        self._load_target(monday)
+        moved = self._view.shift_target(days, self._window.session.week_start)  # type: ignore[attr-defined]
+        if moved is not None:
+            self._load_target(moved)
 
     def _load_target(self, target: str) -> None:
-        session = self._window.session  # type: ignore[attr-defined]
-        self._target_week = target
-        if not session.busy:
+        if self._view.load_target(target, bool(self._window.session.busy)) is not None:  # type: ignore[attr-defined]
             self._flush_target()
 
     def _flush_target(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]
-        if self._target_week and not session.busy:
-            target = self._target_week
-            if target == session.week_start:
-                self._target_week = None
-                return
-            self._loading_week = target
-            session.load_week(target)
-            if not session.busy:
-                self._loading_week = None
-                self._target_week = None
+        target = self._view.begin_flush(session.week_start, bool(session.busy))
+        if target is None:
+            return
+        session.load_week(target)
+        self._view.finish_flush(bool(session.busy))
 
     def _settle_navigation(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]
-        finished, self._loading_week = self._loading_week, None
-        if finished is not None and self._target_week == finished:
-            self._target_week = None
-        if self._target_week == session.week_start:
-            self._target_week = None
-        if self._target_week and not session.busy:
+        if self._view.settle_navigation(session.week_start, bool(session.busy)) is not None:
             # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
             QTimer.singleShot(0, self, self._flush_target)
 
     @Slot(bool)
     def _on_busy_changed(self, busy: bool) -> None:
-        if not busy:
+        if flexweek_engine.views_week_when_idle(bool(busy)) is not None:
             self._settle_navigation()
 
     @Slot()
     def _on_week_changed(self) -> None:
-        if not self._window.session.busy:  # type: ignore[attr-defined]
+        if flexweek_engine.views_week_when_idle(bool(self._window.session.busy)) is not None:  # type: ignore[attr-defined]
             self._settle_navigation()
 
     @Slot(object)
     def _on_account_changed(self, _account: object) -> None:
-        self._target_week = None
-        self._loading_week = None
+        self._view.on_account_changed()
 
     # -- what QML reads --------------------------------------------------
 
@@ -687,7 +504,7 @@ class WeekBridge(QObject):
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def dayHeaders(self) -> list:
-        return [row["label"] for row in self._day_rows]
+        return self._day_headers
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def hourLabels(self) -> list:
@@ -720,7 +537,7 @@ class WeekBridge(QObject):
 
     @Property(str, notify=homeworkChanged)
     def leftWords(self) -> str:
-        """"N overdue · N left from last week", or nothing when no homework is left over."""
+        """ "N overdue · N left from last week", or nothing when no homework is left over."""
         return self._left_words
 
     @Property(int, notify=homeworkChanged)
@@ -742,8 +559,7 @@ class WeekBridge(QObject):
     @Property(str, notify=homeworkChanged)
     def planLabel(self) -> str:
         """The plan button's words: a student who places homework by hand asks for ideas, so Suggest times."""
-        prefs = self._window.session.preferences or {}  # type: ignore[attr-defined]
-        return "Suggest times" if prefs.get("planning_style") == "manual" else "Plan my homework"
+        return str(flexweek_engine.views_week_plan_label(self._window.session.preferences))  # type: ignore[attr-defined]
 
     @Property(bool, notify=homeworkChanged)
     def allTimed(self) -> bool:

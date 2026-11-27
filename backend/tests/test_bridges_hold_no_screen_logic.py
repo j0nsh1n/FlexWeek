@@ -28,6 +28,12 @@ LOCKED: dict[str, dict[str, str]] = {
         "_seen_weekday": "reads the computer's local weekday name for the engine"
     },
     "desktop/native/account_copy.py": {},
+    "desktop/native/material/bridge_week.py": {
+        "_steady_ms": "reads the monotonic clock in milliseconds for the engine",
+        "_moment": "reads the session wall clock as local datetime for the engine",
+        "WeekBridge._connect_session": "connects Qt signals on the session to this bridge's slots",
+        "WeekBridge._publish": "updates Qt list models only when rows changed and emits Qt signals",
+    },
     "desktop/native/material/theme.py": {
         "tokens_path": "reads the computer's font and theme locations for the engine",
         "qml_path": "locates the QML files the Qt shell loads",
