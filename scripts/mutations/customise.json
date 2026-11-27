@@ -7,11 +7,11 @@
   "test": "desktop/tests/settings/test_look_file_reading.py::test_a_look_saved_by_016_opens_with_its_knobs_named_as_017_names_them"
  },
  {
-  "file": "desktop/native/look.py",
+  "file": "engine/app/src/views/theme.rs",
   "name": "Paper at the pack's motion",
-  "old": "    return \"reduce\" if selected[\"preset\"] == \"paper\" else \"normal\"",
-  "new": "    return \"normal\"",
-  "test": "desktop/tests/settings/test_look_file_reading.py::test_paper_starts_at_reduce_motion_and_every_other_look_at_normal"
+  "old": "    if preset == \"paper\" {\n        \"reduce\"\n    } else {\n        \"normal\"\n    }",
+  "new": "    if preset == \"paper\" {\n        \"normal\"\n    } else {\n        \"normal\"\n    }",
+  "test": "cargo:flexweek-app:views_theme:paper_starts_at_reduce_motion_and_every_other_look_at_normal"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",

@@ -291,3 +291,22 @@ def test_pack_and_store_material_preserve_valid_panel_widths_and_drop_out_of_ran
     )
     assert "daySideWidth" not in bad
     assert "settingsNavWidth" not in bad
+
+
+@pytest.mark.parametrize("text", ["", "not json", "{}", '{"unused": 1}', '{"Slate.light.std": "nope"}'])
+def test_a_tokens_file_without_the_scheme_is_a_key_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, text: str
+) -> None:
+    """The window falls back to its CPU copy when a scheme cannot be read, so a broken or partial
+    tokens file must not quietly paint the copy compiled into the engine."""
+    from desktop.native.material import theme
+
+    broken = tmp_path / "tokens.json"
+    broken.write_text(text, encoding="utf-8")
+    monkeypatch.setattr(theme, "tokens_path", lambda: broken)
+    theme._schemes.cache_clear()
+    try:
+        with pytest.raises(KeyError):
+            scheme("Slate", "light", "std")
+    finally:
+        theme._schemes.cache_clear()

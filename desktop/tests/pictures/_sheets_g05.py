@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 def _alarm_ringing(window: NativeWindow) -> object:
     from desktop.native.settings import AlarmRingDialog
 
-    dialog = AlarmRingDialog(window, {"name": "Wake up", "time": "06:45", "sound": "chime"}, "")
+    # The window is no longer a widget; it rings the dialog with no parent too (window.py).
+    dialog = AlarmRingDialog(None, {"name": "Wake up", "time": "06:45", "sound": "chime"}, "")
     # The window keeps the dialog it is ringing in, as when an alarm really rings.
     window._alarm_dialog = dialog
     dialog.show()

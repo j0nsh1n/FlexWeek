@@ -15,7 +15,7 @@ from typing import Any
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-from desktop.native.tokens import contrast, fit_lightness, luminance, mix
+from desktop.native.tokens import contrast as contrast
 
 PRESETS = (
     "Slate",
@@ -148,64 +148,28 @@ def _schemes() -> dict[str, dict[str, str]]:
 
 
 def scheme_key(preset: str, mode: str, contrast_name: str) -> str:
-    return f"{preset}.{mode}.{contrast_name}"
+    return str(flexweek_engine.views_theme_scheme_key(preset, mode, contrast_name))
 
 
 def scheme(preset: str, mode: str, contrast_name: str) -> dict[str, str]:
     """One scheme. An unknown preset, mode or contrast is a KeyError, not a quiet fallback."""
-    if preset not in PRESETS or mode not in MODES or contrast_name not in CONTRASTS:
-        raise KeyError(scheme_key(preset, mode, contrast_name))
-    mode = ONE_MODE.get(preset, mode)
-    found = dict(_schemes()[scheme_key(preset, mode, contrast_name)])
-    if preset in ONE_MODE:
-        return found
-    for role in (
-        "surface",
-        "surfaceContainerLowest",
-        "surfaceContainerLow",
-        "surfaceContainer",
-        "surfaceContainerHigh",
-        "surfaceContainerHighest",
-        "surfaceVariant",
-        "outlineVariant",
-        "outline",
-        "onSurface",
-    ):
-        found[role] = B3A3[role][mode]
-    if contrast_name == "high":
-        found["onSurfaceVariant"] = B3A3["onSurfaceVariant_high"][mode]
-    else:
-        found["onSurfaceVariant"] = B3A3["onSurfaceVariant"][mode]
-
-    if preset == "Slate":
-        for role, vals in B3A3["slate"].items():
-            found[role] = vals[mode]
-
-    return found
+    return json.loads(flexweek_engine.views_theme_scheme(preset, mode, contrast_name, _schemes()))
 
 
 def stroke_for(contrast_name: str) -> float:
     """High contrast draws a solid 1.5px outline. Standard contrast does not add one."""
-    if contrast_name not in CONTRASTS:
-        raise KeyError(contrast_name)
-    return HIGH_CONTRAST_STROKE if contrast_name == "high" else 0.0
+    return float(flexweek_engine.views_theme_stroke_for(contrast_name))
 
 
 def bar_for_category(category: str) -> str:
     """The solid accent bar colour for an event category."""
-    return CLASS_COLORS.get(category, OTHER_CLASS_COLOR)
+    return str(flexweek_engine.views_theme_bar_for_category(category))
 
 
 def paint_for_category(category: str, mode: str) -> tuple[str, str]:
     """A week block's category key (`class`, `assignments`, …) as a Material fill and ink."""
-    if mode not in MODES:
-        raise KeyError(mode)
-    bar = bar_for_category(category)
-    card = "#ffffff" if mode == "light" else "#14171c"
-    alpha = 0.14 if mode == "light" else 0.24
-    fill = mix(bar, card, alpha)
-    ink = "#0f172a" if mode == "light" else "#ececec"
-    return fill, ink
+    fill, ink = flexweek_engine.views_theme_paint_for_category(category, mode)
+    return str(fill), str(ink)
 
 
 _ROLE_TO_CATEGORY = {
@@ -225,8 +189,8 @@ _ROLE_TO_CATEGORY = {
 
 def category_paint(role: str, mode: str) -> tuple[str, str]:
     """Fill and ink for a role or category."""
-    cat = _ROLE_TO_CATEGORY.get(role, "other")
-    return paint_for_category(cat, mode)
+    fill, ink = flexweek_engine.views_theme_category_paint(role, mode)
+    return str(fill), str(ink)
 
 
 # The EventBlock class keys for event categories.
@@ -307,7 +271,7 @@ def qml_dir() -> Path:
 
 def event_category(category: str) -> str:
     """The EventBlock category for a week block: the category itself when in SIX_CLASSES, else 'other'."""
-    return category if category in SIX_CLASSES else "other"
+    return str(flexweek_engine.views_theme_event_category(category))
 
 
 def read_material_choice(stored: object) -> dict[str, str]:
@@ -336,14 +300,12 @@ def read_material_choice(stored: object) -> dict[str, str]:
 
 def resolved_mode(mode: str, worn_dark: bool) -> str:
     """`system` follows the worn look's light or dark axis. An explicit light or dark wins."""
-    if mode in MODES:
-        return mode
-    return "dark" if worn_dark else "light"
+    return str(flexweek_engine.views_theme_resolved_mode(mode, worn_dark))
 
 
 def mode_of(choice: dict[str, str], worn_dark: bool) -> str:
     """The light or dark a choice shows: its preset's own when it has only one, else Mode's."""
-    return ONE_MODE.get(choice["preset"]) or resolved_mode(choice["mode"], worn_dark)
+    return str(flexweek_engine.views_theme_mode_of(json.dumps(choice), worn_dark))
 
 
 def read_font(stored: object) -> str:
@@ -355,13 +317,12 @@ def read_font(stored: object) -> str:
 
 def shown_font(preset: str, font: str) -> str:
     """The font worn: the student's choice, else the preset's own, else Sans."""
-    return font or PRESET_LOOK.get(preset, {}).get("font") or "sans"
+    return str(flexweek_engine.views_theme_shown_font(preset, font))
 
 
 def read_accent(preferences: object) -> str:
     """The saved accent name; anything this build does not know is Same as preset."""
-    value = preferences.get("accent") if isinstance(preferences, dict) else None
-    return value if isinstance(value, str) and value in ACCENTS else "default"
+    return str(flexweek_engine.views_theme_read_accent(preferences))
 
 
 def accented(
@@ -369,17 +330,9 @@ def accented(
 ) -> dict[str, str]:
     """`colours` with the accent's primary roles over the preset's. Same as preset, High contrast and a
     name this build does not know leave them as they are."""
-    seed = ACCENT_SEEDS.get(accent)
-    if seed is None or preset in ACCENT_LOCKED:
-        return colours
-    level = 1.0 if contrast_name == "high" else 0.0
-    tone = flexweek_engine.material_scheme(seed, "Tonal Spot", mode == "dark", level)
-    found = dict(colours)
-    for role in ("primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "inversePrimary"):
-        found[role] = tone[role]
-    found["secondaryContainer"] = mix(tone["primary"], found["surfaceContainer"], 0.16)
-    found["onSecondaryContainer"] = found["onSurface"]
-    return found
+    return json.loads(
+        flexweek_engine.views_theme_accented(json.dumps(colours), accent, preset, mode, contrast_name)
+    )
 
 
 def theme_object(
@@ -390,47 +343,11 @@ def theme_object(
     chips_accent: bool = False,
 ) -> dict[str, object]:
     """One map for every control: the Material roles, the ink aliases, and the three shell flags."""
-    theme: dict[str, object] = {role: colours[role] for role in THEME_ROLES}
-    for source, alias in INK_ALIASES.items():
-        theme[alias] = colours[source]
-    theme["density"] = density
-    theme["reduceMotion"] = reduce_motion
-    theme["highContrast"] = high_contrast
-
-    mode = "dark" if luminance(colours.get("surface", "#ffffff")) < 0.18 else "light"
-    card = (
-        colours.get("surfaceContainerLowest", "#ffffff")
-        if mode == "light"
-        else colours.get("surfaceContainerLow", "#14171c")
+    return json.loads(
+        flexweek_engine.views_theme_object(
+            json.dumps(colours), density, reduce_motion, high_contrast, chips_accent
+        )
     )
-    page = colours.get("surface", "#eef1f5" if mode == "light" else "#0b0d10")
-    edge = colours.get("outlineVariant", "#d4dce8" if mode == "light" else "#252a33")
-    theme["page"] = page
-    theme["card"] = card
-    theme["edge"] = edge
-    theme["focusRing"] = colours["primary"]
-
-    statuses = STATUS_COLORS[mode]
-    for key, val in statuses.items():
-        theme[key] = val
-        theme[f"{key}Tint"] = mix(val, card, 0.16)
-
-    theme["classes"] = {
-        cat: {
-            "bar": bar_for_category(cat),
-            "fill": paint_for_category(cat, mode)[0],
-            "ink": paint_for_category(cat, mode)[1],
-        }
-        for cat in SIX_CLASSES
-    }
-    if chips_accent:
-        # "Use the accent on category chips": every category wears the accent.
-        accent_fill = mix(colours["primary"], card, 0.14 if mode == "light" else 0.24)
-        theme["classes"] = {
-            cat: {"bar": colours["primary"], "fill": accent_fill, "ink": paint_for_category(cat, mode)[1]}
-            for cat in SIX_CLASSES
-        }
-    return theme
 
 
 def register_fonts() -> tuple[int, ...]:
@@ -708,14 +625,7 @@ def kept_material(path: Path) -> dict[str, Any] | None:
 
 def hour_row_px(density: str, advanced: dict[str, Any]) -> int:
     """The week row. An advanced hour replaces the density's row; anything else uses the density."""
-    hour = advanced.get("hour")
-    if isinstance(hour, int):
-        return hour
-    base = int(DENSITY[density if density in DENSITY else DEFAULT_DENSITY]["hour_row"])
-    scale = advanced.get("scale")
-    if isinstance(scale, (int, float)) and scale > 0:
-        return int(round(base * scale))
-    return base
+    return int(flexweek_engine.views_theme_hour_row_px(density, json.dumps(advanced)))
 
 
 def dress_theme(
@@ -723,45 +633,9 @@ def dress_theme(
 ) -> dict[str, Any]:
     """The theme object plus the advanced dials that actually differ from the components' own values,
     and the font. A preset's own font and corner are only defaults: the student's choice wins."""
-    dressed = dict(theme)
-    over = advanced_overrides(advanced)
-    body, heading = FONT_FAMILIES[shown_font(preset, font)]
-    dressed["fontFamily"] = body
-    dressed["headingFamily"] = heading
-    preset_corner = PRESET_LOOK.get(preset, {}).get("corner")
-    if "corner" in over:
-        dressed["corner"] = over["corner"]
-    elif preset_corner is not None:
-        dressed["corner"] = preset_corner
-    if "scale" in over:
-        dressed["typeScale"] = over["scale"]
-    if "shadow" in over:
-        dressed["shadow"] = over["shadow"]
-    if "block" in over:
-        dressed["blockStyle"] = over["block"]
-    if "lines" in over:
-        dressed["hourLines"] = over["lines"]
-    if "today" in over:
-        dressed["todayHighlight"] = over["today"]
-    if "times" in over:
-        dressed["showTimes"] = over["times"]
-    if "lengths" in over:
-        dressed["showLengths"] = over["lengths"]
-    if "rail" in over:
-        dressed["railLabels"] = over["rail"]
-    if "padding" in over:
-        dressed["cardPad"] = over["padding"]
-    if "now" in over:
-        dressed["nowLine"] = over["now"]
-    if advanced.get("motion") == "Off":
-        dressed["reduceMotion"] = True
-    # Normal is the components' own speed. Naming it on every theme would change the object a
-    # student has not touched.
-    if advanced.get("motion") not in (None, "Normal"):
-        dressed["motionSpeed"] = advanced["motion"]
-    for name, colour in (over.get("cat") or {}).items():
-        dressed["cat" + name[0].upper() + name[1:]] = colour
-    return dressed
+    return json.loads(
+        flexweek_engine.views_theme_dress_theme(json.dumps(theme), json.dumps(advanced), preset, font)
+    )
 
 
 def export_document(choice: dict[str, str], advanced: dict[str, Any]) -> str:
@@ -798,39 +672,4 @@ def reading_problems(mode: str, advanced: dict[str, Any]) -> list[dict[str, Any]
 
     Seed colours are not checked here. They belong to the palette generator, which is not in yet.
     """
-    problems: list[dict[str, Any]] = []
-    cats = advanced.get("cat") or {}
-    for key in CATEGORY_KEYS:
-        fill = cats.get(key)
-        if not isinstance(fill, str):
-            continue
-        _ground, ink = category_paint(_CATEGORY_ROLE[key], mode)
-        ratio = contrast(ink, fill)
-        if ratio >= 4.5:
-            continue
-        problems.append(
-            {
-                "words": f"{key} colour on its ink",
-                "role": key,
-                "ink": ink,
-                "ground": fill,
-                "ratio": round(ratio, 2),
-                "fixed": fit_lightness(fill, (ink,), 4.5),
-            }
-        )
-    now = advanced.get("now")
-    if isinstance(now, str):
-        surface = "#1a1c20" if mode == "dark" else "#ffffff"
-        ratio = contrast(now, surface)
-        if ratio < 3.0:
-            problems.append(
-                {
-                    "words": "now line on the page",
-                    "role": "now",
-                    "ink": now,
-                    "ground": surface,
-                    "ratio": round(ratio, 2),
-                    "fixed": fit_lightness(now, (surface,), 3.0),
-                }
-            )
-    return problems
+    return json.loads(flexweek_engine.views_theme_reading_problems(mode, json.dumps(advanced)))

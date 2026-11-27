@@ -38,6 +38,7 @@ mod session_views;
 mod session_week;
 mod sync;
 mod views_copy;
+mod views_theme;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
     match err.kind {
@@ -397,5 +398,6 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     desk_rest::add(m)?;
     sync::add(m)?;
     views_copy::add(m)?;
+    views_theme::add(m)?;
     Ok(())
 }
