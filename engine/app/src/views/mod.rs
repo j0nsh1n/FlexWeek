@@ -4,6 +4,7 @@
 //! operating system.
 
 pub mod copy;
+pub mod day;
 pub mod hours;
 pub mod look_file;
 pub mod sheet_rules;
