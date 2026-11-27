@@ -3,5 +3,7 @@
 //! clock, draws a random id, or asks the operating system.
 
 pub mod copy;
+pub mod sheet_block;
+pub mod sheet_preview;
 pub mod sheet_rules;
 pub mod theme;
