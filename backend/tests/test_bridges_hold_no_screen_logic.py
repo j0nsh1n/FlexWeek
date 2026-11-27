@@ -43,6 +43,9 @@ LOCKED: dict[str, dict[str, str]] = {
         "FocusBridge.show": "reads Qt's active focus item and the window's page, then emits Qt signals",
         "FocusBridge.hide": "emits Qt signals and hands the focus restore to a QTimer on the Qt loop",
     },
+    "desktop/native/material/sheet_homework.py": {
+        "HomeworkDraft._stamp": "reads the session wall clock as a local date and minute for the engine",
+    },
     "desktop/native/material/theme.py": {
         "tokens_path": "reads the computer's font and theme locations for the engine",
         "qml_path": "locates the QML files the Qt shell loads",
