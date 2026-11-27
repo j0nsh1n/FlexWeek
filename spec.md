@@ -652,7 +652,7 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   window's requests reach the Rust service through the session in Rust
   (`flexweek_engine.NativeCore`, P4); the local FastAPI server and `backend/app.py`
   are gone (P2).
-- Frameworks, pinned in `requirements.txt`: pytest 9.1.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
+- Frameworks, pinned in `requirements.txt`: pytest 9.1.1, ruff 0.16.6, mypy 2.3.1. Pydantic left with P4.
 - Storage: SQLite, in the user data folder for the app (or the file named by
   `--database`), with users,
   sessions, weeks keyed `(user_id, week_start)`, assignments keyed
@@ -669,8 +669,6 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
   without changing week revisions (`docs/stage1-contract.md`). Browser
   localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
-  - `backend/models.py`. Pydantic models (`TimeBlock`, `Move`, `SolveTrace`,
-    `Explanation`) and slot helpers. **Zero FastAPI imports.**
   - `engine/service` and its `desk_requests`. The window's requests by method and `/api/` path:
     authentication/ownership, the account rules, saves and `/api/solve`, answered in the app's process.
     No placement logic.
@@ -694,9 +692,6 @@ effects; Material's Qt Quick window paces its own animations. Nothing loops.
     not the HTTP API, and listens on no port. The open desktop app notices
     its changes within a few seconds and shows them without a restart,
     keeping any edits the student has not saved.
-  - `backend/solver.py`. Adapter to the engine's synchronous CSP placement. No
-    HTTP knowledge.
-  - `backend/explain.py`. Adapter: reason code and slack status to English string.
   - `backend/storage.py`. Adapter to the engine's store; `connect()` yields
     the store's connection.
   - `backend/data/demo_*.json`. Test-only anonymized seed weeks.

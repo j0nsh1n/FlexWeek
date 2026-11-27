@@ -382,33 +382,14 @@ areas = ["updater"]
 # --- Backend. The light app runs on the backend's storage and models, so those select every area.
 [[rule]]
 paths = [
-  "backend/__init__.py", "backend/storage.py", "backend/models.py",
-  "backend/clock.py", "backend/limits.py", "backend/weeks.py", "backend/data/",
+  "backend/__init__.py", "backend/storage.py",
+  "backend/clock.py", "backend/weeks.py", "backend/data/",
 ]
 everything = true
 
 [[rule]]
-paths = [
-  "backend/solver.py", "backend/slots.py", "backend/availability.py", "backend/comfort.py",
-  "backend/explain.py",
-]
+paths = ["backend/slots.py", "backend/comfort.py"]
 areas = ["backend", "planner"]
-
-[[rule]]
-paths = ["backend/day.py"]
-areas = ["backend", "day"]
-
-[[rule]]
-paths = ["backend/month.py"]
-areas = ["backend", "month"]
-
-[[rule]]
-paths = ["backend/assignments.py"]
-areas = ["backend", "sheets", "planner"]
-
-[[rule]]
-paths = ["backend/transfer.py", "backend/recovery.py", "backend/restore.py"]
-areas = ["backend", "account", "sync", "e2e"]
 
 # --- Engine. The core crate, the store and the Python binding feed every screen.
 [[rule]]

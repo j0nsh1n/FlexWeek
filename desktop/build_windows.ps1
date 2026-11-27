@@ -91,7 +91,7 @@ $NuitkaArgs = @(
     '--nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick',
     # Type-checking tools and uvicorn extras the app never used (it runs no server);
     # the same list as build_linux.sh.
-    '--nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml',
+    '--nofollow-import-to=mypy,uvloop,httptools,watchfiles,websockets,yaml',
     '--msvc=latest',
     '--noinclude-dlls=*.cpp.o',
     '--noinclude-dlls=*.qsb',

@@ -6,19 +6,9 @@ import ast
 from pathlib import Path
 
 BACKEND_MODULES = (
-    "assignments",
-    "availability",
     "comfort",
-    "day",
-    "explain",
-    "limits",
-    "month",
-    "recovery",
-    "restore",
     "slots",
-    "solver",
     "storage",
-    "transfer",
     "weeks",
 )
 DESKTOP_MODULES = (
@@ -169,9 +159,6 @@ def functions_of(tree: ast.AST, stays: set[str]) -> list[str]:
 # sit in these wrappers. Each line names the shape. A new shape, or an older one (a loop, arithmetic,
 # a comparison, a sort), is not listed and still fails.
 ALLOWED_FOR_NOW = {
-    ("assignments.prepare_solve", "branch"),  # a missing deadline stays None while decoding
-    ("availability.resolve_work_windows", "branch"),  # None windows stay None on the way in
-    ("solver._points", "branch"),  # a missing point stays None while encoding
     ("calendar.apply_block_times", "branch"),  # the engine's None answer stays None
     ("calendar.relocate_block", "branch"),  # None dest in, None answer out
     ("calendar.placement_on", "branch"),  # None trace in; the engine's flag becomes NOT_TODAY

@@ -19,7 +19,6 @@ SOURCES = (
     "desktop/native/hours/month.py",
     "desktop/native/hours/scale.py",
     "desktop/native/window.py",
-    "backend/month.py",
 )
 MATERIAL_SOURCES = (
     "desktop/native/material/qml/month",

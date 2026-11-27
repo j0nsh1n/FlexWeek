@@ -177,7 +177,7 @@ rust = [
     "flexweek-engine::test_assignment_models::a_break_chunk_or_a_fixed_block_cannot_be_a_homework_session",
     "flexweek-engine::test_assignment_models::a_flexible_session_and_a_pomodoro_work_chunk_can_be_homework_sessions",
 ]
-red = "a finished homework without its finish time, a session with a latest time, estimates off the 15-minute step and an unknown homework field each accepted by hand: each fails its test (2026-11-22). Its check that backend/models.py does not import FastAPI goes with that file in P2"
+red = "a finished homework without its finish time, a session with a latest time, estimates off the 15-minute step and an unknown homework field each accepted by hand: each fails its test (2026-11-22). The check that backend/models.py did not import FastAPI went with that file when P4 removed it"
 
 [[port]]
 python = "backend/tests/test_shown_week_api.py"

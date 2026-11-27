@@ -1,7 +1,7 @@
-"""The window checks blocks and homework with the engine (engine/service/src/blocks.rs and homework_saves.rs),
-not pydantic: through the binding, as JSON text, each case of the two parity corpora (made with the real
-pydantic models) is refused where pydantic refused it and written exactly as pydantic wrote it. The homework
-fields the window keeps are the model's."""
+"""The window checks blocks and homework with the engine (engine/service/src/blocks.rs and homework_saves.rs):
+through the binding, as JSON text, each case of the two parity corpora (frozen from the old pydantic models)
+is refused where that model refused it and written exactly as that model wrote it. The homework fields the
+window keeps are the engine's, in its order."""
 
 from __future__ import annotations
 
@@ -11,8 +11,29 @@ from pathlib import Path
 import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 
-from backend.models import Assignment
 from desktop.native.controller import HOMEWORK_FIELDS, _checked_block, _checked_homework
+
+# Assignment content in the engine's order (validate.rs ASSIGNMENT_FIELDS), then the save's revision.
+HOMEWORK_FIELD_ORDER = (
+    "id",
+    "title",
+    "course",
+    "category",
+    "priority",
+    "energy",
+    "spotify_url",
+    "due",
+    "estimate_min",
+    "spread",
+    "focus_minutes",
+    "focus_sessions",
+    "completed",
+    "completed_at",
+    "notes",
+    "links",
+    "checklist",
+    "revision",
+)
 
 FIXTURES = Path(__file__).resolve().parents[2] / "engine/service/tests/fixtures"
 
@@ -53,6 +74,6 @@ def test_a_refused_block_or_homework_raises_value_error() -> None:
         _checked_homework({"id": "essay", "title": "Essay", "revision": 0})
 
 
-def test_the_homework_fields_are_the_models_in_its_order() -> None:
-    assert flexweek_engine.homework_fields() == list(Assignment.model_fields)
-    assert set(HOMEWORK_FIELDS) == set(Assignment.model_fields)
+def test_the_homework_fields_follow_the_engine() -> None:
+    assert flexweek_engine.homework_fields() == list(HOMEWORK_FIELD_ORDER)
+    assert set(HOMEWORK_FIELDS) == set(HOMEWORK_FIELD_ORDER)

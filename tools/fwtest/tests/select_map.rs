@@ -410,8 +410,8 @@ fn an_area_file_selects_its_area_and_the_unmoved_desktop_files() {
     assert_eq!(focus.pictures, ["focus"]);
     let week_test = map.select(&paths(&["desktop/tests/week/test_drag_a_block.py"]));
     assert_eq!(week_test.areas, ["week", "unmoved"]);
-    let solver = map.select(&paths(&["backend/solver.py"]));
-    assert_eq!(solver.areas, ["planner", "backend", "unmoved"]);
+    let slots = map.select(&paths(&["backend/slots.py"]));
+    assert_eq!(slots.areas, ["planner", "backend", "unmoved"]);
     let backend_test = map.select(&paths(&["backend/tests/test_api.py"]));
     assert_eq!(backend_test.areas, ["backend"]);
 }

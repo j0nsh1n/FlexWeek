@@ -140,7 +140,7 @@ def test_a_chunk_of_a_tracked_assignment_takes_the_assignment_title_back(
     qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
 ) -> None:
     """Not a defect in the split, and not something to fix here: the server rewrites the title of
-    every block carrying an assignment_id (rewrite_session in backend/assignments.py), so the web's
+    every block carrying an assignment_id (the engine rewrites the title), so the web's
     chunks are renamed in exactly the same way. Dropping the id to keep the number would stop focus
     time being credited to the assignment, which matters more than the label."""
     session = session_in_the_planned_week(open_light, clock)

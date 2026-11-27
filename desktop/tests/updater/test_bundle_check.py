@@ -107,11 +107,10 @@ def test_windows_bundle_needs_the_vc_runtime_but_not_system_icu() -> None:
     assert windows_problems(binaries, {"qt6core.dll", "msvcp140.dll"}) == []
 
 
-def test_windows_qt_and_pydantic_use_system_dlls() -> None:
+def test_windows_qt_and_the_engine_use_system_dlls() -> None:
     binaries = {
         "PySide6/qt-plugins/platforms/qwindows.dll": ["USER32.dll", "uiautomationcore.dll"],
         "PySide6/qt-plugins/platforms/qdirect2d.dll": ["uiautomationcore.dll"],
-        "pydantic_core/_pydantic_core.pyd": ["KERNEL32.dll", "bcryptprimitives.dll"],
         # 1.0.0's engine syncs through iroh, which links the COM runtime (the v1.0.0 Windows build
         # stopped on it).
         "flexweek_engine/flexweek_engine.pyd": ["combase.dll", "ws2_32.dll", "iphlpapi.dll"],

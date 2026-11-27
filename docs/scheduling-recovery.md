@@ -37,7 +37,7 @@ placement ids must be unique. Invalid recovery requests return 422.
 ## Solve trace
 
 The trace adds `explanations`. Each explanation identifies a block and carries
-student-facing text authored by `backend/explain.py`. It may also carry a
+student-facing text from the engine (`sentence` and `slack_sentence` in `engine/engine/src/solver.rs` and `engine/engine/src/plan.rs`). It may also carry a
 reason code or deadline slack:
 
 ```json
