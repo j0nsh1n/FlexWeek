@@ -573,6 +573,29 @@ fn the_longest_allowed_length_is_a_whole_day() {
 }
 
 #[test]
+fn an_extreme_length_on_a_fixed_time_is_refused_without_overflowing() {
+    let world = world();
+    let mut draft = new_sheet(&world);
+    typed(&mut draft, &world, "Huge essay");
+    assert!(!draft.advance(&world.env()).unwrap());
+    assert_eq!(shown(&draft, &world)["step"], 1);
+    assert!(!draft.advance(&world.env()).unwrap());
+    assert_eq!(shown(&draft, &world)["step"], 2);
+    put(&mut draft, &world, "estimate", json!("99999999999999999999"));
+    draft.back();
+    put(&mut draft, &world, "when", json!("fixed"));
+    put(&mut draft, &world, "whenDay", json!(4));
+    put(&mut draft, &world, "whenTime", json!("10:00"));
+    assert!(!draft.advance(&world.env()).unwrap());
+    let form = shown(&draft, &world);
+    assert_eq!(form["step"], 1);
+    assert_eq!(
+        form["whenProblem"],
+        "FlexWeek can't use that time, so the block stayed where it was."
+    );
+}
+
+#[test]
 fn a_length_problem_follows_what_is_typed_once_it_has_been_shown() {
     let world = world();
     let mut draft = at_length(&world, "10");
@@ -1022,11 +1045,13 @@ fn the_due_time_choices_start_with_end_of_day() {
 
 #[test]
 fn quarter_hours_lists_every_mark_of_the_step() {
+    set_clock_24h(false);
     let fifteen = quarter_hours(15).unwrap();
     assert_eq!(fifteen.as_array().unwrap().len(), 96);
     assert_eq!(fifteen[0], json!({"value": "00:00", "label": "12:00 AM"}));
     assert_eq!(fifteen[67], json!({"value": "16:45", "label": "4:45 PM"}));
     assert_eq!(quarter_hours(5).unwrap().as_array().unwrap().len(), 288);
+    assert!(quarter_hours(-15).unwrap().as_array().unwrap().is_empty());
     assert!(quarter_hours(0).is_err());
 }
 

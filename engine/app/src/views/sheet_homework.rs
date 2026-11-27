@@ -224,8 +224,11 @@ fn add_days(iso: &str, count: i64) -> EngineResult<String> {
 }
 
 fn quarter_hours_of(step: i64) -> EngineResult<Vec<Value>> {
-    if step <= 0 {
+    if step == 0 {
         return Err(EngineError::value("range() arg 3 must not be zero"));
+    }
+    if step < 0 {
+        return Ok(Vec::new());
     }
     let mut marks = Vec::new();
     let mut minute = 0;
@@ -671,7 +674,7 @@ impl HomeworkDraft {
             Some((day, minute)) => (json!([day, minute]), "tuple"),
             None => (Value::Null, "NoneType"),
         };
-        let found = span_problem(fixed.0, start, start + length, &limit, kind)?;
+        let found = span_problem(fixed.0, start, start.saturating_add(length), &limit, kind)?;
         Ok(found
             .unwrap_or_default()
             .replace(", so it stayed where it was", ""))
