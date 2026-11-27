@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- A running focus timer survives closing FlexWeek: reopen and sign in, and it carries on, with work or a break that ran out while closed handled as before.
 - Settings > This computer has a Sign out row under Account, with who is signed in. Account now reads "Name, password, recovery codes and your files."
 - Settings > Phone & sync is now its own section under This computer, with a single colored sync status word (Synced, Syncing, Not synced or Not linked), separate clock-warning and problem lines, linked phones with red-outlined Remove buttons, and a summary of what syncs vs what stays on each device.
 - Pair a phone opens a centered pop-up with a computer-and-phone graphic, two large 4-character code tiles, a live 5-minute countdown bar, tries left, Copy code, Start a new code, three numbered steps, and the n0 relay note.
@@ -33,6 +34,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - Deleting School or another weekly fixed time for this week, or for one day, frees up those days in the calendar and planner. Days marked missed stay marked missed, and Undo brings the deleted days back.
 - An update that is ready to install saves your week first. If the save fails, the update waits and the app says why.
+- Mark finished on a focus timer from another week takes one press: it opens that week and finishes the homework once the week has loaded.
+- Flipping two Settings switches quickly keeps both; a change that fails to save goes back and says so, and later changes still save.
+- Dragging one day of School says to open School hours to change every week (it pointed to Setup).
 - Signing out while Settings is open no longer brings the next account back to Settings with the old account's unsaved changes.
 - Plan notices count sessions without calling every Study task homework. Setup's Spotify test says only that FlexWeek opened the link, phone contact stays "Last seen on", and the Delete retry, task-splitting, unfinished-drawer, saved-copy, sign-in and assistant date wording matches what each action does.
 - Settings > Alerts: the reminder notes now say "if the track doesn't play" and "until it's handled", in the app's usual wording.
