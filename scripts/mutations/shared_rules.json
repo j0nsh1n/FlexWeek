@@ -35,11 +35,11 @@
   "test": "desktop/tests/week/test_material_shared_rules.py::test_a_notice_loses_its_undo_when_a_later_change_is_saved"
  },
  {
-  "file": "desktop/native/hours/month_cells.py",
+  "file": "engine/app/src/views/month.rs",
   "name": "the open week read from the reply, not what the student has now",
-  "old": "        if iso in open_days:\n",
-  "new": "        if False:\n",
-  "test": "desktop/tests/month/test_month_dates_and_chips.py::test_the_open_week_is_read_from_what_the_student_has_now_not_from_the_reply"
+  "old": "        if let Some(open_items) = open_days.get(&iso) {\n",
+  "new": "        if let Some(open_items) = Option::<&Vec<&OpenOccurrence>>::None {\n",
+  "test": "cargo:flexweek-app:views_month:the_open_week_is_read_from_what_the_student_has_now_not_from_the_reply"
  },
  {
   "file": "desktop/native/material/sheet_homework.py",
