@@ -7,9 +7,12 @@ and checks the Widgets sheets use. This module does not touch HTTP, SQL, or the 
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
+from functools import partial
 from typing import Any
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
@@ -18,16 +21,12 @@ from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
-    FLEX_CATEGORIES,
-    block_family,
     day_full_names,
     day_names,
-    is_standing_block,
     routine_on_week,
-    sunday_due,
 )
 from desktop.native.fields import announce
-from desktop.native.hours.geometry import drag_step, next_slot
+from desktop.native.hours.geometry import next_slot
 from desktop.native.hours.words import detail_words, plan_placed
 from desktop.native.material.bridge_alarms import FULL, MAX_ALARMS, NOT_SAVED, AlarmDraft, with_alarm
 from desktop.native.material.bridge_info import SIGN_OUT, about_form, help_form, update_form
@@ -41,11 +40,11 @@ from desktop.native.material.bridge_manage import (
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
 from desktop.native.material.sheet_preview import PreviewDraft
+from desktop.native.remind import clock_parts
 from desktop.native.reuse import (
     LATE_MINUTES,
     late_from_start,
     late_locked_line,
-    restore_point_label,
     running_late_refusal,
 )
 from desktop.native.sheet_rules import (
@@ -58,46 +57,44 @@ from desktop.native.sheet_rules import (
     same_weekday,
     turn_days_keeping_weekdays,
 )
-from desktop.native.weekmodel import added_words, hhmm_text, length_label
+from desktop.native.weekmodel import hhmm_text, length_label
 
-NOTHING_UNFINISHED = "None left"
-NOTICE_MS = 10000
-WAIT_SAVE = "Saving your last change… Try Save again in a moment."
-WAIT_DELETE = "Saving your last change… Try Delete again in a moment."
-UNDO_ALSO = "Undo also takes back anything changed after it."
-MAX_NAMED_WEEKS = 3
-DISCARD = {
-    "id": "discard",
-    "title": "Discard your changes?",
-    "body": "Your changes will be lost.",
-    "answers": [
-        {"id": "keep", "label": "Keep editing", "kind": "text"},
-        {"id": "discard", "label": "Discard", "kind": "danger"},
-    ],
-}
+_WORDS = json.loads(flexweek_engine.sheets_words())
+NOTHING_UNFINISHED = _WORDS["nothing_unfinished"]
+NOTICE_MS = _WORDS["notice_ms"]
+WAIT_SAVE = _WORDS["wait_save"]
+WAIT_DELETE = _WORDS["wait_delete"]
+UNDO_ALSO = _WORDS["undo_also"]
+MAX_NAMED_WEEKS = _WORDS["max_named_weeks"]
+SAVED_ALARM = _WORDS["saved_alarm"]
+DELETED_ALARM = _WORDS["deleted_alarm"]
+DISCARD = _WORDS["discard"]
 
 
 def doubled_words(name: str, weeks: list[str], today: date) -> str:
     """Where a new weekly time sits twice: at most three weeks named, then "and N more"."""
+    return flexweek_engine.sheets_doubled_words(name, weeks, today.isoformat())
 
-    def label(week: str) -> str:
-        day = date.fromisoformat(week)
-        text = f"{day.day} {day.strftime('%b')}"
-        return text if day.year == today.year else f"{text} {day.year}"
 
-    named = [label(week) for week in weeks[:MAX_NAMED_WEEKS]]
-    more = len(weeks) - MAX_NAMED_WEEKS
-    if more > 0:
-        listed = ", ".join(named) + f" and {more} more"
-    elif len(named) > 1:
-        listed = ", ".join(named[:-1]) + f" and {named[-1]}"
-    else:
-        listed = named[0]
-    one = len(weeks) == 1
-    return (
-        f"{name} also sits on its own in the {'week' if one else 'weeks'} of {listed}, so it shows twice "
-        f"there. Delete the extra one in {'that week' if one else 'those weeks'} if you don't want both."
-    )
+def _nothing() -> None:
+    return None
+
+
+def _never() -> bool:
+    return False
+
+
+def _invoke(callback: Any) -> Any:
+    return callback()
+
+
+def _dirty(draft: Any) -> bool:
+    """Whether a draft holds typed work that closing would lose; no draft holds none."""
+    return getattr(draft, "dirty", _never)()
+
+
+def _title_of(draft: Any) -> Any:
+    return getattr(draft, "original", {}).get("title")
 
 
 # The More menu, in one place: id, words, icon.
@@ -129,6 +126,21 @@ class SheetsBridge(QObject):
     changed = Signal()
     dragRangeCanceled = Signal()
 
+    _doubled_waiting: list[str] | None
+    _homework: HomeworkDraft | None
+    _block: BlockDraft | None
+    _alarm: AlarmDraft | None
+    _update: dict | None
+    _update_waiting: tuple | None
+    _ask_handlers: dict[str, Any] | None
+    _preview: PreviewDraft | None
+    _kept_homework: HomeworkDraft | None
+    _kept_block: BlockDraft | None
+    _late_from: datetime | None
+    _late_running: dict | None
+    _late_waiting: tuple[str, str] | None
+    _noted: str | None
+
     def __init__(self, window: QObject, parent: QObject) -> None:
         super().__init__(parent)
         self.setObjectName("sheetsBridge")
@@ -148,38 +160,38 @@ class SheetsBridge(QObject):
         self._saving_repeat = ""
         self._restore_words = ""
         self._doubled_name = ""
-        self._doubled_waiting: list[str] | None = None
-        self._homework: HomeworkDraft | None = None
-        self._block: BlockDraft | None = None
-        self._alarm: AlarmDraft | None = None
+        self._doubled_waiting = None
+        self._homework = None
+        self._block = None
+        self._alarm = None
         # The update sheet: what was found, the window's answers to it, and how the download is going.
-        self._update: dict | None = None
+        self._update = None
         self._update_current = ""
         self._update_install: Any = None
         self._update_finished: Any = None
         self._update_skip = False
         self._update_state: dict = {}
         # An update found while another sheet is open waits for it to close, so no typing is lost.
-        self._update_waiting: tuple | None = None
+        self._update_waiting = None
         self._sign_out_done: Any = None
         # The Account and Restore points sheets: the answer to a prompt that is up, what the student picked
         # in the list, the name typed for a new copy, and the last thing the session said.
-        self._ask_handlers: dict[str, Any] | None = None
-        self._preview: PreviewDraft | None = None
+        self._ask_handlers = None
+        self._preview = None
         self._restore_selected = ""
         self._restore_label = ""
         self._manage_note = ""
         self._account_actions = AccountActions(window, self._ask_then, self._close)
         # What was typed into a new Add sheet that Esc closed, kept for the next Add of that kind.
-        self._kept_homework: HomeworkDraft | None = None
-        self._kept_block: BlockDraft | None = None
+        self._kept_homework = None
+        self._kept_block = None
         self._late_minutes = 30
-        self._late_from: datetime | None = None
+        self._late_from = None
         self._late_from_start = ""
         self._pending_delete = ""
-        self._late_running: dict | None = None
+        self._late_running = None
         self._late_error = ""
-        self._late_waiting: tuple[str, str] | None = None
+        self._late_waiting = None
         self._routine_id = ""
         self._routine_days: list[int] = []
         # The open week the numbers in _routine_days count from.
@@ -192,7 +204,10 @@ class SheetsBridge(QObject):
         self._routine_touched = False
         self._routine_error = ""
         # The moved-day note the open sheet last showed; None until the sheet's first showing.
-        self._noted: str | None = None
+        self._noted = None
+        # What runs once the sheet is published again, and the figures a spread save took before it wrote.
+        self._after: list = []
+        self._spread_plan: Any = None
         self._paused = False
         self._held = False
         self._remaining_ms = NOTICE_MS
@@ -243,32 +258,43 @@ class SheetsBridge(QObject):
 
     @Property(bool, notify=changed)
     def active(self) -> bool:
-        return bool(self._kind) or self._more or bool(self._ask) or self._drag_range_active
+        return self._plan(
+            "active", kind=self._kind, more=self._more, ask_open=bool(self._ask), drag=self._drag_range_active
+        )
 
     @Slot(bool)
     def setDragRangeActive(self, active: bool) -> None:
-        if self._drag_range_active != active:
-            self._drag_range_active = active
-            self.changed.emit()
+        self._run(self._plan("drag_range", current=self._drag_range_active, active=active))
 
     @Property(bool, notify=changed)
     def canSave(self) -> bool:
         session = self._session
-        return (
-            session is not None and not session.busy and session.pending_save is None and not session.conflict
+        return self._plan(
+            "can_save",
+            no_session=session is None,
+            busy=bool(getattr(session, "busy", False)),
+            pending_save=getattr(session, "pending_save", None) is not None,
+            conflict=bool(getattr(session, "conflict", False)),
         )
+
+    def _wait_for_write(self, words: str) -> tuple | None:
+        """Shows the wait notice and returns its steps while a write is still in flight; None when the
+        write may go ahead."""
+        steps = self._plan("hold", can_save=self.canSave, words=words)
+        if steps is None:
+            return None
+        return self._run(steps)
 
     def _hold_for_save(self, words: str = WAIT_SAVE) -> bool:
         """True when a write is still in flight. The draft stays; Save stays off."""
-        if self.canSave:
-            return False
-        self._say(words)
-        self._publish()
-        return True
+        return self._wait_for_write(words) is not None
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def moreEntries(self) -> list:
-        return self._more_entries() if self._more else []
+        return getattr(self, self._plan("more_source", more=self._more))()
+
+    def _no_entries(self) -> list:
+        return []
 
     @Property(str, notify=changed)
     def notice(self) -> str:
@@ -278,8 +304,48 @@ class SheetsBridge(QObject):
     def noticeUndo(self) -> bool:
         return self._notice_undo
 
-    # Opening and closing ----------------------------------------------------------------
+    # What the Rust sheet rules decide ---------------------------------------------------
 
+    def _plan(self, op: str, **facts: Any) -> Any:
+        """What the sheet rules say to do for `op`, given the facts held here: steps to run, or an answer."""
+        return json.loads(flexweek_engine.sheets_plan(op, json.dumps(facts)))
+
+    def _run(self, steps: list) -> tuple:
+        return tuple(map(self._step, steps))
+
+    def _step(self, step: dict) -> Any:
+        """One call the rules asked for, on the object they named."""
+        targets = {
+            "bridge": self,
+            "session": self._session,
+            "window": self._window,
+            "timer": self._timer,
+            "changed": self.changed,
+            "alarm": self._alarm,
+            "block": self._block,
+            "preview": self._preview,
+        }
+        return getattr(targets[step["on"]], step["call"])(*step["args"], **step["kwargs"])
+
+    def _later(self, callback: Any) -> None:
+        """Keeps `callback` to run once the sheet has been published again."""
+        if callback is not None:
+            self._after.append(callback)
+
+    def _flush_after(self) -> None:
+        callbacks, self._after = self._after, []
+        tuple(map(_invoke, callbacks))
+
+    def _defer_edited(self, answer: Any) -> None:
+        """Takes the edited-weeks question's callback; it is answered once the sheet is published again."""
+        done, self._edited_done = self._edited_done, None
+        if done is not None:
+            self._after.append(partial(done, answer))
+
+    def _defer_update_finish(self) -> None:
+        self._later(self._finish_update())
+
+    # Opening and closing ----------------------------------------------------------------
     def _open(self, kind: str) -> None:
         self._kind = kind
         self._more = False
@@ -290,9 +356,11 @@ class SheetsBridge(QObject):
         self._publish()
 
     def _close(self) -> None:
-        late = self._kind == "late"
-        done, self._edited_done = self._edited_done, None
-        update_done = self._finish_update() if self._kind == "update" else None
+        plan = self._plan(
+            "close", kind=self._kind, late_preview=getattr(self._session, "late_preview", None) is not None
+        )
+        self._defer_edited(None)
+        self._run(plan["before"])
         self._kind = ""
         self._ask = {}
         self._ask_handlers = None
@@ -302,69 +370,65 @@ class SheetsBridge(QObject):
         self._block = None
         self._alarm = None
         self._preview = None
-        session = self._session
-        if late and session is not None and session.late_preview is not None:
-            session.late_preview = None
-            session._say("")
+        self._run(plan["clear"])
         self._publish()
-        if done is not None:
-            done(None)
-        if update_done is not None:
-            update_done()
+        self._flush_after()
 
     @Slot()
     def openHomework(self) -> None:
         session = self._session
-        if session is None or session.account is None:
+        plan = self._plan(
+            "open_homework",
+            account=getattr(session, "account", None) is not None,
+            armed=getattr(session, "armed_category", None),
+        )
+        if plan is None:
             return
-        category = session.armed_category
-        if category not in FLEX_CATEGORIES:
-            category = "assignments"
         kept, self._kept_homework = self._kept_homework, None
-        if kept is not None:
+        if kept is None:
+            self._homework = HomeworkDraft(session, category=plan["category"])
+        else:
             kept.read_clock()
-            kept.follow_week(HomeworkDraft(session, category=category).when_day)
-        self._homework = kept or HomeworkDraft(session, category=category)
+            kept.follow_week(HomeworkDraft(session, category=plan["category"]).when_day)
+            self._homework = kept
         self._open("homework")
 
     @Slot(int, int, int)
     def openHomeworkAt(self, day: int, start_min: int, end_min: int) -> None:
         session = self._session
-        if session is None or session.account is None:
-            return
-        if start_min > end_min:
-            start_min, end_min = end_min, start_min
-        duration = end_min - start_min
-        if duration < 15:
-            return
-        category = session.armed_category
-        if category not in FLEX_CATEGORIES:
-            category = "assignments"
-        due = sunday_due(session.week_start) if session.week_start else None
-        start_hhmm = f"{start_min // 60:02d}:{start_min % 60:02d}"
-        kept, self._kept_homework = self._kept_homework, None
-        if kept is not None:
-            kept.read_clock()
-            kept.follow_week(HomeworkDraft(session, category=category).when_day)
-            kept.use_picked(day, start_hhmm)
-            self._homework = kept
-            self._open("homework")
-            return
-        self._homework = HomeworkDraft(
-            session,
-            category=category,
-            due=due,
-            when="fixed",
-            when_day=day,
-            when_time=start_hhmm,
-            estimate_min=duration,
+        plan = self._plan(
+            "open_homework_at",
+            account=getattr(session, "account", None) is not None,
+            armed=getattr(session, "armed_category", None),
+            week_start=getattr(session, "week_start", None),
+            day=day,
+            start_min=start_min,
+            end_min=end_min,
         )
+        if plan is None:
+            return
+        kept, self._kept_homework = self._kept_homework, None
+        if kept is None:
+            self._homework = HomeworkDraft(
+                session,
+                category=plan["category"],
+                due=plan["due"],
+                when="fixed",
+                when_day=plan["day"],
+                when_time=plan["start"],
+                estimate_min=plan["duration"],
+            )
+        else:
+            kept.read_clock()
+            kept.follow_week(HomeworkDraft(session, category=plan["category"]).when_day)
+            kept.use_picked(plan["day"], plan["start"])
+            self._homework = kept
         self._open("homework")
 
     @Slot(str)
     def editHomework(self, assignment_id: str) -> None:
         session = self._session
-        assignment = None if session is None else session.assignments.get(assignment_id)
+        assignment = getattr(session, "assignments", {}).get(assignment_id)
         if assignment is None:
             return
         self._homework = HomeworkDraft(session, assignment)
@@ -373,135 +437,152 @@ class SheetsBridge(QObject):
     @Slot()
     def openBlock(self) -> None:
         session = self._session
-        if session is None or session.account is None:
+        plan = self._plan(
+            "open_block",
+            account=getattr(session, "account", None) is not None,
+            armed=getattr(session, "armed_category", None),
+        )
+        if plan is None:
             return
         day, start = self._new_event_values()
-        category = session.armed_category
         kept, self._kept_block = self._kept_block, None
-        fresh = BlockDraft(
-            session, day=day, start=start, category=None if category in FLEX_CATEGORIES else category
-        )
-        if kept is not None:
+        fresh = BlockDraft(session, day=day, start=start, category=plan["category"])
+        if kept is None:
+            self._block = fresh
+        else:
             kept.follow_week(fresh.days)
-        self._block = kept or fresh
+            self._block = kept
         self._open("block")
 
     @Slot(int, int, int)
     def openBlockAt(self, day: int, start_min: int, end_min: int) -> None:
         """Add fixed time for a time picked on the grid: that day, that start, that length."""
         session = self._session
-        if session is None or session.account is None:
-            return
-        start_min, end_min = sorted((start_min, end_min))
-        # One step is the shortest block a draw makes, as in the Widgets grid.
-        if end_min - start_min < drag_step((session.preferences or {}).get("drag_step_min")):
-            return
-        category = session.armed_category
-        kept, self._kept_block = self._kept_block, None
-        if kept is not None:
-            kept.follow_week(BlockDraft(session, day=day).days)
-            kept.use_picked(day, f"{start_min // 60:02d}:{start_min % 60:02d}", end_min - start_min)
-            self._block = kept
-            self._open("block")
-            return
-        self._block = BlockDraft(
-            session,
+        plan = self._plan(
+            "open_block_at",
+            account=getattr(session, "account", None) is not None,
+            armed=getattr(session, "armed_category", None),
+            preferences=getattr(session, "preferences", None),
             day=day,
-            start=f"{start_min // 60:02d}:{start_min % 60:02d}",
-            length=end_min - start_min,
-            category=None if category in FLEX_CATEGORIES else category,
+            start_min=start_min,
+            end_min=end_min,
         )
+        if plan is None:
+            return
+        kept, self._kept_block = self._kept_block, None
+        if kept is None:
+            self._block = BlockDraft(
+                session,
+                day=plan["day"],
+                start=plan["start"],
+                length=plan["length"],
+                category=plan["category"],
+            )
+        else:
+            kept.follow_week(BlockDraft(session, day=plan["day"]).days)
+            kept.use_picked(plan["day"], plan["start"], plan["length"])
+            self._block = kept
         self._open("block")
 
     @Slot(str, int)
     def editBlock(self, block_id: str, day: int) -> None:
         """A block on the week: homework opens Edit homework, a fixed time opens Edit fixed time."""
         session = self._session
-        block = next((item for item in session.blocks if item["id"] == block_id), None) if session else None
-        if block is None:
-            return
-        assignment_id = block.get("assignment_id")
-        if assignment_id and assignment_id in session.assignments:
-            self.editHomework(assignment_id)
-            return
-        if block.get("kind") != "locked":
-            return
-        self._block = BlockDraft(session, block, occurrence_day=day if day >= 0 else None)
+        self._run(
+            self._plan(
+                "edit_block",
+                blocks=getattr(session, "blocks", None),
+                assignment_ids=list(getattr(session, "assignments", ())),
+                block_id=block_id,
+                day=day,
+            )
+        )
+
+    def _edit_block_draft(self, block: dict, occurrence_day: int | None) -> None:
+        self._block = BlockDraft(self._session, block, occurrence_day=occurrence_day)
         self._open("block")
 
     @Slot(str, int)
     def askDeleteBlock(self, block_id: str, day: int) -> None:
         """Delete from a fixed time's menu: the Edit sheet's own question, with no sheet behind it."""
         session = self._session
-        block = next((item for item in session.blocks if item["id"] == block_id), None) if session else None
-        if block is None or block.get("kind") != "locked" or block.get("assignment_id"):
-            return
-        self._block = BlockDraft(session, block, occurrence_day=day if day >= 0 else None)
+        self._run(
+            self._plan(
+                "ask_delete_block",
+                blocks=getattr(session, "blocks", None),
+                block_id=block_id,
+                day=day,
+            )
+        )
+
+    def _ask_delete_draft(self, block: dict, occurrence_day: int | None) -> None:
+        self._block = BlockDraft(self._session, block, occurrence_day=occurrence_day)
         self._ask = self._block.delete_question()
         self._publish()
 
     def _new_event_values(self) -> tuple[int, str]:
         """The next quarter hour still ahead today, or the usual 16:00 on another week."""
         session = self._session
-        now = datetime.fromtimestamp(session.now_ms() / 1000)
-        today = session.today_column(now.date().isoformat())
-        if today is None:
-            return 0, "16:00"
-        ahead, slot = next_slot(now.hour * 60 + now.minute)
-        if today + ahead > 6:
-            return 0, "16:00"
-        return today + ahead, f"{slot // 60:02d}:{slot % 60:02d}"
+        now = clock_parts(session.now_ms())
+        day, start = self._plan(
+            "new_event_values", today_column=session.today_column(now["iso"]), minute=now["minute"]
+        )
+        return day, start
 
     @Slot()
     def closeSheet(self) -> None:
         """Esc, Cancel and a tap on the scrim. A sheet with typed work asks before dropping it."""
-        if self._drag_range_active:
-            self._drag_range_active = False
-            self.dragRangeCanceled.emit()
-            self.changed.emit()
-            return
-        if self._ask:
-            edited = self._ask.get("id") == "edited-weeks"
-            done, self._edited_done = self._edited_done, None
-            self._sign_out_done = None
-            handlers, self._ask_handlers = self._ask_handlers, None
-            self._ask = {}
-            self._publish()
-            if edited and done is not None:
-                done(None)
-            elif handlers is not None and "dismiss" in handlers:
-                handlers["dismiss"]()
-            return
-        draft = self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
-        if draft is not None and draft.dirty():
-            self._ask = dict(DISCARD)
-            self._publish()
-            return
-        if self._kind == "alarm" and self._alarm is not None and self._alarm.dirty():
-            self._ask = dict(DISCARD)
-            self._publish()
-            return
-        self._close()
+        self._run(
+            self._plan(
+                "close_sheet",
+                drag_active=self._drag_range_active,
+                ask=self._ask,
+                kind=self._kind,
+                done=self._edited_done is not None,
+                handlers=list(getattr(self._ask_handlers, "keys", tuple)()),
+                homework_dirty=_dirty(self._homework),
+                block_dirty=_dirty(self._block),
+                alarm_dirty=_dirty(self._alarm),
+            )
+        )
+
+    def _cancel_drag(self) -> None:
+        self._drag_range_active = False
+        self.dragRangeCanceled.emit()
+        self.changed.emit()
+
+    def _dismiss_ask(self, which: str) -> None:
+        """Esc on a prompt: the question's own callback, if it has one, runs once the sheet is published."""
+        done, self._edited_done = self._edited_done, None
+        self._sign_out_done = None
+        handlers, self._ask_handlers = self._ask_handlers, None
+        self._ask = {}
+        self._publish()
+        callbacks = {"done": lambda: done(None), "dismiss": lambda: handlers["dismiss"](), "none": _nothing}
+        callbacks[which]()
 
     @Slot()
     def escapeSheet(self) -> None:
         """Esc. A new Add sheet with typed work closes at once and keeps it for the next Add of its kind;
         anything else (Cancel, a tap on the scrim, an Edit sheet) goes through closeSheet."""
         draft = self._draft()
-        if (
-            draft is not None
-            and not draft.existing
-            and draft.dirty()
-            and not self._drag_range_active
-            and not self._ask
-        ):
-            if self._kind == "homework":
-                self._kept_homework = self._homework
-            else:
-                self._kept_block = self._block
-            self._close()
-            return
-        self.closeSheet()
+        self._run(
+            self._plan(
+                "escape_sheet",
+                has_draft=draft is not None,
+                existing=bool(getattr(draft, "existing", False)),
+                dirty=_dirty(draft),
+                drag_active=self._drag_range_active,
+                ask=self._ask,
+                kind=self._kind,
+            )
+        )
+
+    def _keep_homework(self) -> None:
+        self._kept_homework = self._homework
+
+    def _keep_block(self) -> None:
+        self._kept_block = self._block
 
     @Slot()
     def forceClose(self) -> None:
@@ -510,7 +591,7 @@ class SheetsBridge(QObject):
     # Add and edit -----------------------------------------------------------------------
 
     def _draft(self) -> HomeworkDraft | BlockDraft | None:
-        return self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
+        return {"homework": self._homework, "block": self._block}.get(self._kind)
 
     def _set(self, name: str, value: Any) -> None:
         draft = self._draft()
@@ -542,10 +623,7 @@ class SheetsBridge(QObject):
         draft = self._draft()
         if draft is None:
             return
-        if draft.advance():
-            self.save()
-            return
-        self._publish()
+        self._run(self._plan("after_advance", done=draft.advance()))
 
     @Slot()
     def back(self) -> None:
@@ -594,206 +672,187 @@ class SheetsBridge(QObject):
     @Slot()
     def save(self) -> None:
         """Add or Save: the sheet's answer, through the session."""
-        if self._kind == "homework":
-            self._save_homework()
-        elif self._kind == "block":
-            self._save_block()
+        self._run(self._plan("save", kind=self._kind))
 
     def _save_homework(self) -> None:
         draft, session = self._homework, self._session
-        if draft is None or session is None:
+        if draft is None:
             return
-        if self._hold_for_save():
+        if session is None:
+            return
+        if self._wait_for_write(WAIT_SAVE) is not None:
             return
         made = draft.candidate()
         if made is None:
             self._publish()
             return
-        known = session.assignments.get(made["id"])
-        title = made.get("title") or "Homework"
-        if draft.spread_requested():
-            plan = draft.spread_plan()
-            session.add_homework(made, spread=True)
-            session.spread_after_save(made["id"], plan["session_min"], plan["from_date"])
-            session.save()
-        else:
-            session.add_homework(made)
-            style = (session.preferences or {}).get("planning_style")
-            if style == "auto" and known is None and not made.get("completed"):
-                # Plan it for me as I add it: new homework gets its time once it is saved.
-                session.plan_after_save(made["id"])
-            session.save()
-        if made.get("completed") and not (known or {}).get("completed"):
-            words = f"Finished {title}."
-        else:
-            words = f"Added {title}" if known is None else f"Saved {title}"
-        self._close()
-        self._say(words, undo=True)
+        self._run(
+            self._plan(
+                "save_homework",
+                made=made,
+                known=session.assignments.get(made["id"]),
+                spread=draft.spread_requested(),
+                preferences=session.preferences,
+            )
+        )
+
+    def _take_spread_plan(self) -> None:
+        self._spread_plan = self._homework.spread_plan()
+
+    def _spread_after_save(self, assignment_id: str) -> None:
+        self._session.spread_after_save(
+            assignment_id, self._spread_plan["session_min"], self._spread_plan["from_date"]
+        )
 
     def _save_block(self) -> None:
         draft, session = self._block, self._session
-        if draft is None or session is None:
+        if draft is None:
             return
-        if self._hold_for_save():
+        if session is None:
+            return
+        if self._wait_for_write(WAIT_SAVE) is not None:
             return
         made = draft.candidate()
         if made is None:
             self._publish()
             return
         plan = draft.save_plan(made)
-        if plan["kind"] == "ask":
-            self._ask = draft.save_question()
-            self._publish()
-            return
-        if plan["kind"] != "plain":
-            self._save_repeat(draft, made, plan)
-            return
-        self._save_week_copy(draft, made)
+        routes = {
+            "ask": lambda: self._ask_block_save(draft),
+            "repeat": lambda: self._save_repeat(draft, made, plan),
+            "copy": lambda: self._save_week_copy(draft, made),
+        }
+        routes[self._plan("save_block_route", kind=plan["kind"])]()
+
+    def _ask_block_save(self, draft: BlockDraft) -> None:
+        self._ask = draft.save_question()
+        self._publish()
 
     def _answer_save(self, choice: str) -> None:
         """The answer to "Change <name>?": this week's copy alone, or the repeat from this week on."""
         draft = self._block
-        if draft is None or self._session is None:
+        if draft is None:
+            return
+        if self._session is None:
             return
         made = draft.candidate()
         if made is None:
             self._publish()
             return
-        if choice == "later":
-            self._save_repeat(draft, made, draft.save_plan(made))
-        else:
-            self._save_week_copy(draft, made)
+        routes = {
+            "repeat": lambda: self._save_repeat(draft, made, draft.save_plan(made)),
+            "copy": lambda: self._save_week_copy(draft, made),
+        }
+        routes[self._plan("answer_save_route", choice=choice)]()
 
     def _save_repeat(self, draft: BlockDraft, made: dict, plan: dict) -> None:
         """A change to a weekly fixed time from this week on, through the repeats the session holds. The
         save makes a restore point first; the sheet stays until the store has answered, so a refusal (the
-        200 limit) shows on it."""
+        200 limit) shows on it. The window's own question comes between the two halves of the rules."""
         session = self._session
-        kind, body, name = plan["kind"], plan.get("repeat"), made["title"]
-        repeats = session.repeats
-        if kind in ("add", "make"):
-            after = [*repeats, body]
-        elif kind in ("later", "ask"):
-            after = [body if item["id"] == body["id"] else item for item in repeats]
-        else:
-            after = [item for item in repeats if item["id"] != draft.family]
-        alone: dict | None = None
-        if kind == "stop":
-            alone = draft.stopped_one_off(made)
-            if alone is not None:
-                try:
-                    # Validate before touching repeats so a refusal never leaves them half-changed.
-                    alone = session.check_block(alone)
-                except ValueError as error:
-                    draft.error = str(error)
-                    self._publish()
-                    return
-        label = f"changing {name}"
-        if not self._window._apply_standing(after, label):  # type: ignore[attr-defined]
+        before = self._plan(
+            "repeat_before",
+            kind=plan["kind"],
+            repeat=plan.get("repeat"),
+            title=made["title"],
+            repeats=session.repeats,
+            family=draft.family,
+        )
+        try:
+            alone = self._stopped_one_off(before["stop"], draft, made)
+        except ValueError as error:
+            draft.error = str(error)
+            self._publish()
             return
-        if kind in ("later", "ask"):
-            # A day removed only from this week is already on the repeat. Saving the repeat, even when
-            # the body does change, leaves that removal on the week's copy. Same Undo step.
-            self._live_days_ticked_back(draft, made, label)
-        if kind == "make":
-            # The one-off is now the repeat: one Undo step, named for the change.
-            session.delete_block(draft.original["id"], scope="series", label=label)
-        elif kind == "stop" and alone is not None:
-            session.add_block(alone, scope="series")
-        said = {
-            "add": f"{name} repeats every week from this week on.",
-            "make": f"{name} repeats every week from this week on.",
-            "stop": f"{name} stops repeating after this week.",
-        }.get(kind, f"Changed {name} from this week on.")
-        self._saving_repeat = f"{said} {UNDO_ALSO}"
-        self._doubled_name = name
-        session.save(snapshot_label=restore_point_label(f"Before changing {name}"))
+        ok = self._window._apply_standing(before["after"], before["label"])  # type: ignore[attr-defined]
+        after = self._plan(
+            "repeat_after",
+            ok=bool(ok),
+            kind=plan["kind"],
+            title=made["title"],
+            label=before["label"],
+            alone=alone,
+            original_id=draft.original.get("id"),
+        )
+        # A day removed only from this week is already on the repeat. Saving the repeat, even when the
+        # body does change, leaves that removal on the week's copy. Same Undo step.
+        ticked = {True: lambda: self._live_days_ticked_back(draft, made, before["label"]), False: _nothing}
+        ticked[after["ticked"]]()
+        self._run(after["then"])
+
+    def _stopped_one_off(self, stop: bool, draft: BlockDraft, made: dict) -> dict | None:
+        """The one-off a stopped repeat leaves, checked before the repeats change so a refusal never leaves
+        them half-changed."""
+        checks = {True: lambda: self._check_one_off(draft, made), False: _nothing}
+        return checks[stop]()
+
+    def _check_one_off(self, draft: BlockDraft, made: dict) -> dict | None:
+        alone = draft.stopped_one_off(made)
+        if alone is None:
+            return None
+        return self._session.check_block(alone)
 
     def _live_days_ticked_back(self, draft: BlockDraft, made: dict, label: str) -> None:
         """Days the student ticked back on are live this week. Days they left unticked stay removed."""
         session = self._session
         if session is None:
             return
-        restored = set(draft.original.get("removed_days") or []) - set(made.get("removed_days") or [])
-        if not restored:
-            return
-        family = draft.family
-        blocks: list[dict] = []
-        changed = False
-        for item in session.blocks:
-            if block_family(str(item.get("id") or "")) != family:
-                blocks.append(item)
-                continue
-            had = list(item.get("removed_days") or [])
-            kept = [day for day in had if day not in restored]
-            if kept == had:
-                blocks.append(item)
-                continue
-            updated = dict(item)
-            if kept:
-                updated["removed_days"] = kept
-            else:
-                updated.pop("removed_days", None)
-            blocks.append(updated)
-            changed = True
-        if changed:
-            session._touch(label, blocks=blocks)
+        self._run(
+            self._plan(
+                "ticked_back",
+                blocks=session.blocks,
+                family=draft.family,
+                label=label,
+                original_removed=draft.original.get("removed_days"),
+                made_removed=made.get("removed_days"),
+            )
+        )
 
     def _save_week_copy(self, draft: BlockDraft, made: dict) -> None:
         session = self._session
-        before = {item["id"] for item in session.blocks}
+        before = self._plan("block_ids", blocks=session.blocks)
         session.add_block(made, scope=draft.scope, day=draft.occurrence_day)
-        day = draft.occurrence_day
-        if draft.recover_missed() and day is not None:
-            # "This day only" splits the series and gives that day a new id.
-            ids = {made["id"]} | ({item["id"] for item in session.blocks} - before)
-            holder = next(
-                (item for item in session.blocks if item["id"] in ids and day in item["days"]), None
+        self._run(
+            self._plan(
+                "week_copy_after",
+                before_ids=before,
+                blocks=session.blocks,
+                made=made,
+                day=draft.occurrence_day,
+                recover=draft.recover_missed(),
+                week_start=session.week_start,
             )
-            if holder is not None:
-                session.recover_missed(holder["id"], day)
-                self._close()
-                self._say(f"Saved {made['title']}", undo=True)
-                return
-        session.save()
-        existed = made["id"] in before
-        self._close()
-        self._say(f"Saved {made['title']}" if existed else added_words(made, session.week_start), undo=True)
+        )
 
     @Slot()
     def unpin(self) -> None:
         draft, session = self._homework, self._session
-        if draft is None or session is None or not draft.existing:
+        if draft is None:
             return
-        if self._hold_for_save():
+        if session is None:
             return
-        if session.unpin_assignment(draft.original["id"]):
-            session.save()
-        self._close()
-        self._say("FlexWeek can move it again.", undo=True)
+        if self._plan("unpin_gate", existing=draft.existing) is None:
+            return
+        if self._wait_for_write(WAIT_SAVE) is not None:
+            return
+        unpinned = session.unpin_assignment(draft.original["id"])
+        self._run(self._plan("unpin_done", unpinned=bool(unpinned)))
 
     @Slot()
     def remove(self) -> None:
         """Delete, on a sheet that is editing something. It asks first."""
-        session = self._session
-        if self._homework is not None and self._homework.existing:
-            title = self._homework.original.get("title") or "this homework"
-            self._ask = {
-                "id": "delete-homework",
-                "title": "Delete homework",
-                "body": (
-                    f"Delete {title}? Its times on the calendar go too, in every week. You can undo this."
-                ),
-                "answers": [
-                    {"id": "stay", "label": "Cancel", "kind": "text"},
-                    {"id": "delete", "label": "Delete", "kind": "danger"},
-                ],
-            }
-        elif self._block is not None and self._block.existing and session is not None:
-            self._ask = self._block.delete_question()
-        else:
-            return
-        self._publish()
+        self._run(
+            self._plan(
+                "remove",
+                homework_existing=bool(getattr(self._homework, "existing", False)),
+                homework_title=_title_of(self._homework),
+                block_existing=bool(getattr(self._block, "existing", False)),
+                has_session=self._session is not None,
+            )
+        )
+
+    def _ask_block_delete(self) -> None:
+        self._ask = self._block.delete_question()
 
     def pose_edited(self, ask: dict, done) -> None:
         """The edited-weeks question on the week. `done` is called with the answer, or None to cancel."""
@@ -804,123 +863,96 @@ class SheetsBridge(QObject):
     @Slot(str)
     def answer(self, choice: str) -> None:
         """A button on the prompt that is up."""
-        asked = self._ask.get("id", "") if self._ask else ""
-        if asked == "edited-weeks":
-            done, self._edited_done = self._edited_done, None
-            self._ask = {}
-            self._publish()
-            if done is not None:
-                done(choice if choice in ("keep", "replace", "from_today") else None)
-            return
+        self._run(
+            self._plan(
+                "answer",
+                ask=self._ask,
+                choice=choice,
+                has_handlers=self._ask_handlers is not None,
+                pending_delete=self._pending_delete,
+            )
+        )
+
+    def _answer_edited(self, answer: Any) -> None:
+        done, self._edited_done = self._edited_done, None
         self._ask = {}
+        self._publish()
+        if done is not None:
+            done(answer)
+
+    def _run_handler(self, choice: str) -> None:
         handlers, self._ask_handlers = self._ask_handlers, None
-        if handlers is not None:
-            self._publish()
-            run = handlers.get(choice)
-            if run is not None:
-                run()
-            return
-        if asked == "sign-out":
-            signing_out, self._sign_out_done = self._sign_out_done, None
-            self._publish()
-            if choice == "yes" and signing_out is not None:
-                signing_out()
-            return
-        if asked == "discard":
-            if choice == "discard":
-                self._close()
-                return
-        elif asked == "delete-homework" and choice == "delete":
-            self._delete_homework()
-            return
-        elif asked == "delete-block" and choice in ("delete", "day", "week", "every"):
-            self._delete_block(choice)
-            return
-        elif asked == "block-save" and choice in ("week", "later"):
-            self._answer_save(choice)
-            return
-        elif asked == "delete-alarm" and choice == "delete":
-            self._delete_alarm()
-            return
-        elif asked == "delete-unfinished" and choice == "delete":
-            self._delete_unfinished(self._pending_delete)
-            return
+        self._publish()
+        run = handlers.get(choice)
+        if run is not None:
+            run()
+
+    def _sign_out_yes(self) -> None:
+        signing_out, self._sign_out_done = self._sign_out_done, None
+        self._publish()
+        if signing_out is not None:
+            signing_out()
+
+    def _sign_out_no(self) -> None:
+        self._sign_out_done = None
         self._publish()
 
     def _delete_homework(self) -> None:
         draft, session = self._homework, self._session
-        if draft is None or session is None:
+        if draft is None:
             return
-        title = draft.original.get("title") or "this homework"
-        if not session.delete_homework(draft.original["id"]):
-            # Saving, or another window changed the week: the sheet stays so nothing typed is lost.
-            self._say(session.message)
-            self._publish()
+        if session is None:
             return
-        self._close()
-        self._say(f"Deleted {title}.", undo=True)
+        title = draft.original.get("title")
+        deleted = session.delete_homework(draft.original["id"])
+        self._run(self._plan("delete_homework_done", ok=bool(deleted), title=title, message=session.message))
 
     def _delete_block(self, choice: str) -> None:
         draft, session = self._block, self._session
-        if draft is None or session is None:
+        if draft is None:
             return
-        if self._hold_for_save(WAIT_DELETE):
+        if session is None:
             return
-        block = draft.original
-        title = block.get("title") or "this fixed time"
-        scope = draft.scope
-        if choice == "day":
-            scope = "occurrence"
-        elif choice in ("week", "every"):
-            scope = "series"
-        every_week = choice == "every"
-        day = draft.occurrence_day
-        if every_week and is_standing_block(block):
-            family = block_family(block["id"])
-            after = [item for item in session.repeats if item["id"] != family]
-            if not self._window._apply_standing(after, f"deleting {title}"):  # type: ignore[attr-defined]
-                return
-            session.save(snapshot_label=restore_point_label(f"Before deleting {title}"))
-            self._close()
-            words = f"Deleted {title} from this week and every week after. {UNDO_ALSO}"
-            self._say(words)
-            self._restore_words = words
+        if self._wait_for_write(WAIT_DELETE) is not None:
             return
-        session.delete_block(block["id"], scope=scope, day=day, every_week=every_week)
-        session.save()
-        self._close()
-        if every_week:
-            self._say(f"Deleted {title} from this week and every week after.")
-        elif scope == "occurrence" and day is not None:
-            name = day_full_names(session.week_start)[day]
-            self._say(f"Deleted {title} on {name} from this week.", undo=True)
-        else:
-            self._say(f"Deleted {title} from this week.", undo=True)
+        plan = self._plan(
+            "delete_block",
+            choice=choice,
+            block=draft.original,
+            scope=draft.scope,
+            day=draft.occurrence_day,
+            repeats=session.repeats,
+            week_start=session.week_start,
+        )
+        standing = plan["standing"]
+        if standing is not None:
+            ok = self._window._apply_standing(standing["after"], standing["label"])  # type: ignore[attr-defined]
+            self._run(self._plan("delete_block_standing_done", ok=bool(ok), title=standing["title"]))
+            return
+        self._run(plan["steps"])
 
     # Alarms -----------------------------------------------------------------------------
 
     def _alarms_now(self) -> list[dict]:
-        session = self._session
-        return list((getattr(session, "preferences", None) or {}).get("alarms") or [])
+        return self._plan("alarms", preferences=getattr(self._session, "preferences", None))
 
     @Slot(str)
     def openAlarm(self, alarm_id: str) -> None:
         """Add (an empty id) or edit an alarm of Settings > Alerts."""
         session = self._session
-        if session is None or session.account is None or session.preferences is None:
-            return
-        alarms = self._alarms_now()
-        found = next((item for item in alarms if item.get("id") == alarm_id), None) if alarm_id else None
-        if alarm_id and found is None:
-            return
-        if found is None and len(alarms) >= MAX_ALARMS:
-            self._say(FULL)
-            return
-        self._alarm = AlarmDraft(
-            found,
-            str(session.preferences.get("alarm_tone") or "chime"),
-            session.preferences.get("clock_24h") is True,
+        self._run(
+            self._plan(
+                "open_alarm",
+                account=getattr(session, "account", None) is not None,
+                preferences=getattr(session, "preferences", None),
+                alarm_id=alarm_id,
+                max_alarms=MAX_ALARMS,
+                full=FULL,
+            )
         )
+
+    def _open_alarm_sheet(self, found: dict | None, tone: str, clock_24h: bool) -> None:
+        self._alarm = AlarmDraft(found, tone, clock_24h)
         self._open("alarm")
 
     @Slot(str, str)
@@ -951,60 +983,71 @@ class SheetsBridge(QObject):
         session = self._session
 
         def then(ok: bool) -> None:
-            if ok:
-                self._close()
-                self._say(said)
-            elif self._alarm is not None:
-                self._alarm.error = NOT_SAVED
-                self._publish()
+            self._run(
+                self._plan(
+                    "alarm_written",
+                    ok=bool(ok),
+                    said=said,
+                    has_alarm=self._alarm is not None,
+                    not_saved=NOT_SAVED,
+                )
+            )
 
-        if not session.save_preferences({"alarms": alarms}, then):
-            if self._alarm is not None:
-                self._alarm.error = NOT_SAVED
-            self._publish()
+        accepted = session.save_preferences({"alarms": alarms}, then)
+        self._run(
+            self._plan(
+                "alarm_refused",
+                accepted=bool(accepted),
+                has_alarm=self._alarm is not None,
+                not_saved=NOT_SAVED,
+            )
+        )
 
     @Slot()
     def saveAlarm(self) -> None:
         draft, session = self._alarm, self._session
-        if draft is None or session is None or self._kind != "alarm":
+        if draft is None:
             return
-        if self._hold_for_save():
+        if session is None:
+            return
+        gate = self._plan("save_alarm_gate", kind=self._kind)
+        if gate is None:
+            return
+        if self._wait_for_write(WAIT_SAVE) is not None:
             return
         alarms = self._alarms_now()
-        if not draft.existing and len(alarms) >= MAX_ALARMS:
-            draft.error = FULL
-            self._publish()
+        full = self._plan(
+            "alarm_full", existing=draft.existing, alarms=alarms, max_alarms=MAX_ALARMS, full=FULL
+        )
+        if full is not None:
+            self._run(full)
             return
         made = draft.candidate()
         if made is None:
             self._publish()
             return
-        self._write_alarms(with_alarm(alarms, made), "Saved the alarm.")
+        self._write_alarms(with_alarm(alarms, made), gate["said"])
 
     @Slot()
     def removeAlarm(self) -> None:
         """Delete, on the edit sheet. It asks first."""
         draft = self._alarm
-        if draft is None or not draft.existing:
-            return
-        name = draft.name.strip() or "this alarm"
-        self._ask = {
-            "id": "delete-alarm",
-            "title": "Delete alarm",
-            "body": f"Delete {name}? It will not ring again.",
-            "answers": [
-                {"id": "stay", "label": "Cancel", "kind": "text"},
-                {"id": "delete", "label": "Delete", "kind": "danger"},
-            ],
-        }
-        self._publish()
+        self._run(
+            self._plan(
+                "remove_alarm",
+                existing=bool(getattr(draft, "existing", False)),
+                name=getattr(draft, "name", ""),
+            )
+        )
 
     def _delete_alarm(self) -> None:
         draft = self._alarm
-        if draft is None or self._hold_for_save():
+        if draft is None:
             return
-        left = [item for item in self._alarms_now() if item.get("id") != draft.id]
-        self._write_alarms(left, "Deleted the alarm.")
+        if self._wait_for_write(WAIT_SAVE) is not None:
+            return
+        left = self._plan("alarms_without", alarms=self._alarms_now(), id=draft.id)
+        self._write_alarms(left["alarms"], left["said"])
 
     # Running late -----------------------------------------------------------------------
 
@@ -1151,33 +1194,22 @@ class SheetsBridge(QObject):
         self._publish()
 
     def _on_busy(self, _busy: bool) -> None:
-        if self._kind in ("homework", "block"):
-            self._publish()
+        self._run(self._plan("busy", kind=self._kind))
 
     def _on_saved(self, stored: bool, said: str) -> None:
         words, self._saving_repeat = self._saving_repeat, ""
-        if words:
-            if stored:
-                self._close()
-                self._say(words)
-                self._restore_words = words
-            elif self._block is not None:
-                # The sheet keeps what was typed and the store's sentence; a refused change is taken back, so
-                # the week shows what is saved and Save sends a corrected one.
-                self._session.drop_refused_save()
-                self._block.error = said
-                self._publish()
-        if self._kind in ("homework", "block"):
-            self._publish()
-        waiting = self._late_waiting
-        if waiting is None:
-            return
-        block_id, message = waiting
-        if not stored:
-            self._late_waiting = None
-        elif any(item["id"] == block_id for item in self._session.blocks):
-            self._late_waiting = None
-            self._say(message, undo=True)
+        self._run(
+            self._plan(
+                "saved",
+                words=words,
+                stored=bool(stored),
+                said=said,
+                has_block=self._block is not None,
+                kind=self._kind,
+                waiting=self._late_waiting,
+                blocks=getattr(self._session, "blocks", None),
+            )
+        )
 
     # Unfinished -------------------------------------------------------------------------
 
@@ -1237,34 +1269,39 @@ class SheetsBridge(QObject):
         self._preview = draft
         self._open("preview")
 
+    def _preview_edit(self, call: str, *args: Any) -> None:
+        self._run(
+            self._plan(
+                "preview_edit",
+                kind=self._kind,
+                has_preview=self._preview is not None,
+                call=call,
+                args=list(args),
+            )
+        )
+
     @Slot(int, bool)
     def previewCheck(self, index: int, checked: bool) -> None:
-        if self._kind == "preview" and self._preview is not None:
-            self._preview.check(index, checked)
-            self._publish()
+        self._preview_edit("check", index, checked)
 
     @Slot(int, int)
     def previewDay(self, index: int, day: int) -> None:
-        if self._kind == "preview" and self._preview is not None:
-            self._preview.set_day(index, day)
-            self._publish()
+        self._preview_edit("set_day", index, day)
 
     @Slot(int, str)
     def previewStart(self, index: int, start: str) -> None:
-        if self._kind == "preview" and self._preview is not None:
-            self._preview.set_start(index, start)
-            self._publish()
+        self._preview_edit("set_start", index, start)
 
     @Slot(int, int)
     def previewLength(self, index: int, minutes: int) -> None:
-        if self._kind == "preview" and self._preview is not None:
-            self._preview.set_duration(index, minutes)
-            self._publish()
+        self._preview_edit("set_duration", index, minutes)
 
     @Slot()
     def savePreview(self) -> None:
         draft = self._preview
-        if self._kind != "preview" or draft is None or not draft.can_save():
+        if draft is None:
+            return
+        if self._plan("preview_gate", kind=self._kind, can_save=draft.can_save()) is None:
             return
         rows = draft.rows
         save = draft.save
@@ -1850,30 +1887,27 @@ class SheetsBridge(QObject):
     def _on_save_answered(self, point_id: str, doubled: list) -> None:
         """The store's answer to a save: the restore point it made, which gives the notice its Undo, and the
         weeks where the new weekly time doubles one made by hand."""
-        words = self._restore_words
-        if point_id and words and self._notice == words:
-            self._notice_restore = point_id
-            self._notice_undo = True
-            self._restore_words = ""
-            self.changed.emit()
-        if doubled:
-            self._doubled_waiting = [str(week) for week in doubled]
-            self._show_doubled()
+        self._run(
+            self._plan(
+                "save_answered",
+                point_id=point_id,
+                restore_words=self._restore_words,
+                notice=self._notice,
+                doubled=doubled,
+            )
+        )
 
     def _show_doubled(self) -> None:
         """The doubled-weeks prompt, once no other question is up; it never replaces one."""
-        weeks = self._doubled_waiting
-        if weeks is None or self._ask:
-            return
-        self._doubled_waiting = None
-        name = self._doubled_name or "This fixed time"
-        self._ask = {
-            "id": "doubled-weeks",
-            "title": f"{name} is already in {'a later week' if len(weeks) == 1 else 'later weeks'}",
-            "body": doubled_words(name, weeks, wall_clock.today()),
-            "answers": [{"id": "ok", "label": "OK", "kind": "tonal"}],
-        }
-        self.changed.emit()
+        self._run(
+            self._plan(
+                "doubled",
+                weeks=self._doubled_waiting,
+                ask=self._ask,
+                name=self._doubled_name,
+                today=wall_clock.today().isoformat(),
+            )
+        )
 
     def _say(self, text: str, *, undo: bool = False) -> None:
         self._notice = text
@@ -1881,109 +1915,122 @@ class SheetsBridge(QObject):
         self._notice_restore = ""
         self._restore_words = ""
         self._remaining_ms = NOTICE_MS
-        if not text:
-            self._timer.stop()
-            self._paused = False
-        else:
-            if getattr(self, "_held", False):
-                self._paused = True
-                self._timer.stop()
-            else:
-                self._paused = False
-                self._timer.start(NOTICE_MS)
+        self._run(self._plan("say", text=text, held=getattr(self, "_held", False)))
         self.changed.emit()
 
     @Slot()
     def pauseNotice(self) -> None:
         self._held = True
         self._paused = True
-        if self._timer.isActive():
-            self._remaining_ms = max(0, self._timer.remainingTime())
-            self._timer.stop()
+        self._run(self._plan("pause", active=self._timer.isActive(), remaining=self._timer.remainingTime()))
 
     @Slot()
     def resumeNotice(self) -> None:
         self._held = False
-        if self._paused:
-            self._paused = False
-            if self._notice:
-                self._timer.start(max(1000, getattr(self, "_remaining_ms", NOTICE_MS)))
+        self._run(
+            self._plan(
+                "resume",
+                paused=self._paused,
+                notice=self._notice,
+                remaining=getattr(self, "_remaining_ms", NOTICE_MS),
+            )
+        )
 
     @Slot()
     def dismissNotice(self) -> None:
-        if self._notice:
-            self._notice = ""
-            self._notice_undo = False
-            self._notice_restore = ""
-            self._restore_words = ""
-            self._timer.stop()
-            self._paused = False
-            self._held = False
-            self.changed.emit()
+        self._run(self._plan("dismiss", notice=self._notice))
 
     @Slot()
     def undoNotice(self) -> None:
-        if self._notice_undo and self._session is not None:
-            if self._notice_restore:
-                self._session.undo_to_restore_point(self._notice_restore)
-            else:
-                self._session.undo()
-        self.dismissNotice()
+        self._run(
+            self._plan(
+                "undo",
+                undo=self._notice_undo,
+                has_session=self._session is not None,
+                restore=self._notice_restore,
+            )
+        )
 
     # The form ---------------------------------------------------------------------------
 
     def refresh(self) -> None:
         """The session changed. A sheet that reads it, such as a late preview, shows what it has now."""
-        if self._kind in ("late", "unfinished", "weekList", "routines", "account", "restore", "preview"):
-            self._publish()
+        self._run(self._plan("refresh", kind=self._kind))
 
     def _publish(self) -> None:
-        kind = self._kind
-        if kind == "homework" and self._homework is not None:
-            self._form = {**self._homework.form(), "canSave": self.canSave}
-        elif kind == "block" and self._block is not None:
-            self._form = {**self._block.form(), "canSave": self.canSave}
-        elif kind == "late":
-            self._form = self._late_form()
-        elif kind == "unfinished":
-            self._form = self._unfinished_form()
-        elif kind == "weekList":
-            self._form = self._week_list_form()
-        elif kind == "preview" and self._preview is not None:
-            self._form = self._preview.form()
-        elif kind == "routines":
-            self._form = self._routine_form()
-        elif kind == "alarm" and self._alarm is not None:
-            self._form = {**self._alarm.form(), "canSave": self.canSave}
-        elif kind == "help":
-            owner = self.parent()
-            self._form = help_form(
-                bool(getattr(owner, "shortcuts", True)), bool(getattr(owner, "letterKeys", False))
+        source = self._plan(
+            "form_source",
+            kind=self._kind,
+            homework=self._homework is not None,
+            block=self._block is not None,
+            preview=self._preview is not None,
+            alarm=self._alarm is not None,
+            update=self._update is not None,
+        )
+        self._form = getattr(self, source)()
+        # The moved-day note is said aloud when it appears or changes in a sheet that is already open.
+        self._run(
+            self._plan(
+                "note_edge",
+                moved=self._form.get("movedNote"),
+                when_moved=self._form.get("whenMovedNote"),
+                noted=self._noted,
             )
-        elif kind == "about":
-            self._form = about_form(getattr(self._session, "storage_info", None))
-        elif kind == "update" and self._update is not None:
-            self._form = update_form(self._update, self._update_current, self._update_state)
-        elif kind == "account":
-            self._form = account_form(self._session.storage_info, self._session.recovery_remaining)
-        elif kind == "restore":
-            session = self._session
-            self._form = restore_form(
-                session.restore_points,
-                session.restore_preview,
-                session.storage_info,
-                self._restore_selected,
-                self._restore_label,
-                self._manage_note,
-            )
-        else:
-            self._form = {}
-        # The moved-day note is said aloud when it appears or changes in a sheet that is already open. A
-        # sheet that opens with it is read with the note, and one that clears it says nothing.
-        note = str(self._form.get("movedNote") or self._form.get("whenMovedNote") or "")
-        if self._noted is not None and note and note != self._noted:
-            announce(self._window, note)
-        self._noted = note
+        )
         self.changed.emit()
         self._show_waiting_update()
         self._show_doubled()
+
+    def _announce(self, note: str) -> None:
+        announce(self._window, note)
+
+    def _form_homework(self) -> dict:
+        return {**self._homework.form(), "canSave": self.canSave}
+
+    def _form_block(self) -> dict:
+        return {**self._block.form(), "canSave": self.canSave}
+
+    def _form_alarm(self) -> dict:
+        return {**self._alarm.form(), "canSave": self.canSave}
+
+    def _form_late(self) -> dict:
+        return self._late_form()
+
+    def _form_unfinished(self) -> dict:
+        return self._unfinished_form()
+
+    def _form_week_list(self) -> dict:
+        return self._week_list_form()
+
+    def _form_preview(self) -> dict:
+        return self._preview.form()
+
+    def _form_routines(self) -> dict:
+        return self._routine_form()
+
+    def _form_help(self) -> dict:
+        owner = self.parent()
+        return help_form(bool(getattr(owner, "shortcuts", True)), bool(getattr(owner, "letterKeys", False)))
+
+    def _form_about(self) -> dict:
+        return about_form(getattr(self._session, "storage_info", None))
+
+    def _form_update(self) -> dict:
+        return update_form(self._update, self._update_current, self._update_state)
+
+    def _form_account(self) -> dict:
+        return account_form(self._session.storage_info, self._session.recovery_remaining)
+
+    def _form_restore(self) -> dict:
+        session = self._session
+        return restore_form(
+            session.restore_points,
+            session.restore_preview,
+            session.storage_info,
+            self._restore_selected,
+            self._restore_label,
+            self._manage_note,
+        )
+
+    def _form_none(self) -> dict:
+        return {}
