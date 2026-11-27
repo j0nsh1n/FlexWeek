@@ -10,12 +10,12 @@ and knows nothing about gestures or painting.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QTransform
 
@@ -23,13 +23,13 @@ from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN
 
 FIRST, LAST = DAY_START_MIN, DAY_END_MIN
 # The minutes a student can have a drag move by, in the order they are shown.
-DRAG_STEPS = (5, 15)
+DRAG_STEPS = tuple(flexweek_engine.HOURS_DRAG_STEPS)
 # What an account that never chose reads as; the engine fills the same number for a missing key.
-DEFAULT_DRAG_STEP = 15
+DEFAULT_DRAG_STEP = int(flexweek_engine.HOURS_DEFAULT_DRAG_STEP)
 # Space between blocks that share a time, and between a block and its track's sides.
-GAP = 2.0
+GAP = float(flexweek_engine.HOURS_GAP)
 # Space between a block and the next one back to back with it.
-BETWEEN = 3.0
+BETWEEN = float(flexweek_engine.HOURS_BETWEEN)
 
 
 class Axis(Enum):
@@ -45,11 +45,11 @@ class Span:
 
     @property
     def minutes(self) -> int:
-        return self.end - self.start
+        return int(flexweek_engine.hours_span_minutes(self.start, self.end))
 
 
 def snap(minute: float, step: int) -> int:
-    return round(minute / step) * step
+    return int(flexweek_engine.hours_snap(minute, step))
 
 
 def next_slot(
@@ -58,13 +58,13 @@ def next_slot(
     """Where a new thing starts when asked for at `minute`: (days ahead, minute) of the next mark of
     `step` (a quarter hour unless given), now rounded up, kept between `first` and `last`. With none left
     today, the first one tomorrow."""
-    slot = max(-(-minute // step) * step, first)
-    return (0, slot) if slot <= last else (1, first)
+    day, at = flexweek_engine.hours_next_slot(minute, first, last, step)
+    return (int(day), int(at))
 
 
 def drag_step(chosen: object) -> int:
     """The step a preference names, or the default for anything else."""
-    return chosen if isinstance(chosen, int) and chosen in DRAG_STEPS else DEFAULT_DRAG_STEP
+    return int(flexweek_engine.hours_drag_step(chosen))
 
 
 class Track(Protocol):
@@ -124,55 +124,95 @@ class LinearTrack:
 
     @property
     def length(self) -> float:
-        return self.area.height() if self.axis is Axis.DOWN else self.area.width()
+        return float(
+            flexweek_engine.hours_track_length(self.area.width(), self.area.height(), self.axis.value)
+        )
 
     def per_minute(self) -> float:
-        return self.length / (self.last - self.first)
+        return float(
+            flexweek_engine.hours_per_minute(
+                self.area.width(), self.area.height(), self.axis.value, self.first, self.last
+            )
+        )
 
     def upright(self, point: QPointF) -> QPointF:
         return self._back.map(point)
 
     def minute_at(self, point: QPointF) -> float:
         """The minute under a point, past either end too: a drag that leaves the track keeps a time."""
+        # `upright` already undid the card's turn, so the engine reads that point on a flat track.
         local = self.upright(point)
-        along = local.y() - self.area.top() if self.axis is Axis.DOWN else local.x() - self.area.left()
-        return self.first + along / self.per_minute()
+        return float(
+            flexweek_engine.hours_linear_minute_at(
+                self.area.x(),
+                self.area.y(),
+                self.area.width(),
+                self.area.height(),
+                self.axis.value,
+                self.first,
+                self.last,
+                0.0,
+                local.x(),
+                local.y(),
+            )
+        )
 
     def contains(self, point: QPointF) -> bool:
-        return self.area.contains(self.upright(point))
+        local = self.upright(point)
+        return bool(
+            flexweek_engine.hours_linear_contains(
+                self.area.x(),
+                self.area.y(),
+                self.area.width(),
+                self.area.height(),
+                0.0,
+                local.x(),
+                local.y(),
+            )
+        )
 
     def offset(self, minute: float) -> float:
         """How far along the track, from its start edge, a minute lies."""
-        return (minute - self.first) * self.per_minute()
+        return float(
+            flexweek_engine.hours_linear_offset(
+                self.area.width(), self.area.height(), self.axis.value, self.first, self.last, minute
+            )
+        )
 
     def rect_for(self, start: int, end: int, column: int = 0, columns: int = 1) -> QRectF:
         """Where a span is drawn, in the track's upright frame, as one of `columns` side by side. A
         pixel in from its start and two from its end, so two blocks back to back are three apart and
         never read as one (decision 14 of 0.17)."""
-        start, end = max(start, self.first), min(end, self.last)
-        if self.axis is Axis.DOWN:
-            width = (self.area.width() - 2 * GAP) / columns
-            return QRectF(
-                self.area.left() + GAP + column * width,
-                self.area.top() + self.offset(start) + 1,
-                width - GAP,
-                max(self.offset(end) - self.offset(start) - BETWEEN, 4.0),
-            )
-        height = (self.area.height() - 2 * GAP) / columns
-        return QRectF(
-            self.area.left() + self.offset(start) + 1,
-            self.area.top() + GAP + column * height,
-            max(self.offset(end) - self.offset(start) - BETWEEN, 4.0),
-            height - GAP,
+        left, top, width, height = flexweek_engine.hours_linear_rect(
+            self.area.x(),
+            self.area.y(),
+            self.area.width(),
+            self.area.height(),
+            self.axis.value,
+            self.first,
+            self.last,
+            start,
+            end,
+            column,
+            columns,
         )
+        return QRectF(left, top, width, height)
 
     def point_for(self, minute: int) -> QPointF:
         """The middle of the track at a minute, in the widget's coordinates."""
-        if self.axis is Axis.DOWN:
-            upright = QPointF(self.area.center().x(), self.area.top() + self.offset(minute))
-        else:
-            upright = QPointF(self.area.left() + self.offset(minute), self.area.center().y())
-        return self._into.map(upright)
+        # The engine returns the upright middle. The same transform a painter sets turns it back.
+        x, y = flexweek_engine.hours_linear_point(
+            self.area.x(),
+            self.area.y(),
+            self.area.width(),
+            self.area.height(),
+            self.axis.value,
+            self.first,
+            self.last,
+            0.0,
+            minute,
+        )
+        return self._into.map(QPointF(x, y))
 
 
 @dataclass(frozen=True)
@@ -191,42 +231,57 @@ class DialTrack:
 
     def turn_at(self, point: QPointF) -> float:
         """Degrees clockwise from the top of the face."""
-        return math.degrees(math.atan2(point.x() - self.centre.x(), -(point.y() - self.centre.y())))
+        return float(
+            flexweek_engine.hours_dial_turn(self.centre.x(), self.centre.y(), point.x(), point.y())
+        )
 
     def minute_at(self, point: QPointF) -> float:
-        half = self.sweep / 2
-        turn = min(max(self.turn_at(point), -half), half)
-        return self.first + (turn + half) / self.sweep * (self.last - self.first)
+        return float(
+            flexweek_engine.hours_dial_minute(
+                self.centre.x(),
+                self.centre.y(),
+                self.inner,
+                self.outer,
+                self.first,
+                self.last,
+                self.sweep,
+                point.x(),
+                point.y(),
+            )
+        )
 
     def contains(self, point: QPointF) -> bool:
-        reach = math.hypot(point.x() - self.centre.x(), point.y() - self.centre.y())
-        return self.inner <= reach <= self.outer and abs(self.turn_at(point)) <= self.sweep / 2
+        return bool(
+            flexweek_engine.hours_dial_contains(
+                self.centre.x(),
+                self.centre.y(),
+                self.inner,
+                self.outer,
+                self.first,
+                self.last,
+                self.sweep,
+                point.x(),
+                point.y(),
+            )
+        )
 
     def point_for(self, minute: int) -> QPointF:
-        share = (min(max(minute, self.first), self.last) - self.first) / (self.last - self.first)
-        turn = math.radians(-self.sweep / 2 + share * self.sweep)
-        radius = (self.inner + self.outer) / 2
-        return QPointF(self.centre.x() + radius * math.sin(turn), self.centre.y() - radius * math.cos(turn))
+        x, y = flexweek_engine.hours_dial_point(
+            self.centre.x(),
+            self.centre.y(),
+            self.inner,
+            self.outer,
+            self.first,
+            self.last,
+            self.sweep,
+            minute,
+        )
+        return QPointF(x, y)
 
 
 def overlap_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
     """Side by side for spans that overlap: each one's column and how many share its time, in the
     order given. Daily Scheduler's assign_overlap_cols. By position, not by value, since a repeating
     block dragged onto another of its days can be two equal spans."""
-    order = sorted(range(len(spans)), key=lambda at: spans[at])
-    ends: list[int] = []
-    column = [0] * len(spans)
-    for at in order:
-        start = spans[at][0]
-        free = next((index for index, end in enumerate(ends) if end <= start), len(ends))
-        if free == len(ends):
-            ends.append(0)
-        ends[free] = spans[at][1]
-        column[at] = free
-    return [
-        (
-            column[at],
-            max(column[other] for other, (s, e) in enumerate(spans) if s < end and start < e) + 1,
-        )
-        for at, (start, end) in enumerate(spans)
-    ]
+    placed = flexweek_engine.hours_overlap_columns(list(spans))
+    return [(int(column), int(count)) for column, count in placed]

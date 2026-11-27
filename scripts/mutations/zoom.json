@@ -1,9 +1,9 @@
 [
  {
-  "file": "desktop/native/hours/scale.py",
+  "file": "engine/app/src/views/hours.rs",
   "name": "another day opens at eight, not its first block",
-  "old": "    return min((item.start for item in items), default=OPENS)\n",
-  "new": "    return OPENS\n",
-  "test": "desktop/tests/day/test_day_opening_scroll.py::test_opening_a_date_in_the_next_week_waits_for_that_week"
+  "old": "    items.iter().copied().min().unwrap_or(OPENS)\n",
+  "new": "    OPENS\n",
+  "test": "cargo:flexweek-app:views_hours:another_day_opens_at_its_first_block"
  }
 ]

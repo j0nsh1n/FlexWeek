@@ -3,9 +3,9 @@ window announces from."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from flexweek_engine import parse_due  # type: ignore[import-untyped]
+import flexweek_engine  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     QEvent,
     QObject,
@@ -84,15 +84,17 @@ def use_app_style(app: QApplication) -> None:
 def overdue_unfinished(items: list[dict], now: datetime | None = None) -> list[dict]:
     """Homework whose deadline is already past. The engine's unfinished list also holds work due
     today or tomorrow; this list is only what is late."""
-    moment = wall_clock.now() if now is None else now
-    return [item for item in items if _deadline_passed(item.get("due"), moment)]
-
-
-def _deadline_passed(due: object, now: datetime) -> bool:
-    if not isinstance(due, str) or not due:
-        return False
-    try:
-        day, minute = parse_due(due)
-    except ValueError:
-        return False
-    return datetime.combine(day, datetime.min.time()) + timedelta(minutes=minute) <= now
+    if now is None:
+        now = wall_clock.now()
+    dues = [item.get("due") for item in items]
+    kept = flexweek_engine.hours_overdue_indexes(
+        dues,
+        now.year,
+        now.month,
+        now.day,
+        now.hour,
+        now.minute,
+        now.second,
+        now.microsecond,
+    )
+    return [items[index] for index in kept]
