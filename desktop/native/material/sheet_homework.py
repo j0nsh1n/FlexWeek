@@ -17,14 +17,14 @@ import flexweek_engine  # type: ignore[import-untyped]
 
 from backend.slots import SLOT_MIN
 
-STEPS = flexweek_engine.VIEWS_HOMEWORK_STEPS
-PROMPTS = flexweek_engine.VIEWS_HOMEWORK_PROMPTS
+STEPS = tuple(flexweek_engine.VIEWS_HOMEWORK_STEPS)
+PROMPTS = tuple(flexweek_engine.VIEWS_HOMEWORK_PROMPTS)
 TITLE_PROBLEM = flexweek_engine.VIEWS_HOMEWORK_TITLE_PROBLEM
-TYPES = flexweek_engine.VIEWS_HOMEWORK_TYPES
-ENERGIES = flexweek_engine.VIEWS_HOMEWORK_ENERGIES
-WHEN_CHOICES = flexweek_engine.VIEWS_HOMEWORK_WHEN_CHOICES
-SPREAD_CHOICES = flexweek_engine.VIEWS_HOMEWORK_SPREAD_CHOICES
-DAYS_AHEAD = flexweek_engine.VIEWS_HOMEWORK_DAYS_AHEAD
+TYPES = tuple(flexweek_engine.VIEWS_HOMEWORK_TYPES)
+ENERGIES = tuple(flexweek_engine.VIEWS_HOMEWORK_ENERGIES)
+WHEN_CHOICES = tuple(flexweek_engine.VIEWS_HOMEWORK_WHEN_CHOICES)
+SPREAD_CHOICES = tuple(flexweek_engine.VIEWS_HOMEWORK_SPREAD_CHOICES)
+DAYS_AHEAD = tuple(flexweek_engine.VIEWS_HOMEWORK_DAYS_AHEAD)
 
 
 def quarter_hours(step: int = SLOT_MIN) -> list[dict]:
