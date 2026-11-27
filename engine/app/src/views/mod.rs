@@ -7,3 +7,4 @@ pub mod copy;
 pub mod hours;
 pub mod sheet_rules;
 pub mod theme;
+pub mod week;

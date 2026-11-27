@@ -40,6 +40,7 @@ mod sync;
 mod views_copy;
 mod views_hours;
 mod views_theme;
+mod views_week;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
     match err.kind {
@@ -401,5 +402,6 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     views_copy::add(m)?;
     views_hours::add(m)?;
     views_theme::add(m)?;
+    views_week::add(m)?;
     Ok(())
 }
