@@ -1875,7 +1875,10 @@ fn a_kept_call_with_the_wrong_shape_is_refused() {
     );
 
     let err = focus::merge_kept(&json!({ "account_id": 7, "state": null })).unwrap_err();
-    assert_eq!(err, flexweek_engine::EngineError::value("entries is a list"));
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("entries is a list")
+    );
 
     let err = focus::merge_kept(&json!({
         "entries": {},
@@ -1883,7 +1886,10 @@ fn a_kept_call_with_the_wrong_shape_is_refused() {
         "state": null
     }))
     .unwrap_err();
-    assert_eq!(err, flexweek_engine::EngineError::value("entries is a list"));
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("entries is a list")
+    );
 
     let err = focus::merge_kept(&json!({
         "entries": [{ "account_id": true, "payload": {} }],
@@ -1964,7 +1970,10 @@ fn a_kept_call_with_the_wrong_shape_is_refused() {
     );
 
     let err = focus::kept_text(&json!({})).unwrap_err();
-    assert_eq!(err, flexweek_engine::EngineError::value("entries is a list"));
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("entries is a list")
+    );
 }
 
 #[test]

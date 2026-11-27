@@ -4,6 +4,8 @@
 //! applies what comes back; the timer's own arithmetic stays in the engine (`desk::focus`). The clock and
 //! the preferences are always passed in.
 
+use std::collections::BTreeMap;
+
 use flexweek_engine::desk::{focus as timer, grid};
 use flexweek_engine::time::week_start_on;
 use flexweek_engine::{EngineError, EngineResult};
@@ -994,27 +996,172 @@ pub fn take_break_plan(args: &Value) -> EngineResult<Value> {
     }))
 }
 
+const KEPT_FORMAT: i64 = 1;
+
 /// Read a focus-timer file. `text` is the file, or null when there is no file.
 /// A file this build cannot trust answers no timers, not an error.
 /// Arguments: `text`.
-pub fn load_kept(_args: &Value) -> EngineResult<Value> {
-    Err(EngineError::value("not kept yet"))
+pub fn load_kept(args: &Value) -> EngineResult<Value> {
+    let Some(text) = args.get("text") else {
+        return Ok(empty_entries());
+    };
+    if text.is_null() {
+        return Ok(empty_entries());
+    }
+    let Some(text) = text.as_str() else {
+        return Err(EngineError::value("text is text or null"));
+    };
+    Ok(entries_value(file_entries(text)))
 }
 
 /// Store one account's timer into the kept entries, or remove it when the timer is null.
+/// The stored object is whatever `persist_payload` returns. Whether that object is still
+/// a timer is checked when the file is read, not here, so a live timer cannot be dropped
+/// by a second pass.
 /// Arguments: `entries`, `account_id`, `state`.
-pub fn merge_kept(_args: &Value) -> EngineResult<Value> {
-    Err(EngineError::value("not kept yet"))
+pub fn merge_kept(args: &Value) -> EngineResult<Value> {
+    let mut kept = read_entries(args)?;
+    let id = account_id_of(args)?;
+    let state = args
+        .get("state")
+        .ok_or_else(|| EngineError::value("state is an object or null"))?;
+    match timer::persist_payload(state)? {
+        Some(payload) => {
+            kept.insert(id, payload);
+        }
+        None => {
+            kept.remove(&id);
+        }
+    }
+    Ok(entries_value(kept))
 }
 
 /// Drop one account from the kept entries. An account that is not there stays absent.
 /// Arguments: `entries`, `account_id`.
-pub fn remove_kept(_args: &Value) -> EngineResult<Value> {
-    Err(EngineError::value("not kept yet"))
+pub fn remove_kept(args: &Value) -> EngineResult<Value> {
+    let mut kept = read_entries(args)?;
+    kept.remove(&account_id_of(args)?);
+    Ok(entries_value(kept))
 }
 
-/// The focus-timer file for these entries.
+/// The focus-timer file for these entries: format 1, accounts in id order.
 /// Arguments: `entries`.
-pub fn kept_text(_args: &Value) -> EngineResult<Value> {
-    Err(EngineError::value("not kept yet"))
+pub fn kept_text(args: &Value) -> EngineResult<Value> {
+    let kept = read_entries(args)?;
+    let mut accounts = serde_json::Map::new();
+    for (id, payload) in kept {
+        accounts.insert(id.to_string(), payload);
+    }
+    let file = json!({ "format": KEPT_FORMAT, "accounts": Value::Object(accounts) });
+    Ok(json!({ "text": file.to_string() }))
+}
+
+fn empty_entries() -> Value {
+    json!({ "entries": [] })
+}
+
+fn entries_value(kept: BTreeMap<i64, Value>) -> Value {
+    let entries: Vec<Value> = kept
+        .into_iter()
+        .map(|(id, payload)| json!({ "account_id": id, "payload": payload }))
+        .collect();
+    json!({ "entries": entries })
+}
+
+fn file_entries(text: &str) -> BTreeMap<i64, Value> {
+    let Ok(file) = serde_json::from_str::<Value>(text) else {
+        return BTreeMap::new();
+    };
+    let Some(file) = file.as_object() else {
+        return BTreeMap::new();
+    };
+    if file.get("format").and_then(Value::as_i64) != Some(KEPT_FORMAT) {
+        return BTreeMap::new();
+    }
+    let Some(accounts) = file.get("accounts").and_then(Value::as_object) else {
+        return BTreeMap::new();
+    };
+    let mut kept = BTreeMap::new();
+    for (key, payload) in accounts {
+        let Some(id) = canonical_account_key(key) else {
+            continue;
+        };
+        if timer_payload(payload) {
+            kept.insert(id, payload.clone());
+        }
+    }
+    kept
+}
+
+fn canonical_account_key(key: &str) -> Option<i64> {
+    let Ok(id) = key.parse::<i64>() else {
+        return None;
+    };
+    (id.to_string() == key).then_some(id)
+}
+
+fn timer_payload(payload: &Value) -> bool {
+    if !payload.is_object() || saved_is_corrupt(payload) {
+        return false;
+    }
+    let (assignments, blocks) = world_that_names(payload);
+    matches!(
+        timer::restore_state(payload, &assignments, &blocks, 0),
+        Ok(Some(_))
+    )
+}
+
+/// A saved homework names an assignment the file does not carry. Whether that homework
+/// still exists is decided when the week opens, so the file keeps the payload.
+fn world_that_names(payload: &Value) -> (Value, Value) {
+    let mut assignments = serde_json::Map::new();
+    if let Some(id) = payload
+        .get("assignmentId")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    {
+        assignments.insert(
+            id.to_string(),
+            json!({ "id": id, "title": "Kept", "completed": false }),
+        );
+    }
+    let blocks = match payload
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    {
+        Some(id) => json!([{ "id": id, "title": "Focus session" }]),
+        None => json!([]),
+    };
+    (Value::Object(assignments), blocks)
+}
+
+fn read_entries(args: &Value) -> EngineResult<BTreeMap<i64, Value>> {
+    let items = args
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| EngineError::value("entries is a list"))?;
+    let mut kept = BTreeMap::new();
+    for item in items {
+        let item = item
+            .as_object()
+            .ok_or_else(|| EngineError::value("an entry is an object"))?;
+        let id = item
+            .get("account_id")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| EngineError::value("account_id is a whole number"))?;
+        let payload = item
+            .get("payload")
+            .filter(|value| value.is_object())
+            .cloned()
+            .ok_or_else(|| EngineError::value("payload is an object"))?;
+        kept.insert(id, payload);
+    }
+    Ok(kept)
+}
+
+fn account_id_of(args: &Value) -> EngineResult<i64> {
+    args.get("account_id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| EngineError::value("account_id is a whole number"))
 }
