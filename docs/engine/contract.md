@@ -1,9 +1,10 @@
 # The FlexWeek engine in Rust
 
 Status: E1–E7 are complete. This file keeps the original migration contract and its decisions. The
-FastAPI server and `backend/app.py` mentioned below were removed in 2.0.0 P2. The window now asks the
-Rust service in its own process. See `ARCHITECTURE.md`, `docs/engine/adapters.md` and
-`docs/engine/interface-logic.md` for the current map.
+FastAPI server and `backend/app.py` mentioned below were removed in 2.0.0 P2. P4 then removed pydantic,
+`backend/models.py`, and the adapters nothing imports any more. The window now asks the Rust service in
+its own process. See `ARCHITECTURE.md`, `docs/engine/adapters.md` and `docs/engine/interface-logic.md`
+for the current map.
 
 FlexWeek's planning logic and its storage live in one Rust library, the engine. The desktop app keeps
 its Material 3 Qt Quick/QML interface and Python bridges, and calls the engine through a Python module.

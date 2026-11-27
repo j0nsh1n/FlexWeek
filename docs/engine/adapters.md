@@ -2,13 +2,13 @@
 
 A backend wrapper is one of three classes.
 
-**ADAPTER.** The body only encodes arguments, calls one engine function, and decodes the result. Turning `None` into a default the original also used, a list into a tuple, or a dict into a dataclass or a pydantic model is still an adapter. So is re-checking a value with a pydantic model.
+**ADAPTER.** The body only encodes arguments, calls one engine function, and decodes the result. Turning `None` into a default the original also used, a list into a tuple, or a dict into a dataclass is still an adapter.
 
 **LOGIC.** The body decides something a student could see, or computes a value, in Python: a comparison that picks a result, arithmetic on times, a sort, a loop that builds a result, string building, or a rule. That work lives in the engine. The Python left behind is an adapter.
 
-**STAYS.** It cannot move, and only for one of these reasons: it reads the clock, the environment, a file, or randomness (the engine core is pure, so Python reads those and passes them in); it is a dataclass, a `Protocol`, or an exception; it is the pydantic validation the contract keeps in Python (`backend/models.py`, which this table does not list); or it is a method of the connection that only forwards to the Rust connection.
+**STAYS.** It cannot move, and only for one of these reasons: it reads the clock, the environment, a file, or randomness (the engine core is pure, so Python reads those and passes them in); it is a dataclass, a `Protocol`, or an exception; or it is a method of the connection that only forwards to the Rust connection.
 
-`limits` and `slots` define no functions. They re-export engine names and constants, as `weeks` does besides `current_week_start` and the shown-week adapters below. Adding `storage.SESSION_SECONDS` to the clock reading happens in `open_session`.
+`slots` defines no functions. It re-exports engine names and constants, as `weeks` does besides `current_week_start` and the shown-week adapters below. Adding `storage.SESSION_SECONDS` to the clock reading happens in `open_session`. Pydantic and `backend/models.py` are gone, and so are the adapters nothing imports any more.
 
 The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` and `custom_look.py` still sanitize stored look data and share look files, but the Widgets look editor is gone. Material's current controls live in `desktop/native/material/theme.py` and its QML Settings pages. `test_wrappers_hold_no_engine_logic.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
 
@@ -16,54 +16,14 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
-| assignments | migrated_assignment_id | ADAPTER | Passes two strings to one engine call. |
-| assignments | due_from_latest | ADAPTER | Passes the week, the latest instant, and the days to one engine call. |
-| assignments | completed_at_for_block | ADAPTER | Encodes the block as JSON and calls the engine once. |
-| assignments | due_placement_bound | ADAPTER | One engine call; `None` stays `None`, otherwise the pair becomes ints. |
-| assignments | due_slack_point | ADAPTER | One engine call, returned as a pair of ints. |
-| assignments | planned_minutes_from_day | ADAPTER | Encodes the weeks, one call, values become ints. |
-| assignments | prepare_solve | ADAPTER | Encodes blocks and assignments, one call, then pydantic and tuples. |
-| assignments | legacy_session | ADAPTER | One engine call, then a `TimeBlock` and the body dict. |
-| assignments | rewrite_session | ADAPTER | One engine call, then `TimeBlock.model_validate`. |
 | weeks | shown_week_parts | ADAPTER | One engine call (`shown::shown_parts`); `None` for a Monday. |
 | weeks | compose_shown_week | ADAPTER | Encodes the two stored weeks, one call (`shown::compose_shown_week`), JSON decoded. |
 | weeks | split_shown_week | ADAPTER | Encodes the shown week and the two stored weeks, one call (`shown::split_shown_week`), JSON decoded. |
 | weeks | repeat_changes_from_shown_week | ADAPTER | Encodes the changes, one call (`shown::repeat_changes_from_shown_week`), JSON decoded. |
 | weeks | availability_on_shown_week | ADAPTER | One call (`shown::occupancy_on_shown_week` and `shown::windows_on_shown_week` in one binding): each weekday's occupancy and work windows on that weekday's day of the shown week. |
 | weeks | rules_on_shown_week | ADAPTER | Encodes the planner settings, one call (`shown::rules_on_shown_week`) that names the weekday of the shown week's day 0, JSON decoded. |
-| assignments | held_dates_by_id | ADAPTER | Encodes the weeks, one call, values become lists of text. |
-| assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
-| assignments | done_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
-| assignments | unplanned_minutes | ADAPTER | Four ints in (estimate, focus, minutes ticked done, planned), one engine call. |
-| assignments | migrate_blocks | ADAPTER | Encodes the blocks, one call, two lists out. |
-| availability | add_occupancy | ADAPTER | One engine call, written back over the occupancy list. |
-| availability | occupancy_from_windows | ADAPTER | Encodes the windows, one call, list out. |
-| availability | lateness_occupancy | ADAPTER | One engine call, list out. |
-| availability | study_rank | ADAPTER | Encodes the windows, one call. |
-| availability | fold_study_windows | ADAPTER | Encodes both lists, one call, dicts out. |
-| availability | resolve_work_windows | ADAPTER | `None` stays `None`; an empty list is the engine's to default. One call, then pydantic. |
-| availability | session_inside_work_windows | ADAPTER | Encodes the windows, one call. |
-| availability | merge_occupancy | ADAPTER | One engine call, list out. |
-| availability | spread_sessions | ADAPTER | One engine call (`spread_sessions_around`, with the days the homework's timed sessions sit on); the session text is decoded and the remainder is returned beside it. |
 | comfort | snap_minutes | ADAPTER | One `snap_minutes_wide` call. Integers f64 holds exactly keep `plan::snap_minutes`; past 2^53 the engine uses Python's formula. |
 | comfort | split_plan | ADAPTER | One engine call, JSON decoded. |
-| day | is_work_session | ADAPTER | Encodes the block, one call, `bool` of the result. |
-| day | build_day | ADAPTER | Encodes rows and weeks, one call, then pydantic on sessions and locked blocks. |
-| explain | sentence | ADAPTER | Looks up engine copy cached at import, so an unknown code stays a `KeyError`. |
-| month | build_month | ADAPTER | Encodes rows and weeks, one call, JSON decoded. |
-| recovery | generate_recovery_codes | STAYS | Reads `secrets` for each draw. The binding repeats that draw; the engine accepts or skips the bytes. |
-| recovery | recovery_code_matches | ADAPTER | One engine call. ASCII comparison and the non-ASCII `TypeError` live in the engine. |
-| restore | canonical | ADAPTER | Encodes the value, one call. |
-| restore | state_token | ADAPTER | Encodes the snapshot, one call. |
-| restore | diff_transfer | ADAPTER | Encodes both snapshots, one call, JSON decoded. |
-| solver | _clock | STAYS | Reads `time.perf_counter`. A budget test patches that clock. |
-| solver | _clock.elapsed | STAYS | Nested in `_clock`. Turns later readings of the same clock into milliseconds. |
-| solver | _points | ADAPTER | `None` stays `None`; otherwise each point becomes a pair or `None` and is encoded. |
-| solver | _windows | ADAPTER | `None` stays `None`. An empty list is encoded so the engine can default it. |
-| solver | _blocks | ADAPTER | Encodes each block with `model_dump`. |
-| solver | solve | ADAPTER | Encodes the plan, passes the clock callable, one call, then `SolveTrace`. |
-| solver | reschedule_after_miss | ADAPTER | Encodes the plan, passes the clock callable, one call, then `SolveTrace`. |
-| solver | reschedule_running_late | ADAPTER | Encodes the plan, passes the clock callable, one call, then `SolveTrace`. |
 | storage | digest | ADAPTER | One engine call. |
 | storage | password_hash | STAYS | Reads `secrets` when the caller does not pass a salt. An empty salt counts as missing, as it did before. |
 | storage | password_matches | ADAPTER | One engine call. A hash with no salt raises `IndexError` inside the engine. |
@@ -136,9 +96,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | storage | create_session | STAYS | Reads `secrets` for the token and `time.time` for the timestamp. Expiry is `open_session`. |
 | storage | cookie_age | ADAPTER | Looks up `SESSION_SECONDS` or `SESSION_SECONDS_KEEP` from the keep flag. |
 | storage | throttle | STAYS | Reads `time.time` and passes that instant to one engine call. |
-| transfer | transfer_apply_envelope | ADAPTER | Encodes the snapshot, one call, JSON decoded. |
-| transfer | transfer_apply_bytes | ADAPTER | Encodes the snapshot, one call. |
-| transfer | transfer_fits | ADAPTER | Encodes the snapshot, one call. The size cap is the engine's. |
 
 ## backend/app.py helpers
 
@@ -235,17 +192,17 @@ The desktop wrapper modules, plus `look.py`, `custom_look.py` and `version.py`. 
 
 | Module | Function | Class | Reason |
 |---|---|---|---|
-| files | assignment_body | ADAPTER | one engine call, then the pydantic model; no branch or loop |
-| files | exportable_block | ADAPTER | one engine call, then the pydantic model; no branch or loop |
-| files | _block_models | STAYS | runs the pydantic `TimeBlock` over a list; the model exists only in Python |
-| files | _bodies | STAYS | runs the pydantic homework model over the ids the engine named, then raises the failure the engine stopped at; the model exists only in Python |
+| files | assignment_body | ADAPTER | one engine call (`checked_homework_content`); no branch or loop |
+| files | exportable_block | ADAPTER | one engine call (`checked_block`); no branch or loop |
+| files | _block_models | STAYS | runs the engine's block check over a list |
+| files | _bodies | STAYS | runs the engine's homework check over the ids the engine named, then raises the failure the engine stopped at |
 | files | _exported_blocks | ADAPTER | one engine call, the model, then raise the engine's failure (`is not None`) |
 | files | _export_payload | ADAPTER | engine call, model calls, engine call; nothing decided |
 | files | referenced_assignments | ADAPTER | one engine call, then the model over its ids |
 | files | export_week_payload | LOGIC, moved | which blocks, the payload and its key order are the engine's |
 | files | export_day_payload | LOGIC, moved | the day filter, day copies, date and payload are the engine's |
 | files | _read_import | STAYS | reads the file's text with Python's own `json`, which accepts NaN and lone surrogates the engine's reader refuses; the empty test uses Python's `str.strip` |
-| files | _checked_import | STAYS | runs both pydantic models and turns their exception into text; the model exists only in Python |
+| files | _checked_import | STAYS | runs the engine's block and homework checks and turns an exception into text |
 | files | _read_list | ADAPTER | json.loads and wire.restore |
 | files | parse_import_payload | LOGIC, moved | the refusals, the version and day rules and the rest of the checks are the engine's |
 | files | occurrence_import_id | ADAPTER | one engine call |
@@ -470,10 +427,10 @@ The desktop wrapper modules, plus `look.py`, `custom_look.py` and `version.py`. 
 - custom_look.LookNameError, exception definition
 - custom_look.Imported, dataclass
 - custom_look.import_look, Python JSON reader and file size guard before the engine
-- files._block_models, pydantic `TimeBlock` model exists only in Python
-- files._bodies, pydantic homework model exists only in Python
+- files._block_models, the engine's block check over a list
+- files._bodies, the engine's homework check over the ids it named
 - files._read_import, Python `json` reader for NaN and lone surrogates
-- files._checked_import, pydantic validation and exception text
+- files._checked_import, the engine's checks, and their exception as text
 - tokens.Shadow, dataclass
 - update.install_kind, reads platform, environment and executable, and resolves paths
 - weekmodel.Occurrence, dataclass definition
@@ -487,9 +444,6 @@ The desktop wrapper modules, plus `look.py`, `custom_look.py` and `version.py`. 
 
 | Wrapper | Shape | What it holds |
 | --- | --- | --- |
-| assignments.prepare_solve | branch | a missing deadline stays None while decoding |
-| availability.resolve_work_windows | branch | None windows stay None on the way in |
-| solver._points | branch | a missing point stays None while encoding |
 | calendar.apply_block_times | branch | the engine's None answer stays None |
 | calendar.relocate_block | branch | None dest in, None answer out |
 | calendar.placement_on | branch | None trace in; the engine's flag becomes NOT_TODAY |

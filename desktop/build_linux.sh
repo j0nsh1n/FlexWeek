@@ -27,7 +27,7 @@ command -v patchelf >/dev/null || { echo "patchelf not found; pip install -r req
 mkdir -p "$ROOT/build"
 STAGING="$(mktemp -d "$ROOT/build/linux.XXXXXX")"
 trap 'echo "Build staging retained at $STAGING" >&2' ERR
-# mypy and pydantic.mypy are type-checking tools; uvloop, httptools, watchfiles,
+# mypy is a type-checking tool; uvloop, httptools, watchfiles,
 # websockets and yaml are uvicorn extras the app never used (it runs no server);
 # curses, readline and termios are terminal modules whose Fedora builds need a
 # newer glibc than the release promises.
@@ -43,7 +43,7 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --include-data-dir="$ROOT/desktop/native/material/qml=desktop/native/material/qml" \
     --nofollow-import-to=desktop.tests,backend.tests \
     --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick \
-    --nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml \
+    --nofollow-import-to=mypy,uvloop,httptools,watchfiles,websockets,yaml \
     --nofollow-import-to=curses,readline,termios \
     --output-filename=FlexWeek \
     --output-dir="$STAGING" \

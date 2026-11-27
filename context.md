@@ -20,8 +20,8 @@
   overhaul is under way on main and is available in developer builds only.
 - P0 (#142), P1 (#143-#152) and the P2 server removal (#154-#156) are merged. The window asks the Rust service in its
   own process. `desktop/server.py`, `desktop/origin.py`, `backend/app.py` and FastAPI/uvicorn/httpx are gone, and the
-  hosted-server settings are not read. With no phone paired, the app opens no network port. Removing pydantic is part
-  of P4.
+  hosted-server settings are not read. With no phone paired, the app opens no network port. P4's closing slice
+  removes pydantic and the adapters nothing imports any more.
 - P3 is done (#158, #160): the test-only door (`desktop/tests/door.py`, `door_app.py`) and `flexweek-testkit::door`
   drive the Python app from Rust screen tests. CI's `screens` job runs them. fwtest's flaky rerun still covers pytest
   only.
@@ -42,16 +42,16 @@
   the Android pairing field keeps typed digits in order and draws the grouping space separately (#175). #179 updated
   the phone refusal tests to use the demo clock.
 - Rust owns planning, storage, calendar rules and Qt-free desktop logic. Python still owns Qt/QML hosting, live week
-  state and interface rules not yet ported, plus clock, environment and file integration. `backend/models.py` remains
-  until P4 finishes. Python wrappers encode, call and decode rather than keeping a second implementation.
+  state and interface rules not yet ported, plus clock, environment and file integration. Python wrappers encode, call
+  and decode rather than keeping a second implementation.
 - Known gaps: Ctrl+wheel zoom in Material fails on Jonathan's Wayland desktop; Material memory growth remains
   unmeasured; Jonathan ran 1.5.0 on a real Windows PC on 2026-11-21, but the 2.0.0 rewrite's Windows pieces are not
   tried there; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open; `fwtest flaky` lists the
   remaining flaky tests. The desktop drag tests in `test_material_drag_move_and_resize_blocks.py` can be clock-sensitive
   on CI.
 - 2.0.0 follow-ups: `hypothesis` is installed and unused; Python store methods `apply_repeat_intents`,
-  `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers; five corpus generators still count
-  any exception as a refusal. Known Rust/Python differences remain for integers past 64 bits, Python-only JSON values,
+  `delete_assignment`, `standing_blocks` and `save_assignment` have no app callers. The five corpus generators are frozen
+  stubs; their JSON stays as the old models wrote it. Known Rust/Python differences remain for integers past 64 bits, Python-only JSON values,
   estimates past 2^63 and a finished session with no start in `build_month`.
 
 ## Repo Landmarks
