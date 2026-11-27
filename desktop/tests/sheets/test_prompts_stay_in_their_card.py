@@ -232,7 +232,9 @@ def test_no_settings_prompt_has_a_button_outside_its_card(
 
 def test_every_prompt_the_code_can_raise_is_in_the_walk() -> None:
     found: set[str] = set()
-    for path in [*(NATIVE / "material").glob("*.py"), NATIVE / "window.py"]:
+    views = NATIVE.parents[1] / "engine" / "app" / "src" / "views"
+    # A prompt moved into any Rust view still has to join the same real-window walk.
+    for path in [*(NATIVE / "material").glob("*.py"), NATIVE / "window.py", *views.glob("*.rs")]:
         found |= set(re.findall(r'"id": "([a-z-]+)",\s*"title"', path.read_text()))
     found = {item for item in found if "-" in item or item == "discard"}
     assert found == WALKED, (
