@@ -220,14 +220,24 @@ pub fn scheme_key(preset: &str, mode: &str, contrast_name: &str) -> String {
     format!("{preset}.{mode}.{contrast_name}")
 }
 
-/// One scheme from embedded `tokens.json` with B3A3 neutral and Slate overrides applied.
-/// An unknown preset, mode or contrast returns `ErrorKind::Key`, not a quiet fallback.
-pub fn scheme(preset: &str, mode: &str, contrast_name: &str) -> EngineResult<Map<String, Value>> {
+/// The `tokens.json` key a scheme is read from: a one-mode preset reads its own mode. An unknown
+/// preset, mode or contrast returns `ErrorKind::Key`.
+pub fn scheme_source_key(preset: &str, mode: &str, contrast_name: &str) -> EngineResult<String> {
     if !PRESETS.contains(&preset) || !MODES.contains(&mode) || !CONTRASTS.contains(&contrast_name) {
         return Err(EngineError::key(scheme_key(preset, mode, contrast_name)));
     }
+    Ok(scheme_key(
+        preset,
+        one_mode_for(preset).unwrap_or(mode),
+        contrast_name,
+    ))
+}
+
+/// One scheme from embedded `tokens.json` with B3A3 neutral and Slate overrides applied.
+/// An unknown preset, mode or contrast returns `ErrorKind::Key`, not a quiet fallback.
+pub fn scheme(preset: &str, mode: &str, contrast_name: &str) -> EngineResult<Map<String, Value>> {
+    let key = scheme_source_key(preset, mode, contrast_name)?;
     let effective_mode = one_mode_for(preset).unwrap_or(mode);
-    let key = scheme_key(preset, effective_mode, contrast_name);
     let raw = parsed_tokens()
         .get(&key)
         .and_then(Value::as_object)

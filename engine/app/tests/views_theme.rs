@@ -7,7 +7,7 @@ use flexweek_app::views::theme::{
     PRESETS, SIX_CLASSES, THEME_ROLES, accented, bar_for_category, category_paint, dress_theme,
     event_category, hour_row_px, look_motion, mode_of, motion_distance, motion_duration,
     motion_level, motion_moves, pack_axis, paint_for_category, read_accent, reading_problems,
-    resolved_mode, scheme, scheme_key, shown_font, stroke_for, theme_object,
+    resolved_mode, scheme, scheme_key, scheme_source_key, shown_font, stroke_for, theme_object,
 };
 use flexweek_engine::ErrorKind;
 use flexweek_engine::desk::tokens::{contrast, luminance};
@@ -26,6 +26,26 @@ fn scheme_key_joins_preset_mode_and_contrast() {
         scheme_key("High contrast", "dark", "high"),
         "High contrast.dark.high"
     );
+}
+
+#[test]
+fn a_one_mode_preset_reads_its_own_mode_and_an_unknown_name_is_a_key_error() {
+    assert_eq!(
+        scheme_source_key("Slate", "dark", "high").unwrap(),
+        "Slate.dark.high"
+    );
+    assert_eq!(
+        scheme_source_key("Paper", "dark", "std").unwrap(),
+        "Paper.light.std"
+    );
+    for (preset, mode, contrast_name) in [
+        ("Nope", "light", "std"),
+        ("Slate", "dim", "std"),
+        ("Slate", "light", "max"),
+    ] {
+        let error = scheme_source_key(preset, mode, contrast_name).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Key);
+    }
 }
 
 #[test]

@@ -20,21 +20,21 @@ fn views_theme_scheme_key(preset: &str, mode: &str, contrast_name: &str) -> PyRe
     guard(|| Ok(theme::scheme_key(preset, mode, contrast_name)))
 }
 
+/// `loaded` is the scheme map the desktop read from its own `tokens.json`. A scheme that file does not
+/// hold is a KeyError, as when the desktop looked it up there, so a missing or broken file never opens
+/// Material; the colours come from the copy compiled in.
 #[pyfunction]
-#[pyo3(signature = (preset, mode, contrast_name, tokens_available = true))]
 fn views_theme_scheme(
     preset: &str,
     mode: &str,
     contrast_name: &str,
-    tokens_available: bool,
+    loaded: &Bound<'_, PyDict>,
 ) -> PyResult<String> {
     guard(|| {
-        if !tokens_available {
-            return Err(raise(EngineError::key(theme::scheme_key(
-                preset,
-                mode,
-                contrast_name,
-            ))));
+        let key = theme::scheme_source_key(preset, mode, contrast_name).map_err(raise)?;
+        let held = loaded.get_item(&key)?;
+        if !held.is_some_and(|value| value.is_instance_of::<PyDict>()) {
+            return Err(raise(EngineError::key(key)));
         }
         let found = theme::scheme(preset, mode, contrast_name).map_err(raise)?;
         Ok(Value::Object(found).to_string())

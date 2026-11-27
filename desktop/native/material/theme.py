@@ -153,7 +153,7 @@ def scheme_key(preset: str, mode: str, contrast_name: str) -> str:
 
 def scheme(preset: str, mode: str, contrast_name: str) -> dict[str, str]:
     """One scheme. An unknown preset, mode or contrast is a KeyError, not a quiet fallback."""
-    return json.loads(flexweek_engine.views_theme_scheme(preset, mode, contrast_name, bool(_schemes())))
+    return json.loads(flexweek_engine.views_theme_scheme(preset, mode, contrast_name, _schemes()))
 
 
 def stroke_for(contrast_name: str) -> float:
