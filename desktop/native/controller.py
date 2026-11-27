@@ -19,7 +19,6 @@ from backend.weeks import current_week_start
 from desktop.native.calendar import (
     hand_move,
     local_stamp,
-    monday_of,
     repeat_changes,
     stored_weeks_of,
     week_start_on,
@@ -62,14 +61,7 @@ from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
 from desktop.native.kept_alerts import KeptReminders
 from desktop.native.look import sanitize_look
-from desktop.native.remind import (
-    clock_parts,
-    due_alarms,
-    due_reminders,
-    due_songs,
-    reminder_lead_min,
-    todays_starts,
-)
+from desktop.native.remind import clock_parts
 from desktop.native.reuse import (
     clear_stale_pins,
     settle_placements,
@@ -3630,119 +3622,110 @@ class NativeSession(QObject):
         self.focus_changed.emit()
         return True
 
-    def _today_reminder_source(self, today_monday: str) -> tuple[list[dict], dict | None] | None:
-        if self.week_start == today_monday:
-            return self.blocks, self.trace
+    def _today_reminder_source(self, today_monday: str) -> dict | None:
+        # A parked lookup writes drafts, so it runs only when the open week is not today.
+        opened = json.loads(
+            flexweek_engine.session_open_reminder_source(
+                json.dumps(self.week_start), json.dumps(self.blocks), json.dumps(self.trace), today_monday
+            )
+        )
+        if opened is not None:
+            return opened
         parked = self._draft_command("parked", week_start=today_monday)["week"]
-        if parked is not None:
-            return parked["blocks"], parked.get("trace")
-        if self._reminder_week == today_monday:
-            return self._reminder_blocks, self._reminder_trace
-        return None
+        return json.loads(
+            flexweek_engine.session_parked_or_cached_source(
+                json.dumps(parked),
+                json.dumps(self._reminder_week),
+                json.dumps(self._reminder_blocks),
+                json.dumps(self._reminder_trace),
+                today_monday,
+            )
+        )
 
     def todays_reminder_blocks(self) -> dict[str, dict] | None:
         """Today's blocks by reminder key, or None while today's week is not known here."""
         clock = self._clock()
-        source = self._today_reminder_source(monday_of(clock["iso"]))
+        today_monday = flexweek_engine.calendar_monday_of(clock["iso"])
+        source = self._today_reminder_source(today_monday)
         if source is None:
             return None
-        return {key: block for block, _day, _start, key in todays_starts(source[0], source[1], clock["iso"])}
+        return json.loads(
+            flexweek_engine.session_todays_reminder_blocks(
+                json.dumps(source["blocks"]), json.dumps(source["trace"]), clock["iso"]
+            )
+        )
 
     def _due_block_alerts(
-        self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
+        self, blocks: list[dict], trace: dict | None, clock: dict
     ) -> tuple[list[dict], list[dict]]:
-        """Today's reminders, and the song for blocks that are starting.
-
-        A link stored on a block is left in the week. The copies handed to the engine have that field
-        cleared, so a block start uses the Settings link. It plays only when the alarm sound is
-        Spotify. A link saved for Focus does not start a song on its own.
-        """
-        notices: list[dict] = []
-        lead = reminder_lead_min(prefs)
-
-        def quiet(item: dict) -> dict:
-            if item.get("spotify_url"):
-                return {**item, "spotify_url": None}
-            return item
-
-        blocks = [quiet(block) for block in blocks]
-        if isinstance(trace, dict):
-            placed = trace.get("placed")
-            if isinstance(placed, list):
-                trace = {
-                    **trace,
-                    "placed": [quiet(item) if isinstance(item, dict) else item for item in placed],
-                }
-        # A bad saved link is left out here, as it is when the alarm rings.
-        default_link = self.spotify_url(prefs.get("default_spotify_url") or "") or None
-        sound_is_spotify = prefs.get("alarm_tone") == "spotify"
-        due = due_reminders(
-            blocks=blocks,
-            trace=trace,
-            today_iso=clock["iso"],
-            now_min=clock["minute"],
-            lead_min=lead,
-            fired=self.fired_reminders,
-            default_link=default_link,
-            sound_is_spotify=sound_is_spotify,
-        )
-        for item in due:
-            self.fired_reminders.add(item["key"])
-            notices.append(
-                {"title": item["title"], "body": item["body"], "kind": "reminder", "key": item["key"]}
+        due = json.loads(
+            flexweek_engine.session_due_block_alerts(
+                json.dumps(blocks, default=str),
+                json.dumps(trace, default=str),
+                clock["iso"],
+                clock["minute"],
+                json.dumps(self.preferences),
+                self.fired_reminders,
+                self.played_songs,
             )
-        songs = due_songs(
-            blocks=blocks,
-            trace=trace,
-            today_iso=clock["iso"],
-            now_min=clock["minute"],
-            lead_min=lead,
-            played=self.played_songs,
-            default_link=default_link,
-            sound_is_spotify=sound_is_spotify,
         )
-        self.played_songs.update(song["id"] for song in songs)
-        return notices, songs
+        return due["notices"], due["songs"]
 
     def _request_today_reminders(self, today_monday: str) -> None:
-        if self._reminder_fetching == today_monday:
+        begun = json.loads(
+            flexweek_engine.session_reminder_fetch_begin(
+                json.dumps(self._reminder_fetching), self._reminder_ticket, today_monday
+            )
+        )
+        self._reminder_fetching = begun["fetching"]
+        self._reminder_ticket = begun["ticket"]
+        if not begun["send"]:
             return
-        self._reminder_fetching = today_monday
-        self._reminder_ticket += 1
-        token = self._reminder_ticket
+        token = begun["ticket"]
 
         def ok(data: dict) -> None:
-            if token != self._reminder_ticket or self.account is None:
+            gate = json.loads(
+                flexweek_engine.session_reminder_fetch_gate(
+                    token,
+                    self._reminder_ticket,
+                    json.dumps(self.account),
+                    json.dumps(self.week_start),
+                    today_monday,
+                )
+            )
+            if gate["kind"] == "ignore":
                 return
             self._reminder_fetching = None
-            if self.week_start == today_monday or self._draft_command(
-                "parked", week_start=today_monday
-            )["week"] is not None:
-                self._emit_cached_today_reminders(today_monday)
-                return
-            self._reminder_week = data.get("week_start") or today_monday
-            self._reminder_blocks = list(data.get("blocks") or [])
-            self._reminder_trace = None
+            parked = None
+            if gate["need_parked"]:
+                parked = self._draft_command("parked", week_start=today_monday)["week"]
+            reply = json.loads(
+                flexweek_engine.session_reminder_fetch_apply(
+                    gate["need_parked"], json.dumps(parked), json.dumps(data), today_monday
+                )
+            )
+            if reply["kind"] == "cache":
+                self._reminder_week = reply["week"]
+                self._reminder_blocks = reply["blocks"]
+                self._reminder_trace = None
             self._emit_cached_today_reminders(today_monday)
 
         def failed(_error: ApiError) -> None:
-            if token != self._reminder_ticket:
-                return
-            self._reminder_fetching = None
+            if flexweek_engine.session_reminder_fetch_failed(token, self._reminder_ticket):
+                self._reminder_fetching = None
 
         self.client.request("GET", f"/api/week?week_start={today_monday}", None, ok, failed)
 
     def _emit_cached_today_reminders(self, today_monday: str) -> None:
-        prefs = self.preferences or {}
-        if not prefs.get("reminders_enabled"):
-            return
         clock = self._clock()
-        if monday_of(clock["iso"]) != today_monday:
+        if not flexweek_engine.session_cached_reminders_due(
+            json.dumps(self.preferences), clock["iso"], today_monday
+        ):
             return
         source = self._today_reminder_source(today_monday)
         if source is None:
             return
-        notices, songs = self._due_block_alerts(source[0], source[1], clock, prefs)
+        notices, songs = self._due_block_alerts(source["blocks"], source["trace"], clock)
         if notices:
             self.alerts.emit(notices)
         for song in songs:
@@ -3752,31 +3735,39 @@ class NativeSession(QObject):
         if self.account is None:
             return
         clock = self._clock()
-        notices: list[dict] = []
-        songs: list[dict] = []
-        prefs = self.preferences or {}
         # Before the due check: a card whose block starts now frees its key, so "starts now" comes this tick.
         self.reminder_cards.sync()
-        if prefs.get("reminders_enabled"):
-            today_monday = monday_of(clock["iso"])
-            source = self._today_reminder_source(today_monday)
-            if source is None:
-                self._request_today_reminders(today_monday)
-            else:
-                notices, songs = self._due_block_alerts(source[0], source[1], clock, prefs)
-        queued, self.snoozed_alarms, self.last_alarm_check = due_alarms(
-            alarms=[*(prefs.get("alarms") or []), *self._snoozed_songs.values()],
-            today_iso=clock["iso"],
-            weekday=clock["day"],
-            now_ms=clock["now_ms"],
-            midnight_ms=clock["midnight_ms"],
-            last_check_ms=self.last_alarm_check,
-            fired=self.fired_alarms,
-            snoozed=self.snoozed_alarms,
+        begun = json.loads(
+            flexweek_engine.session_check_alerts_begin(json.dumps(self.preferences), clock["iso"])
         )
+        notices: list[dict] = []
+        songs: list[dict] = []
+        if begun["today_monday"] is not None:
+            source = self._today_reminder_source(begun["today_monday"])
+            if source is None:
+                self._request_today_reminders(begun["today_monday"])
+            else:
+                notices, songs = self._due_block_alerts(source["blocks"], source["trace"], clock)
+        alarms = json.loads(
+            flexweek_engine.session_due_alarm_plan(
+                json.dumps(self.preferences),
+                self._alarms.songs(),
+                clock["iso"],
+                clock["day"],
+                clock["now_ms"],
+                self.last_alarm_check,
+                self.fired_alarms,
+                json.dumps(self.snoozed_alarms),
+                datetime.fromisoformat,
+            )
+        )
+        self.snoozed_alarms = alarms["snoozed_alarms"]
+        self.last_alarm_check = alarms["last_alarm_check"]
         if notices:
             self.alerts.emit(notices)
-        for alarm in (*songs, *queued):
+        for song in songs:
+            self._enqueue_alarm(song)
+        for alarm in alarms["queued"]:
             self._enqueue_alarm(alarm)
 
     @property
@@ -3810,13 +3801,7 @@ class NativeSession(QObject):
         Alarms pass their own link. More and a block start pass nothing and get the Settings link.
         A link stored on a block is not read.
         """
-        from backend.models import valid_spotify_url
-
-        raw = (self.preferences or {}).get("default_spotify_url") if value is None else value
-        try:
-            return valid_spotify_url(raw) or ""
-        except ValueError:
-            return ""
+        return flexweek_engine.session_resolve_spotify_url(json.dumps(self.preferences), json.dumps(value))
 
     def save_preferences(self, updates: dict, then: Callable[[bool], None] | None = None) -> bool:
         """Queue and send the changes one PUT at a time. `then` is told whether the server kept them."""
