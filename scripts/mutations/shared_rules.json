@@ -184,8 +184,8 @@
  {
   "file": "engine/app/src/views/sheet_block.rs",
   "name": "unticking i missed it keeps the day missed",
-  "old": "        let restored = self.occurrence_day.filter(|_| !self.missed).map(Value::from);\n",
-  "new": "        let restored = self.occurrence_day.filter(|_| false).map(Value::from);\n",
+  "old": "            .filter(|_| !self.missed)\n",
+  "new": "            .filter(|_| false)\n",
   "test": "cargo:flexweek-app:views_sheet_block:unticking_i_missed_it_removes_the_day"
  },
  {

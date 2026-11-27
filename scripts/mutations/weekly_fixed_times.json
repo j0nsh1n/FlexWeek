@@ -16,8 +16,8 @@
  {
   "file": "engine/app/src/views/sheet_block.rs",
   "name": "only Until changed asks the question anyway",
-  "old": "        if changed.iter().all(|name| *name == \"weekly\" || *name == \"until\") {\n",
-  "new": "        if false {\n",
+  "old": "            .all(|name| *name == \"weekly\" || *name == \"until\")\n",
+  "new": "            .all(|_| false)\n",
   "test": "cargo:flexweek-app:views_sheet_block:only_until_changed_is_later"
  }
 ]
