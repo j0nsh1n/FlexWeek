@@ -1539,3 +1539,738 @@ fn a_saved_timer_with_nan_or_a_lone_surrogate_is_dropped() {
     surrogate["start"] = json!(format!("09:00{}", char::from_u32(0x10F800).unwrap()));
     assert_eq!(restored(surrogate, 1000)["action"], "drop");
 }
+
+fn running_payload() -> Value {
+    json!({
+        "assignmentId": null,
+        "sessionId": "b1",
+        "weekStart": WEEK,
+        "day": 0,
+        "start": "09:00",
+        "phase": "work",
+        "cycles": 0,
+        "endsAt": 1_800_000,
+        "remainingMs": null,
+        "workMin": 30
+    })
+}
+
+fn paused_payload() -> Value {
+    json!({
+        "assignmentId": null,
+        "sessionId": "b1",
+        "weekStart": WEEK,
+        "day": 0,
+        "start": "09:00",
+        "phase": "work",
+        "cycles": 0,
+        "endsAt": null,
+        "remainingMs": 4000,
+        "workMin": 30
+    })
+}
+
+fn homework_payload() -> Value {
+    json!({
+        "assignmentId": "essay",
+        "sessionId": null,
+        "weekStart": WEEK,
+        "day": null,
+        "start": null,
+        "phase": "work",
+        "cycles": 1,
+        "endsAt": 5000,
+        "remainingMs": null
+    })
+}
+
+fn load_text(text: &str) -> Value {
+    call(focus::load_kept, json!({ "text": text }))
+}
+
+#[test]
+fn a_missing_focus_file_keeps_no_timer() {
+    assert_eq!(call(focus::load_kept, json!({})), json!({ "entries": [] }));
+    assert_eq!(
+        call(focus::load_kept, json!({ "text": null })),
+        json!({ "entries": [] })
+    );
+}
+
+#[test]
+fn an_unreadable_focus_file_is_dropped_and_is_not_an_error() {
+    for text in [
+        "",
+        "not json",
+        "{\"format\":1,\"accounts\":{\"7\":{\"endsAt\":NaN}}}",
+        "{\"format\":1,\"accounts\":{\"7\":{\"start\":\"\\uD800\"}}}",
+    ] {
+        assert_eq!(load_text(text), json!({ "entries": [] }));
+    }
+}
+
+#[test]
+fn a_focus_file_from_a_later_format_is_dropped() {
+    // A newer format is not loaded, and the answer says the file must be left on disk.
+    let later = json!({ "format": 2, "accounts": { "7": running_payload() } }).to_string();
+    assert_eq!(load_text(&later), json!({ "entries": [], "sealed": true }));
+    assert_eq!(
+        load_text(&json!({ "format": 0, "accounts": { "7": running_payload() } }).to_string()),
+        json!({ "entries": [], "sealed": true })
+    );
+    assert_eq!(
+        load_text(r#"{"format":"1","accounts":{}}"#),
+        json!({ "entries": [] })
+    );
+    assert_eq!(
+        load_text(r#"{"format":true,"accounts":{}}"#),
+        json!({ "entries": [] })
+    );
+    assert_eq!(
+        load_text(r#"{"format":1.0,"accounts":{}}"#),
+        json!({ "entries": [] })
+    );
+    assert_eq!(load_text("{}"), json!({ "entries": [] }));
+}
+
+#[test]
+fn a_wrong_shaped_focus_file_is_dropped_and_an_extra_key_is_ignored() {
+    assert_eq!(load_text("[]"), json!({ "entries": [] }));
+    assert_eq!(load_text("null"), json!({ "entries": [] }));
+    assert_eq!(load_text(r#"{"format":1}"#), json!({ "entries": [] }));
+    assert_eq!(
+        load_text(r#"{"format":1,"accounts":[]}"#),
+        json!({ "entries": [] })
+    );
+    assert_eq!(
+        load_text(r#"{"format":1,"accounts":null}"#),
+        json!({ "entries": [] })
+    );
+    let good = running_payload();
+    let text = json!({ "format": 1, "note": "later", "accounts": { "7": good } }).to_string();
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([{ "account_id": 7, "payload": good }])
+    );
+}
+
+#[test]
+fn nan_infinity_or_a_lone_surrogate_drops_that_timer_only() {
+    let good = running_payload();
+    let mut nan = running_payload();
+    nan["start"] = json!({ "\u{0}float": "nan" });
+    let mut inf = running_payload();
+    inf["start"] = json!({ "\u{0}float": "inf" });
+    let mut neg = running_payload();
+    neg["start"] = json!({ "\u{0}float": "-inf" });
+    let mut surrogate = running_payload();
+    surrogate["start"] = json!(format!("09{}", char::from_u32(0x10F800).unwrap()));
+    let text = json!({
+        "format": 1,
+        "accounts": { "1": nan, "2": good, "3": inf, "4": surrogate, "5": neg }
+    })
+    .to_string();
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([{ "account_id": 2, "payload": good }])
+    );
+}
+
+#[test]
+fn a_homework_timer_is_kept_and_a_timer_that_is_not_one_is_dropped() {
+    let homework = homework_payload();
+    let mut nap = running_payload();
+    nap["phase"] = json!("nap");
+    let mut tuesday = running_payload();
+    tuesday["weekStart"] = json!("2026-09-29");
+    let mut open = running_payload();
+    open["endsAt"] = Value::Null;
+    open["remainingMs"] = Value::Null;
+    let text = json!({
+        "format": 1,
+        "accounts": { "4": homework, "5": nap, "6": tuesday, "8": open, "9": "timer" }
+    })
+    .to_string();
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([{ "account_id": 4, "payload": homework }])
+    );
+}
+
+#[test]
+fn account_keys_that_are_not_the_decimal_id_are_dropped() {
+    let good = running_payload();
+    let text = json!({
+        "format": 1,
+        "accounts": {
+            "01": good,
+            "+1": good,
+            "-0": good,
+            " 1": good,
+            "9223372036854775808": good,
+            "7": good,
+            "-1": good
+        }
+    })
+    .to_string();
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([
+            { "account_id": -1, "payload": good },
+            { "account_id": 7, "payload": good }
+        ])
+    );
+}
+
+#[test]
+fn merging_a_running_timer_stores_the_payload_the_timer_already_saves() {
+    let merged = call(
+        focus::merge_kept,
+        json!({ "entries": [], "account_id": 7, "state": work_timer(false) }),
+    );
+    assert_eq!(
+        merged["entries"],
+        json!([{ "account_id": 7, "payload": running_payload() }])
+    );
+}
+
+#[test]
+fn merging_a_paused_timer_stores_the_time_left() {
+    let mut paused = work_timer(false);
+    paused["running"] = json!(false);
+    paused["remainingMs"] = json!(4000);
+    let merged = call(
+        focus::merge_kept,
+        json!({ "entries": [], "account_id": 7, "state": paused }),
+    );
+    assert_eq!(
+        merged["entries"],
+        json!([{ "account_id": 7, "payload": paused_payload() }])
+    );
+}
+
+#[test]
+fn merging_null_removes_that_account_and_leaves_the_other() {
+    let running = running_payload();
+    let merged = call(
+        focus::merge_kept,
+        json!({
+            "entries": [
+                { "account_id": 7, "payload": running },
+                { "account_id": 8, "payload": running }
+            ],
+            "account_id": 7,
+            "state": null
+        }),
+    );
+    assert_eq!(
+        merged["entries"],
+        json!([{ "account_id": 8, "payload": running }])
+    );
+}
+
+#[test]
+fn the_last_copy_of_an_account_wins_and_ids_come_out_in_order() {
+    let running = running_payload();
+    let paused = paused_payload();
+    let merged = call(
+        focus::merge_kept,
+        json!({
+            "entries": [
+                { "account_id": 10, "payload": running },
+                { "account_id": 2, "payload": running },
+                { "account_id": 10, "payload": paused }
+            ],
+            "account_id": 2,
+            "state": work_timer(false)
+        }),
+    );
+    assert_eq!(
+        merged["entries"],
+        json!([
+            { "account_id": 2, "payload": running },
+            { "account_id": 10, "payload": paused }
+        ])
+    );
+}
+
+#[test]
+fn merging_a_state_that_is_not_a_timer_stores_nothing() {
+    let merged = call(
+        focus::merge_kept,
+        json!({ "entries": [], "account_id": 7, "state": {} }),
+    );
+    assert_eq!(merged["entries"], json!([]));
+}
+
+#[test]
+fn removing_one_account_leaves_the_other() {
+    let running = running_payload();
+    let left = call(
+        focus::remove_kept,
+        json!({
+            "entries": [
+                { "account_id": 2, "payload": running },
+                { "account_id": 10, "payload": running }
+            ],
+            "account_id": 10
+        }),
+    );
+    assert_eq!(
+        left["entries"],
+        json!([{ "account_id": 2, "payload": running }])
+    );
+    assert_eq!(left["changed"], true);
+}
+
+#[test]
+fn removing_an_account_that_is_not_there_changes_nothing() {
+    let running = running_payload();
+    let entries = json!([{ "account_id": 2, "payload": running }]);
+    let left = call(
+        focus::remove_kept,
+        json!({ "entries": entries, "account_id": 9 }),
+    );
+    assert_eq!(left["entries"], entries);
+    assert_eq!(left["changed"], false);
+}
+
+#[test]
+fn account_zero_and_a_negative_id_round_trip() {
+    let merged = call(
+        focus::merge_kept,
+        json!({ "entries": [], "account_id": 0, "state": work_timer(false) }),
+    );
+    let text = call(focus::kept_text, merged)["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(text.contains("\"0\":"));
+    assert_eq!(load_text(&text)["entries"][0]["account_id"], 0);
+
+    let merged = call(
+        focus::merge_kept,
+        json!({ "entries": [], "account_id": -1, "state": work_timer(false) }),
+    );
+    let text = call(focus::kept_text, merged)["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(text.contains("\"-1\":"));
+    assert_eq!(load_text(&text)["entries"][0]["account_id"], -1);
+}
+
+#[test]
+fn a_kept_call_with_the_wrong_shape_is_refused() {
+    let err = focus::load_kept(&json!({ "text": 1 })).unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("text is text or null")
+    );
+
+    let err = focus::merge_kept(&json!({ "account_id": 7, "state": null })).unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("entries is a list")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": {},
+        "account_id": 7,
+        "state": null
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("entries is a list")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": [{ "account_id": true, "payload": {} }],
+        "account_id": 7,
+        "state": null
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("account_id is a whole number")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": [{ "account_id": 1.5, "payload": {} }],
+        "account_id": 7,
+        "state": null
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("account_id is a whole number")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": ["no"],
+        "account_id": 7,
+        "state": null
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("an entry is an object")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": [{ "account_id": 7, "payload": "x" }],
+        "account_id": 7,
+        "state": null
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("payload is an object")
+    );
+
+    let err = focus::merge_kept(&json!({ "entries": [], "account_id": 7 })).unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("state is an object or null")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": [],
+        "account_id": true,
+        "state": null
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("account_id is a whole number")
+    );
+
+    let err = focus::merge_kept(&json!({
+        "entries": [],
+        "account_id": 7,
+        "state": "no"
+    }))
+    .unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::stored::attribute_error(&json!("no"), "get")
+    );
+
+    let err = focus::remove_kept(&json!({ "entries": [] })).unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("account_id is a whole number")
+    );
+
+    let err = focus::kept_text(&json!({})).unwrap_err();
+    assert_eq!(
+        err,
+        flexweek_engine::EngineError::value("entries is a list")
+    );
+}
+
+#[test]
+fn the_focus_file_is_format_one_with_accounts_in_id_order() {
+    let running = running_payload();
+    let paused = paused_payload();
+    let text = call(
+        focus::kept_text,
+        json!({
+            "entries": [
+                { "account_id": 10, "payload": paused },
+                { "account_id": 2, "payload": running }
+            ]
+        }),
+    )["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let expected = format!(
+        "{{\"format\":1,\"accounts\":{{\"2\":{},\"10\":{}}}}}",
+        running, paused
+    );
+    assert_eq!(text, expected);
+    assert!(!text.ends_with('\n'));
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([
+            { "account_id": 2, "payload": running },
+            { "account_id": 10, "payload": paused }
+        ])
+    );
+    assert_eq!(
+        call(focus::kept_text, json!({ "entries": [] }))["text"],
+        "{\"format\":1,\"accounts\":{}}"
+    );
+}
+
+fn kept_file(accounts: Value) -> String {
+    json!({ "format": 1, "accounts": accounts }).to_string()
+}
+
+#[test]
+fn a_focus_file_bigger_than_64_kib_keeps_no_timer() {
+    let mut payload = running_payload();
+    payload["start"] = json!("s".repeat(70_000));
+    let text = kept_file(json!({ "7": payload }));
+    assert!(text.len() > 64 * 1024);
+    assert_eq!(load_text(&text), json!({ "entries": [] }));
+}
+
+#[test]
+fn a_kept_timer_keeps_only_the_fields_the_app_writes() {
+    let mut payload = running_payload();
+    payload["extra"] = json!("junk");
+    payload["title"] = json!("spoof");
+    // In range, so the timer stays, but these are not part of the stored timer.
+    payload["breakMin"] = json!(15);
+    payload["longBreakMin"] = json!(30);
+    payload["startedAt"] = json!(1_000);
+    let text = kept_file(json!({ "7": payload }));
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([{ "account_id": 7, "payload": running_payload() }])
+    );
+}
+
+#[test]
+fn a_timer_at_the_apps_own_limits_is_kept() {
+    let mut payload = running_payload();
+    payload["workMin"] = json!(180);
+    payload["cycles"] = json!(9999);
+    payload["day"] = json!(6);
+    payload["endsAt"] = json!(i64::MAX);
+    let text = kept_file(json!({ "3": payload }));
+    assert_eq!(load_text(&text)["entries"][0]["payload"], payload);
+}
+
+#[test]
+fn an_out_of_range_kept_timer_is_dropped() {
+    let bad = [
+        ("1", "day", json!(true)),
+        ("2", "day", json!(7)),
+        ("3", "day", json!(-1)),
+        ("4", "cycles", json!(false)),
+        ("5", "cycles", json!(-1)),
+        ("6", "cycles", json!(10_000)),
+        ("7", "cycles", json!(i64::MAX)),
+        ("8", "workMin", json!(181)),
+        ("9", "workMin", json!(0)),
+        ("10", "workMin", json!(true)),
+        ("11", "remainingMs", json!(18446744073709551615u64)),
+        ("12", "endsAt", json!(18446744073709551615u64)),
+        ("13", "remainingMs", json!(-1)),
+        ("14", "endsAt", json!(-1)),
+        ("16", "breakMin", json!(61)),
+        ("17", "longBreakMin", json!(121)),
+        ("18", "startedAt", json!(-1)),
+    ];
+    let mut accounts = serde_json::Map::new();
+    for (id, key, value) in bad {
+        let mut payload = running_payload();
+        payload[key] = value;
+        accounts.insert(id.to_string(), payload);
+    }
+    // Neither clock is set, so this is not a timer the app can restore.
+    let mut open = running_payload();
+    open["endsAt"] = Value::Null;
+    open["remainingMs"] = Value::Null;
+    accounts.insert("15".to_string(), open);
+    // The one that stays: an ended timer the app can write, with a time left of zero.
+    accounts.insert(
+        "20".to_string(),
+        json!({
+            "assignmentId": null,
+            "sessionId": null,
+            "weekStart": WEEK,
+            "day": null,
+            "start": null,
+            "phase": "ended",
+            "cycles": 1,
+            "endsAt": null,
+            "remainingMs": 0
+        }),
+    );
+    let loaded = load_text(&kept_file(Value::Object(accounts)));
+    assert_eq!(
+        loaded["entries"],
+        json!([{
+            "account_id": 20,
+            "payload": {
+                "assignmentId": null,
+                "sessionId": null,
+                "weekStart": WEEK,
+                "day": null,
+                "start": null,
+                "phase": "ended",
+                "cycles": 1,
+                "endsAt": null,
+                "remainingMs": 0
+            }
+        }])
+    );
+}
+
+#[test]
+fn an_ended_timer_that_ran_out_stays_ended() {
+    let decision = restored(saved_timer("ended", 500), 1000);
+    assert_eq!(decision["action"], "active");
+    assert_eq!(decision["state"]["phase"], "ended");
+    assert!(decision.get("paused").is_none());
+    assert!(decision.get("say").is_none());
+
+    let resting = restored(saved_timer("long_break", 500), 1000);
+    assert_eq!(resting["action"], "paused_work");
+    assert_eq!(resting["paused"]["phase"], "work");
+}
+
+#[test]
+fn a_timer_whose_session_belongs_to_another_homework_is_dropped() {
+    let saved = json!({
+        "assignmentId": "essay",
+        "sessionId": "block-a",
+        "weekStart": WEEK,
+        "day": 0,
+        "start": "09:00",
+        "phase": "work",
+        "cycles": 0,
+        "endsAt": 1,
+        "remainingMs": null,
+        "workMin": 30
+    });
+    let decision = call(
+        focus::restore_decision,
+        json!({
+            "saved": saved,
+            "assignments": {
+                "essay": { "id": "essay", "title": "Essay", "completed": false },
+                "other": { "id": "other", "title": "Other", "completed": false }
+            },
+            "blocks": [{ "id": "block-a", "title": "Write", "assignment_id": "other" }],
+            "prefs": {},
+            "now_ms": 1000
+        }),
+    );
+    assert_eq!(decision, json!({ "action": "drop" }));
+}
+
+#[test]
+fn a_timer_from_another_week_is_not_dropped_for_a_session_the_open_week_does_not_hold() {
+    // Started Sunday night, reopened on Monday: the open week has none of last week's blocks.
+    let saved = json!({
+        "assignmentId": "essay",
+        "sessionId": "last-week-block",
+        "weekStart": WEEK,
+        "day": 6,
+        "start": "21:00",
+        "phase": "work",
+        "cycles": 0,
+        "endsAt": 500,
+        "remainingMs": null,
+        "workMin": 30
+    });
+    let decision = call(
+        focus::restore_decision,
+        json!({
+            "saved": saved,
+            "assignments": { "essay": { "id": "essay", "title": "Essay", "completed": false } },
+            "blocks": [{ "id": "this-week-block", "title": "Write", "assignment_id": "essay" }],
+            "prefs": {},
+            "now_ms": 1000
+        }),
+    );
+    assert_ne!(decision["action"], "drop");
+}
+
+#[test]
+fn a_timer_on_its_own_session_is_still_advanced_when_the_work_ran_out() {
+    let saved = json!({
+        "assignmentId": "essay",
+        "sessionId": "b1",
+        "weekStart": WEEK,
+        "day": 0,
+        "start": "09:00",
+        "phase": "work",
+        "cycles": 0,
+        "endsAt": 500,
+        "remainingMs": null,
+        "workMin": 30
+    });
+    let decision = call(
+        focus::restore_decision,
+        json!({
+            "saved": saved,
+            "assignments": {
+                "essay": { "id": "essay", "title": "Essay", "completed": false }
+            },
+            "blocks": [{ "id": "b1", "title": "Write", "assignment_id": "essay" }],
+            "prefs": {},
+            "now_ms": 1000
+        }),
+    );
+    assert_eq!(decision["action"], "advance_work");
+    assert_eq!(decision["state"]["assignmentId"], "essay");
+    assert_eq!(decision["state"]["blockId"], "b1");
+}
+
+#[test]
+fn a_homework_timer_with_no_session_is_still_advanced() {
+    let mut saved = homework_payload();
+    saved["endsAt"] = json!(500);
+    let decision = call(
+        focus::restore_decision,
+        json!({
+            "saved": saved,
+            "assignments": {
+                "essay": { "id": "essay", "title": "Essay", "completed": false }
+            },
+            "blocks": [],
+            "prefs": {},
+            "now_ms": 1000
+        }),
+    );
+    assert_eq!(decision["action"], "advance_work");
+}
+
+#[test]
+fn merging_an_out_of_range_timer_does_not_store_it() {
+    let mut state = work_timer(false);
+    state["cycles"] = json!(10_000);
+    state["workMin"] = json!(181);
+    let merged = call(
+        focus::merge_kept,
+        json!({
+            "entries": [{ "account_id": 7, "payload": running_payload() }],
+            "account_id": 7,
+            "state": state
+        }),
+    );
+    assert_eq!(merged["entries"], json!([]));
+}
+
+#[test]
+fn writing_keeps_only_a_timer_the_app_would_store() {
+    let mut junk = running_payload();
+    junk["extra"] = json!("junk");
+    junk["breakMin"] = json!(15);
+    let text = call(
+        focus::kept_text,
+        json!({
+            "entries": [
+                { "account_id": 7, "payload": junk },
+                { "account_id": 8, "payload": { "phase": "nope" } }
+            ]
+        }),
+    )["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(!text.contains("extra"));
+    assert!(!text.contains("breakMin"));
+    assert!(!text.contains("\"8\""));
+    assert_eq!(
+        load_text(&text)["entries"],
+        json!([{ "account_id": 7, "payload": running_payload() }])
+    );
+}
