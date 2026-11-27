@@ -20,7 +20,6 @@ from desktop.native.calendar import (
     hand_move,
     local_stamp,
     repeat_changes,
-    stored_weeks_of,
     week_start_on,
 )
 from desktop.native.client import SESSION_ENDED, ApiError, NativeClient
@@ -70,10 +69,10 @@ from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
 from desktop.native.kept_alerts import KeptReminders
 from desktop.native.look import sanitize_look
-from desktop.native.remind import clock_parts
+from desktop.native.remind import (
+    clock_parts,
+)
 from desktop.native.reuse import (
-    clear_stale_pins,
-    settle_placements,
     week_label,
 )
 from desktop.native.weekmodel import (
@@ -246,6 +245,7 @@ class NativeSession(QObject):
         self._draft_versions: dict[str, int] = {}
         self._draft_command("clear", week_start=current_week_start())
         self._views = flexweek_engine.ViewState(wall_clock.today().isoformat())
+        self._flow = flexweek_engine.PlanFlow()
         # New homework to give a time once its save lands, when the student plans as they add.
         self._plan_after_save: set[str] = set()
         # Sessions to plan once the open week is read again: a save wrote them through the stored
@@ -488,10 +488,7 @@ class NativeSession(QObject):
     def _fail(self, ticket: int, error: ApiError) -> None:
         planning = self.planning
         if self._idle(ticket):
-            if planning and error.status == 0:
-                self._say("Can't reach FlexWeek, so nothing was planned. Try again.")
-            else:
-                self._say(error.message)
+            self._say(flexweek_engine.session_fail_words(planning, error.status, error.message))
 
     def _drop_setup(self) -> None:
         """Unsent setup answers and queued preference saves belong to the account that gave them."""
@@ -725,6 +722,95 @@ class NativeSession(QObject):
     @property
     def _month_prefetching(self) -> set:
         return _MonthPrefetch(self)
+
+    # The same set or dict the window assigned, so an in-place edit is still there on the next read.
+    @property
+    def _plan_after_save(self) -> set[str]:
+        return self._flow.plan_after_save()
+
+    @_plan_after_save.setter
+    def _plan_after_save(self, value: set[str]) -> None:
+        self._flow.set_plan_after_save(value)
+
+    @property
+    def _plan_after_load(self) -> set[str]:
+        return self._flow.plan_after_load()
+
+    @_plan_after_load.setter
+    def _plan_after_load(self, value: set[str]) -> None:
+        self._flow.set_plan_after_load(value)
+
+    @property
+    def _split_whole(self) -> set[str]:
+        return self._flow.split_whole()
+
+    @_split_whole.setter
+    def _split_whole(self, value: set[str]) -> None:
+        self._flow.set_split_whole(value)
+
+    @property
+    def _split_planned(self) -> set[str]:
+        return self._flow.split_planned()
+
+    @_split_planned.setter
+    def _split_planned(self, value: set[str]) -> None:
+        self._flow.set_split_planned(value)
+
+    @property
+    def _replan_after_save(self) -> bool:
+        return self._flow.replan_after_save()
+
+    @_replan_after_save.setter
+    def _replan_after_save(self, value: bool) -> None:
+        self._flow.set_replan_after_save(value)
+
+    @property
+    def _replan_after_load(self) -> bool:
+        return self._flow.replan_after_load()
+
+    @_replan_after_load.setter
+    def _replan_after_load(self, value: bool) -> None:
+        self._flow.set_replan_after_load(value)
+
+    @property
+    def _spread_after_save(self) -> tuple[str, int, str] | None:
+        return self._flow.spread_after_save()
+
+    @_spread_after_save.setter
+    def _spread_after_save(self, value: tuple[str, int, str] | None) -> None:
+        self._flow.set_spread_after_save(value)
+
+    @property
+    def _allow_split_pending(self) -> str | None:
+        return self._flow.allow_split_pending()
+
+    @_allow_split_pending.setter
+    def _allow_split_pending(self, value: str | None) -> None:
+        self._flow.set_allow_split_pending(value)
+
+    @property
+    def _seen_unfinished(self) -> set[str]:
+        return self._flow.seen_unfinished()
+
+    @_seen_unfinished.setter
+    def _seen_unfinished(self, value: set[str]) -> None:
+        self._flow.set_seen_unfinished(value)
+
+    @property
+    def _fresh_plan(self) -> bool:
+        return self._flow.fresh_plan()
+
+    @_fresh_plan.setter
+    def _fresh_plan(self, value: bool) -> None:
+        self._flow.set_fresh_plan(value)
+
+    @property
+    def needs_time(self) -> dict[str, str]:
+        return self._flow.needs_time()
+
+    @needs_time.setter
+    def needs_time(self, value: dict[str, str]) -> None:
+        self._flow.set_needs_time(value)
 
     def arm_category(self, category: str) -> None:
         self.armed_category = category
@@ -1119,13 +1205,58 @@ class NativeSession(QObject):
         self.week_changed.emit()
         self._finish_loaded_focus(loaded=False)
 
+    def _apply_saved_steps(self, steps: list[dict], answer: dict | None = None) -> None:
+        """Run one saved plan's steps in order. A read stops the list; what follows that read waits."""
+        for step in steps:
+            kind = step["kind"]
+            if kind == "say_status":
+                self.message = answer["words"]
+            elif kind == "say":
+                self._say(answer["words"])
+            elif kind == "invalidate_months":
+                self._invalidate_months()
+            elif kind == "spread_next":
+                args = (step["assignment_id"], step["session_min"], step["from_date"])
+                QTimer.singleShot(
+                    0, lambda args=args: self.preview_spread(*args, then=self.confirm_spread)
+                )
+            elif kind == "solve_only":
+                ids = step["ids"]
+                QTimer.singleShot(0, lambda ids=ids: self.solve(only=set(ids), join=True))
+            elif kind == "solve_replan":
+                QTimer.singleShot(0, lambda: self.solve(everything=True))
+            elif kind == "save_finished":
+                self.save_finished.emit(True, self.message)
+            elif kind == "repeats_kept":
+                self.repeats_kept.emit(step["notice"])
+            elif kind == "save_answered":
+                self.save_answered.emit(step["point_id"], step["doubled"])
+            elif kind == "emit_planned":
+                self.planned.emit(self.message)
+            elif kind == "clear_reminder_week":
+                self._reminder_week = None
+            elif kind == "load_destination":
+                self.load_week(step["week"])
+                return
+            elif kind == "refollow":
+                self._follow_week()
+                if self.busy:
+                    return
+                self._apply_saved_steps(step["then"], answer)
+                return
+            elif kind == "reload_open":
+                self.load_week(self.week_start, discard=True, said=self.message)
+                return
+            elif kind == "run_waiting":
+                self._plan_waiting_for_load()
+                self._refresh_view()
+                self.week_changed.emit()
+                self._fetch_weeks()
+                self._refresh_assignments()
+                return
+
     def _plan_waiting_for_load(self) -> None:
-        planned, self._plan_after_load = self._plan_after_load, set()
-        if planned:
-            QTimer.singleShot(0, lambda: self.solve(only=planned, join=True))
-        replan, self._replan_after_load = self._replan_after_load, False
-        if replan:
-            QTimer.singleShot(0, lambda: self.solve(everything=True))
+        self._apply_saved_steps(json.loads(self._flow.plan_waiting_for_load()))
 
     def reload(self) -> None:
         self._draft_command("reload")
@@ -1220,11 +1351,9 @@ class NativeSession(QObject):
     def stored_weeks(self) -> list[tuple[str, int]]:
         """The stored (Monday) weeks the open week is read from, with the revisions this window holds:
         the week itself from Monday, both stored weeks it covers from any other day."""
-        if self._stored_parts:
-            return [(str(part["week_start"]), int(part["revision"])) for part in self._stored_parts]
-        if isinstance(self.revision, list):
-            return list(zip(stored_weeks_of(self.week_start), map(int, self.revision), strict=True))
-        return [(self.week_start, int(self.revision))]
+        return flexweek_engine.session_stored_week_rows(
+            json.dumps(self._stored_parts), json.dumps(self.revision), self.week_start
+        )
 
     def accept_remote_week(self, who: str) -> bool:
         """A linked phone's edits arrived. Unsaved edits here are kept and marked as a conflict, and
@@ -1247,47 +1376,36 @@ class NativeSession(QObject):
         intents: list[dict] | None = None,
     ) -> None:
         blocks = self.blocks if blocks is None else blocks
-        assignments = {**self.assignments, **{item["id"]: item for item in homework}}
-        overdue = self._overdue_assignment_ids(assignments)
-        after_deadline = {
-            block["id"] for block in blocks
-            if block.get("start") and block.get("assignment_id") in overdue
-        }
-        blocks, lost = settle_placements(
-            blocks, assignments, self.week_start, keep, after_deadline=after_deadline
+        settled = json.loads(
+            flexweek_engine.session_touch_settle(
+                json.dumps(
+                    {
+                        "blocks": blocks,
+                        "assignments": self.assignments,
+                        "homework": list(homework),
+                        "week_start": self.week_start,
+                        "keep": list(keep),
+                        "selected_block_id": self.selected_block_id,
+                        "now": self._clock_now(),
+                        "needs_time": self.needs_time,
+                    }
+                )
+            )
         )
-        blocks = clear_stale_pins(blocks)
         self._draft_command(
-            "touch", label=label, blocks=blocks, put_homework=homework,
+            "touch", label=label, blocks=settled["blocks"], put_homework=homework,
             repeats=repeats, hold_repeats=intents,
         )
-        if self.selected_block_id not in {item["id"] for item in blocks}:
+        if settled["clear_selection"]:
             self.select_block(None, None)
-        for note in lost:
-            self.needs_time[note["block_id"]] = note["message"]
-        self._forget_settled_notes()
+        self.needs_time = settled["needs_time"]
         self.week_changed.emit()
-        if lost:
-            self.plan_conflicts.emit(lost)
-
-    def _forget_settled_notes(self) -> None:
-        waiting = {
-            block["id"]
-            for block in self.blocks
-            if block.get("kind") == "flexible" and not block.get("completed") and not block.get("start")
-        }
-        self.needs_time = {key: value for key, value in self.needs_time.items() if key in waiting}
+        if settled["lost"]:
+            self.plan_conflicts.emit(settled["lost"])
 
     def plan_notes(self) -> dict | None:
         """The last plan's explanations, or after an edit the reason each session lost its time."""
-        if self.trace is not None:
-            return self.trace
-        if not self.needs_time:
-            return None
-        return {
-            "placed": [],
-            "explanations": [{"block_id": key, "message": value} for key, value in self.needs_time.items()],
-        }
+        return flexweek_engine.session_plan_notes(json.dumps(self.trace), json.dumps(self.needs_time))
 
     def check_block(self, block: dict) -> dict:
         return _checked_block(block)
@@ -1478,14 +1596,7 @@ class NativeSession(QObject):
 
     def plan_after_save(self, assignment_id: str) -> None:
         """Give this homework's sessions that need a time one once the save now under way lands."""
-        waiting = {
-            block["id"]
-            for block in self.blocks
-            if block.get("assignment_id") == assignment_id
-            and not block.get("start")
-            and not block.get("completed")
-        }
-        self._plan_after_save |= waiting
+        self._flow.plan_after_save_ids(json.dumps(self.blocks), assignment_id)
 
     def allow_splitting(self, assignment_id: str) -> bool:
         plan = json.loads(
@@ -1745,13 +1856,27 @@ class NativeSession(QObject):
 
     def delete_homework(self, assignment_id: str) -> bool:
         """Delete homework and its sessions in every week as one undoable change."""
-        item = self.assignments.get(assignment_id)
-        if item is None or self.account is None or self.conflict:
+        decision = json.loads(
+            flexweek_engine.session_delete_homework_guard(
+                json.dumps(
+                    {
+                        "account": self.account,
+                        "assignment_id": assignment_id,
+                        "item": self.assignments.get(assignment_id),
+                        "conflict": self.conflict,
+                        "busy": self.busy,
+                        "dirty": self.dirty,
+                        "pending_save": self.pending_save,
+                    }
+                )
+            )
+        )
+        if decision["kind"] == "absent":
             return False
-        if self.busy or self.dirty or self.pending_save is not None:
-            self._say("Saving your last change… Try Delete again in a moment.")
+        if decision["kind"] == "wait":
+            self._say(decision["say"])
             return False
-        key = f"delete-homework|{self.account['id']}|{assignment_id}|{int(item.get('revision') or 0)}"
+        key = decision["key"]
         operation_id = self._operation(key)
         ticket = self._begin()
         first = self._draft_command(
@@ -1898,83 +2023,31 @@ class NativeSession(QObject):
         def ok(answer: dict) -> None:
             if not self._idle(ticket):
                 return
-            current = answer["open_week"]
-            destination = answer["destination"]
-            written = answer["written"]
-            planned = answer["planned"]
-            if planned:
-                # `planned` says it, with Undo.
-                self.message = answer["words"]
-            else:
-                self._say(answer["words"])
-            self._invalidate_months()
-            spread_next, self._spread_after_save = self._spread_after_save, None
-            if spread_next is not None:
-                QTimer.singleShot(0, lambda: self.preview_spread(*spread_next, then=self.confirm_spread))
-            self._split_whole -= self._split_planned
-            self._split_planned = set()
-            planned_next, self._plan_after_save = self._plan_after_save, set()
-            reread = (
-                destination is None
-                and not self._refollow_week
-                and not current
-                and self._wrote_open_weeks(written)
+            steps = json.loads(
+                self._flow.post_pending_ok(
+                    json.dumps(
+                        {
+                            "planned": answer["planned"],
+                            "open_week": answer["open_week"],
+                            "destination": answer["destination"],
+                            "repeat_notice": answer["repeat_notice"],
+                            "point_id": answer["point_id"],
+                            "doubled": answer["doubled"],
+                            "refollow": self._refollow_week,
+                            "wrote_open": self._wrote_open_weeks(answer["written"]),
+                            "first_weekday": self.first_weekday,
+                        }
+                    )
+                )
             )
-            # A new first day of the week opens its week next; a plan started before that read lands
-            # would take its place and leave the old week on screen.
-            following = destination is None and self._refollow_week
-            if planned_next and (reread or following):
-                self._plan_after_load = planned_next
-            elif planned_next:
-                # Plan it for me as I add it: the new homework's time, joined to the add in one step.
-                QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
-            replan_next, self._replan_after_save = self._replan_after_save, False
-            if replan_next and following:
-                self._replan_after_load = True
-            elif replan_next:
-                QTimer.singleShot(0, lambda: self.solve(everything=True))
-            self.save_finished.emit(True, self.message)
-            kept = answer["repeat_notice"]
-            if kept:
-                self.repeats_kept.emit(kept)
-            point_id = answer["point_id"]
-            doubled = answer["doubled"]
-            if point_id or doubled:
-                self.save_answered.emit(point_id, doubled)
-            if planned:
-                self.planned.emit(self.message)
-            if self.first_weekday:
-                # Reminders read today's stored week from the server when the open week starts on another
-                # day; what this save changed is read again.
-                self._reminder_week = None
-            if destination is not None:
-                self.load_week(destination)
-                return
-            if self._refollow_week:
-                self._follow_week()
-                if self.busy:
-                    return
-            if not current and self._wrote_open_weeks(written):
-                # Stored weeks the open week shows changed through their Mondays: show them again.
-                self.load_week(self.week_start, discard=True, said=self.message)
-                return
-            # No read followed after all: what waited for one runs now.
-            self._plan_waiting_for_load()
-            self._refresh_view()
-            self.week_changed.emit()
-            self._fetch_weeks()
-            self._refresh_assignments()
+            self._apply_saved_steps(steps, answer)
 
         def err(refusal: dict) -> None:
             if not self._idle(ticket):
                 return
             # A plan waiting on this save must not fire after some later, unrelated one.
-            self._plan_after_save = set()
-            # A plan that was not saved ends no promise; Allow splitting's sessions stay to be saved by Retry.
-            self._split_planned = set()
-            self._replan_after_save = False
-            self._spread_after_save = None
-            self._allow_split_pending = None
+            # Allow splitting's sessions stay promised, for Retry to save.
+            self._flow.post_pending_err()
             self._say(refusal["words"])
             self.save_finished.emit(False, self.message)
             self.week_changed.emit()
@@ -2106,7 +2179,6 @@ class NativeSession(QObject):
             self.week_changed.emit()
             return
         body = prepared["body"]
-        targets = set(prepared["targets"])
         prior_updates = prepared["prior_updates"]
         shares = prepared["shares"]
         week = prepared["week"]
@@ -2139,48 +2211,65 @@ class NativeSession(QObject):
                     )
                 )
             )
-            self.needs_time = answer["needs_time"]
-            self._fresh_plan = True
             self.plan_remainders = [tuple(item) for item in answer["plan_remainders"]]
             self.plan_counts = tuple(answer["plan_counts"])
             self.plan_open = answer["plan_open"]
             self.plan_first = None if answer["plan_first"] is None else tuple(answer["plan_first"])
-            split_note = answer["split_note"]
-            changed = answer["changed"]
-            dirty = self.dirty or changed or bool(split_note)
+            commit = json.loads(
+                self._flow.solve_apply_commit(
+                    json.dumps(
+                        {
+                            "needs_time": answer["needs_time"],
+                            "split_note": answer["split_note"],
+                            "changed": answer["changed"],
+                            "placed_note": answer["placed_note"],
+                            "placed_where": answer["placed_where"],
+                            "dirty": self.dirty,
+                            "dirty_assignments": list(self.dirty_assignments),
+                            "prior_updates": prior_updates,
+                            "targets": prepared["targets"],
+                            "join": join,
+                            "step_id": str(uuid4()),
+                        }
+                    ),
+                    only,
+                )
+            )
             self._draft_command(
                 "apply_plan",
                 blocks=answer["blocks"],
                 trace=answer["trace"],
-                history_label="the focus split" if split_note else "planning the week" if changed else None,
-                dirty=dirty,
-                prior_updates=prior_updates if changed else None,
-                step_id=str(uuid4()) if changed and prior_updates else None,
-                clear_plan_step_id=dirty or bool(self.dirty_assignments),
+                history_label=commit["history_label"],
+                dirty=commit["dirty"],
+                prior_updates=commit["prior_updates"],
+                step_id=commit["step_id"],
+                clear_plan_step_id=commit["clear_plan_step_id"],
             )
-            placed_note = answer["placed_note"]
-            if answer["placed_where"]:
-                self.placed_where = answer["placed_where"]
-            if not changed and not self.dirty and not self.dirty_assignments:
-                self._say(placed_note)
+            if commit["placed_where"] is not None:
+                self.placed_where = commit["placed_where"]
+            if commit["kind"] == "say":
+                self._say(commit["placed_note"])
                 self.week_changed.emit()
                 return
             # Said once its save lands, by `planned`, with Undo. Said now as well, the toast showed it
             # without Undo and then rewrapped it (Grok Bot's 0.17.0 audit, T7).
-            self.message = placed_note
+            self.message = commit["placed_note"]
             self.week_changed.emit()
-            self._split_planned = targets & self._split_whole
-            self.save(status=placed_note, join=join, plan=changed and not (join and only is not None))
+            self.save(status=commit["placed_note"], join=join, plan=commit["plan"])
 
         def err(error: ApiError) -> None:
-            if self._alive(ticket) and _new_left:
-                self._draft_command(
-                    "apply_plan",
-                    blocks=[block for block in self.blocks if block["id"] not in _new_left],
-                    dirty=_dirty_before,
+            if self._alive(ticket):
+                rolled = json.loads(
+                    self._flow.solve_err_rollback(
+                        json.dumps({"blocks": self.blocks, "dirty_before": _dirty_before}),
+                        _new_left,
+                    )
                 )
-                self._forget_settled_notes()
-                self.week_changed.emit()
+                if rolled["rollback"]:
+                    self._draft_command(
+                        "apply_plan", blocks=rolled["blocks"], dirty=rolled["dirty"]
+                    )
+                    self.week_changed.emit()
             self._fail(ticket, error)
 
         self.client.request(
@@ -2280,10 +2369,7 @@ class NativeSession(QObject):
 
     def consume_plan_review(self) -> dict | None:
         """The solver's trace, once, for the review panel. Reading a week again must not reopen it."""
-        if not self._fresh_plan:
-            return None
-        self._fresh_plan = False
-        return self.trace
+        return self._flow.consume_plan_review(json.dumps(self.trace))
 
     def _clock_now(self) -> dict[str, Any]:
         clock = datetime.fromtimestamp(self.now_ms() / 1000)
@@ -2851,11 +2937,9 @@ class NativeSession(QObject):
         )
 
     def consume_unfinished(self) -> list[dict]:
-        items = self.unfinished()
-        if not items or self.week_start in self._seen_unfinished:
-            return []
-        self._seen_unfinished.add(self.week_start)
-        return items
+        return json.loads(
+            self._flow.consume_unfinished(self.week_start, json.dumps(self.unfinished()))
+        )
 
     def plan_unfinished(self, assignment_id: str) -> list[dict] | None:
         result = json.loads(
@@ -2924,9 +3008,10 @@ class NativeSession(QObject):
 
     def did_these(self, assignment_ids: list[str]) -> None:
         """"Mark as finished": the student finished them after all, as one Undo step."""
-        for assignment_id in assignment_ids:
-            if assignment_id in self.assignments:
-                self.complete_homework(assignment_id)
+        for assignment_id in flexweek_engine.session_did_these_ids(
+            json.dumps(self.assignments), json.dumps(assignment_ids)
+        ):
+            self.complete_homework(assignment_id)
         self.save()
 
     def recover_missed(self, block_id: str, day: int) -> None:
@@ -3112,8 +3197,7 @@ class NativeSession(QObject):
         then: Callable[[], object] | None = None,
     ) -> None:
         item = self.assignments.get(assignment_id)
-        if item is None or item.get("completed"):
-            self._allow_split_pending = None
+        if self._flow.preview_spread_stop(json.dumps(item)):
             return
         ticket = self._begin()
         self._say("Working out sessions…")
@@ -3179,26 +3263,19 @@ class NativeSession(QObject):
                 self._allow_split_pending,
             )
         )
-        made = set(selection["made_ids"])
-        plan_ids = set(selection["plan_ids"])
-        self._plan_after_save |= plan_ids
-        # A Spread by hand of the same homework and length makes the same ids as discarded Allow splitting
-        # sessions (one operation per attempt); its sessions are not promised a place.
-        self._split_whole = (self._split_whole - made) | plan_ids
+        made = selection["made_ids"]
+        plan_ids = selection["plan_ids"]
+        # Stage the promise before confirm: a save that preview starts still has to see it.
+        self._flow.confirm_spread_transition(json.dumps(made), json.dumps(plan_ids))
         ok = self.confirm_preview(
             preview["rows"],
             label=selection["label"],
             operation_id=operation_id,
             attempt_key=key,
         )
+        self._flow.confirm_spread_transition(json.dumps(made), json.dumps(plan_ids), ok)
         if ok:
             self.spread_preview = None
-            self._allow_split_pending = None
-        else:
-            self._plan_after_save.difference_update(plan_ids)
-            # Refused (a full week): the sessions were never made.
-            self._split_whole -= plan_ids
-            self._allow_split_pending = None
         return ok
 
     def save_availability(

@@ -18,6 +18,7 @@ use serde_json::{Map, Value, json};
 use super::autosave;
 use super::changes::{self, SaveAnswer, SaveDraft, SaveFailureKind, StepPlace, Travel};
 use super::leaving::Unsaved;
+use super::plan_flow::stored_weeks_json;
 use super::week::{self, DraftFlags, History, LoadFinish, LoadReply, LoadRoute, ReadWeek, Row};
 
 /// A week's own fields: what the open week holds and what a week set aside keeps.
@@ -624,6 +625,11 @@ impl Drafts {
                 "parked_count": self.parked_count(),
                 "parked_held": self.first_parked_held(),
             })),
+            "stored_weeks" => Some(stored_weeks_json(
+                &self.get("stored_parts"),
+                &self.get("revision"),
+                &self.week_start(),
+            )),
             field if known(field) => Some(self.get(field)),
             _ => None,
         }
