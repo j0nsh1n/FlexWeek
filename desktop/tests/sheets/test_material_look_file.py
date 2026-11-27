@@ -90,3 +90,35 @@ def test_setup_writes_material_beside_the_layout(qapp: QApplication, material_wi
     window._load_look()
     assert window._surface == "material"
     assert window._layout["options"]["classic"]["look"] == "preset:paper"
+
+
+def test_a_material_save_writes_the_look_file_as_python_always_did(tmp_path) -> None:  # noqa: ANN001
+    """Saving Material puts it in place and leaves every other key's bytes as json.dumps wrote them:
+    the spaces after ':' and ',', escaped non-ASCII, and Python's number spelling."""
+    from desktop.native.material.theme import kept_material, store_material
+
+    path = tmp_path / "look.json"
+    before = {
+        "preset": "high-contrast",
+        "saved_looks": [{"name": "Caf\u00e9 night", "scale": 1.1}],
+        "layout": {"main": "classic", "day": "dial", "options": {}},
+        "material": {"preset": "Slate"},
+        "zoom": {"week.hour": 1.25},
+        "extra": {"nested": [1, 2.5, "\u00fc"]},
+    }
+    path.write_text(json.dumps(before) + "\n", encoding="utf-8")
+    material = {"preset": "Blue", "mode": "dark"}
+    store_material(path, material)
+    after = dict(before, material=material)
+    assert path.read_text(encoding="utf-8") == json.dumps(after) + "\n"
+    assert kept_material(path) == material
+
+
+def test_a_look_file_that_is_not_text_reads_as_empty(tmp_path) -> None:  # noqa: ANN001
+    from desktop.native.material.theme import kept_material, store_material
+
+    path = tmp_path / "look.json"
+    path.write_bytes(b"\xff\xfe not utf-8")
+    assert kept_material(path) is None
+    store_material(path, {"preset": "Slate"})
+    assert path.read_text(encoding="utf-8") == json.dumps({"material": {"preset": "Slate"}}) + "\n"

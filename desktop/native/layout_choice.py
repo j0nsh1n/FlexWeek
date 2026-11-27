@@ -6,7 +6,11 @@ others, so reading it still sanitizes the choice and writing it back keeps the s
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import Any
+
+import flexweek_engine  # type: ignore[import-untyped]
 
 
 @dataclass(frozen=True)
@@ -26,7 +30,7 @@ class Option:
 
     @property
     def default(self) -> str:
-        return self.shipped or self.choices[0].value
+        return str(flexweek_engine.views_look_option_default(self.shipped, self.choices[0].value))
 
     @property
     def values(self) -> tuple[str, ...]:
@@ -43,69 +47,53 @@ class LayoutSpec:
     purpose: str = ""
 
 
-DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = {
-    "classic": (
-        ("pack:light-frost", "Light"),
-        ("preset:high-contrast", "High contrast"),
-        ("pack:dark-frost", "Dark"),
-        ("preset:paper", "Paper"),
-        ("preset:poster", "Poster"),
-    ),
-}
+def _build_design_looks() -> dict[str, tuple[tuple[str, str], ...]]:
+    raw: dict[str, list[list[str]]] = json.loads(flexweek_engine.views_look_design_looks())
+    return {
+        layout_id: tuple((str(value), str(label)) for value, label in pairs)
+        for layout_id, pairs in raw.items()
+    }
 
 
-def _look(layout_id: str) -> Option:
-    """Offer the signature first; an unset stored choice continues to wear the student's own look."""
-    choices = tuple(Choice(value, label) for value, label in DESIGN_LOOKS[layout_id])
-    return Option("look", "Look", "style", (*choices, Choice("your", "Your look")), shipped="your")
-
-
-LAYOUTS: dict[str, LayoutSpec] = {
-    spec.id: spec
-    for spec in (
-        LayoutSpec(
-            "classic",
-            "plan",
-            "Today's app",
-            "The week grid with the sidebar. Its colours come from the look you choose above.",
-            (_look("classic"),),
-            purpose="Calendar",
-        ),
+def _build_option(item: dict[str, Any]) -> Option:
+    return Option(
+        str(item["key"]),
+        str(item["label"]),
+        str(item["level"]),
+        tuple(Choice(str(choice["value"]), str(choice["label"])) for choice in item["choices"]),
+        shipped=str(item["shipped"]),
     )
-}
-MAIN_DEFAULT, DAY_DEFAULT = "classic", "dial"
+
+
+def _build_layouts() -> dict[str, LayoutSpec]:
+    raw: list[dict[str, Any]] = json.loads(flexweek_engine.views_look_layouts())
+    return {
+        str(spec["id"]): LayoutSpec(
+            str(spec["id"]),
+            str(spec["role"]),
+            str(spec["label"]),
+            str(spec["summary"]),
+            tuple(_build_option(option) for option in spec["options"]),
+            purpose=str(spec["purpose"]),
+        )
+        for spec in raw
+    }
+
+
+DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = _build_design_looks()
+LAYOUTS: dict[str, LayoutSpec] = _build_layouts()
+MAIN_DEFAULT: str = str(flexweek_engine.LOOK_MAIN_DEFAULT)
+DAY_DEFAULT: str = str(flexweek_engine.LOOK_DAY_DEFAULT)
 LEGACY_COLOURS: dict[str, dict[str, str]] = {}
 
 
 def sanitize_layout(raw: object) -> dict:
     """Whatever the file on disk says, hand back a choice this build can show."""
-    clean: dict = {"main": MAIN_DEFAULT, "day": DAY_DEFAULT, "options": {}}
-    if not isinstance(raw, dict):
-        return clean
-    for slot, role in (("main", "plan"), ("day", "day")):
-        spec = LAYOUTS.get(raw.get(slot)) if isinstance(raw.get(slot), str) else None
-        if spec is not None and spec.role == role:
-            clean[slot] = spec.id
-    stored = raw.get("options")
-    for layout_id, values in (stored if isinstance(stored, dict) else {}).items():
-        spec = LAYOUTS.get(layout_id) if isinstance(layout_id, str) else None
-        if spec is None or not isinstance(values, dict):
-            continue
-        old_colour = values.get("colour")
-        if "look" not in values and isinstance(old_colour, str):
-            values = {**values, "look": LEGACY_COLOURS.get(layout_id, {}).get(old_colour, "your")}
-        kept = {
-            option.key: values[option.key]
-            for option in spec.options
-            if values.get(option.key) in option.values
-        }
-        if kept:
-            clean["options"][layout_id] = kept
-    return clean
+    return json.loads(flexweek_engine.views_look_sanitize_layout(raw))
 
 
-SURFACES = ("material",)
-SURFACE_DEFAULT = "material"
+SURFACES: tuple[str, ...] = tuple(flexweek_engine.LOOK_SURFACES)
+SURFACE_DEFAULT: str = str(flexweek_engine.LOOK_SURFACE_DEFAULT)
 
 
 def sanitize_surface(raw: object) -> str:
@@ -115,4 +103,4 @@ def sanitize_surface(raw: object) -> str:
     Widgets value an older build wrote, opens Material. The file is not rewritten for keys this
     does not own.
     """
-    return SURFACE_DEFAULT
+    return str(flexweek_engine.views_look_sanitize_surface(raw))
