@@ -119,7 +119,7 @@ def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str
     return str(flexweek_engine.session_spread_ready_sentence(title, minutes, due, today))
 
 
-HOURS_REFUSED = "Check the days and times in Study hours and Protected time."
+HOURS_REFUSED = str(flexweek_engine.HOURS_REFUSED)
 
 
 # Blocks and homework are checked and written as the engine does it (engine/service/src/blocks.rs and
@@ -269,7 +269,6 @@ class NativeSession(QObject):
         self._seen_unfinished: set[str] = set()
         self._weeks_ticket = 0
         self._routines_ticket = 0
-        self._prefs_ticket = 0
         self.focus: dict | None = None
         self._fresh_plan = False
         # The last plan's homework given a time and still without one: what its toast and its bar say.
@@ -327,10 +326,13 @@ class NativeSession(QObject):
         # What setup has kept and not yet written, one request at a time: preferences, then study
         # hours, then the week. A second request would replace the first on this session.
         self._setup = flexweek_engine.SetupQueue()
+        self._prefs_queue = flexweek_engine.PreferencesQueue()
+        self._prefs_callbacks: list[Callable[[bool], None] | None] = []
         # The app's one sync host. Pairing, removal and Sync now use it; this session does not start
         # another.
         self._sync_host: QObject | None = None
         self.busy_changed.connect(self._resume_pending)
+        self.busy_changed.connect(self._resume_preferences)
         self._reminder_ticket = 0
         self._reminder_fetching: str | None = None
         self._reminder_week: str | None = None
@@ -488,8 +490,18 @@ class NativeSession(QObject):
             self._say(flexweek_engine.session_fail_words(planning, error.status, error.message))
 
     def _drop_setup(self) -> None:
-        """Unsent setup answers belong to the account that gave them."""
+        """Unsent setup answers and queued preference saves belong to the account that gave them."""
         self._setup.clear()
+        self._prefs_queue.clear()
+        self._prefs_callbacks.clear()
+
+    @property
+    def _prefs_ticket(self) -> int:
+        return int(self._prefs_queue.fetch_ticket())
+
+    @_prefs_ticket.setter
+    def _prefs_ticket(self, value: int) -> None:
+        self._prefs_queue.set_fetch_ticket(int(value))
 
     @property
     def setup_prefs(self) -> dict:
@@ -518,8 +530,11 @@ class NativeSession(QObject):
 
     def _drop_other_setup(self, account_id: object) -> None:
         """A different account does not keep the previous one's unsent setup answers."""
-        if self.account is None or self.account["id"] != account_id:
-            self._drop_setup()
+        current = None if self.account is None else json.dumps(self.account["id"])
+        incoming = json.dumps(account_id)
+        self._setup.drop_if_other_account(current, incoming)
+        if self._prefs_queue.drop_if_other_account(current, incoming):
+            self._prefs_callbacks.clear()
 
     def _clear_local(self) -> None:
         if self.account is not None:
@@ -1498,29 +1513,31 @@ class NativeSession(QObject):
         save_week: bool = False,
     ) -> None:
         """Remember what a setup page answered. The write goes out one request at a time."""
-        self._setup.keep(
+        merged = self._setup.keep_and_merge(
             json.dumps(updates),
             None if work_windows is None else json.dumps(work_windows),
             save_week,
+            None if self.preferences is None else json.dumps(self.preferences),
         )
-        if self.preferences is not None:
+        if merged is not None:
             # Seen at once, as Settings does: the save that follows stores them.
-            self.preferences = {**self.preferences, **self.setup_prefs}
+            self.preferences = json.loads(merged)
         self.flush_setup()
 
     def flush_setup(self) -> None:
         """Write what setup kept. Preferences go first: the week's save can start a plan. While a
         request is out, this waits, and the next idle turn sends whatever is still kept."""
         step = json.loads(
-            self._setup.next(self.account is not None, self.busy, self.preferences is not None)
+            self._setup.next_action(
+                self.account is not None,
+                self.busy,
+                None if self.preferences is None else json.dumps(self.preferences),
+            )
         )
         if step["step"] == "preferences":
             self.save_preferences(step["updates"])
         elif step["step"] == "windows":
-            prefs = self.preferences or {}
-            self.save_availability(
-                prefs.get("protected") or [], prefs.get("day_cutoff"), step["windows"]
-            )
+            self.save_availability(step["protected"], step["day_cutoff"], step["work_windows"])
         elif step["step"] == "week":
             self.save()
 
@@ -2327,13 +2344,12 @@ class NativeSession(QObject):
         self.client.request("GET", "/api/routines", None, ok, lambda _error: None)
 
     def _fetch_preferences(self) -> None:
-        if self.account is None:
+        token = self._prefs_queue.begin_fetch(self.account is not None)
+        if token is None:
             return
-        self._prefs_ticket += 1
-        token = self._prefs_ticket
 
         def ok(data: dict) -> None:
-            if token != self._prefs_ticket or self.account is None:
+            if not self._prefs_queue.accept_fetch(token, self.account is not None):
                 return
             self.preferences = data
             self.week_changed.emit()
@@ -3267,39 +3283,34 @@ class NativeSession(QObject):
         day_cutoff: str | None,
         work_windows: list[dict] | None = None,
     ) -> bool:
-        if self.account is None or self.preferences is None:
-            return False
-        try:
-            flexweek_engine.check_hours_windows(
-                json.dumps(protected), None if work_windows is None else json.dumps(work_windows)
-            )
-        except ValueError:
-            # The engine's reason names fields, not what the student sees; the Study hours sheet checks
-            # its own rows first, so this is rarely reached.
-            self._say(HOURS_REFUSED)
-            return False
-        body = json.loads(
-            flexweek_engine.session_availability_body(
-                json.dumps(self.preferences),
+        decision = json.loads(
+            flexweek_engine.session_prepare_save_availability(
+                self.account is not None,
+                None if self.preferences is None else json.dumps(self.preferences),
                 json.dumps(protected),
                 json.dumps(day_cutoff),
                 None if work_windows is None else json.dumps(work_windows),
             )
         )
+        if decision["kind"] == "absent":
+            return False
+        if decision["kind"] == "refused":
+            self._say(decision["say"])
+            return False
         ticket = self._begin()
-        self._say("Saving availability…")
+        self._say(decision["progress"])
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
             self.preferences = data
-            self._say("Saved availability.")
+            self._say(decision["done"])
             self.week_changed.emit()
 
         self.client.request(
-            "PUT",
-            "/api/preferences",
-            body,
+            decision["method"],
+            decision["path"],
+            decision["body"],
             ok,
             lambda error: self._fail(ticket, error),
         )
@@ -3917,37 +3928,70 @@ class NativeSession(QObject):
         return flexweek_engine.session_resolve_spotify_url(json.dumps(self.preferences), json.dumps(value))
 
     def save_preferences(self, updates: dict, then: Callable[[bool], None] | None = None) -> bool:
-        """Send the changes. `then` is told whether the server kept them, once it has answered."""
-        if self.account is None or self.preferences is None:
+        """Queue and send the changes one PUT at a time. `then` is told whether the server kept them."""
+        if not self._prefs_queue.enqueue(
+            self.account is not None, self.preferences is not None, json.dumps(updates)
+        ):
             return False
-        body = json.loads(
-            flexweek_engine.session_preferences_body(
-                json.dumps(self.preferences), json.dumps(updates)
+        self._prefs_callbacks.append(then)
+        self._flush_preferences()
+        return True
+
+    def _resume_preferences(self, busy: bool) -> None:
+        if not busy and self._prefs_queue.has_pending():
+            QTimer.singleShot(0, self, self._flush_preferences)
+
+    def _flush_preferences(self) -> None:
+        action = json.loads(
+            self._prefs_queue.next(
+                self.account is not None,
+                self.busy,
+                self._ticket,
+                None if self.preferences is None else json.dumps(self.preferences),
             )
         )
+        if action["kind"] != "send":
+            return
+        count = int(action["batch_len"])
+        callbacks = self._prefs_callbacks[:count]
+        del self._prefs_callbacks[:count]
         ticket = self._begin()
-        self._say("Saving preferences…")
+        self._prefs_queue.mark_in_flight(ticket)
+        self._say(action["progress"])
 
         def ok(data: dict) -> None:
+            self._prefs_queue.finish(ticket)
             if not self._idle(ticket):
                 return
             self.preferences = data
-            self._say("Saved preferences.")
+            self._say(action["done"])
             self.week_changed.emit()
-            if then is not None:
-                then(True)
+            for callback in callbacks:
+                if callback is not None:
+                    callback(True)
+            self._flush_preferences()
 
         def failed(error: ApiError) -> None:
             current = self._alive(ticket)
+            self._prefs_queue.finish(ticket)
             self._fail(ticket, error)
-            if current and then is not None:
-                then(False)
+            if current:
+                for callback in callbacks:
+                    if callback is not None:
+                        callback(False)
+                self._flush_preferences()
 
-        self.client.request("PUT", "/api/preferences", body, ok, failed)
-        return True
+        self.client.request(action["method"], action["path"], action["body"], ok, failed)
 
     def preview_timer_split(self, duration_min: int) -> None:
-        if self.account is None or self.preferences is None:
+        decision = json.loads(
+            flexweek_engine.session_prepare_timer_split_preview(
+                self.account is not None,
+                None if self.preferences is None else json.dumps(self.preferences),
+                duration_min,
+            )
+        )
+        if decision["kind"] != "ready":
             return
         ticket = self._begin()
 
@@ -3958,15 +4002,9 @@ class NativeSession(QObject):
             self.week_changed.emit()
 
         self.client.request(
-            "POST",
-            "/api/timer-split-preview",
-            {
-                "duration_min": duration_min,
-                "timer_work_min": self.preferences.get("timer_work_min"),
-                "timer_break_min": self.preferences.get("timer_break_min"),
-                "timer_long_break_min": self.preferences.get("timer_long_break_min"),
-                "timer_long_break_every": self.preferences.get("timer_long_break_every"),
-            },
+            decision["method"],
+            decision["path"],
+            decision["body"],
             ok,
             lambda error: self._fail(ticket, error),
         )
@@ -3976,10 +4014,14 @@ class NativeSession(QObject):
             return
 
         def presets(data: dict) -> None:
-            self.timer_presets = list(data.get("presets") or [])
+            self.timer_presets = json.loads(
+                flexweek_engine.session_parse_timer_presets(json.dumps(data))
+            )
 
         def limits(data: dict) -> None:
-            self.reminder_limits = dict(data)
+            self.reminder_limits = json.loads(
+                flexweek_engine.session_parse_reminder_limits(json.dumps(data))
+            )
             self.week_changed.emit()
 
         self.client.request("GET", "/api/timer-presets", None, presets, lambda _error: None)
@@ -3990,7 +4032,9 @@ class NativeSession(QObject):
             return
 
         def ok(data: dict) -> None:
-            self.recovery_remaining = int(data.get("remaining") or 0)
+            self.recovery_remaining = int(
+                flexweek_engine.session_parse_recovery_status(json.dumps(data))
+            )
             self.week_changed.emit()
 
         def storage(data: dict) -> None:
