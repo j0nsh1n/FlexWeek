@@ -9,6 +9,8 @@ pub mod hours;
 pub mod look_file;
 pub mod manage_info_alarms;
 pub mod month;
+pub mod sheet_block;
+pub mod sheet_preview;
 pub mod sheet_rules;
 pub mod theme;
 pub mod week;

@@ -57,6 +57,8 @@ LOCKED: dict[str, dict[str, str]] = {
         "AccountActions.import_account": "opens the system file picker and reads the chosen backup file from disk",
         "AccountActions.import_file": "opens the system file picker and reads the chosen week or day file from disk",
     },
+    "desktop/native/material/sheet_block.py": {},
+    "desktop/native/material/sheet_preview.py": {},
 }
 
 # Files that still hold other decisions. Only these functions moved.

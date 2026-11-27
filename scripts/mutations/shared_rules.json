@@ -105,32 +105,32 @@
   "test": "desktop/tests/sheets/test_material_homework_due_time.py::test_spreading_is_not_offered_when_the_homework_already_has_sessions"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "deleting a plain fixed time is not a red answer",
   "old": "                {\"id\": \"delete\", \"label\": \"Delete\", \"kind\": \"danger\"},\n",
   "new": "                {\"id\": \"delete\", \"label\": \"Delete\", \"kind\": \"filled\"},\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_deleting_a_plain_fixed_time_has_a_red_delete_and_a_plain_cancel"
+  "test": "cargo:flexweek-app:views_sheet_block:deleting_a_plain_fixed_time_has_a_red_delete"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "a series does not say changes apply to every selected day",
-  "old": "                and len(self._active_days()) > 1\n",
-  "new": "                and len(self._active_days()) > 5\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_series_opened_for_all_its_days_says_changes_apply_to_every_selected_day"
+  "old": "        if self.existing && active.len() > 1 && !covered {\n",
+  "new": "        if self.existing && active.len() > 5 && !covered {\n",
+  "test": "cargo:flexweek-app:views_sheet_block:a_series_says_changes_apply_to_every_selected_day"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "a one-day block says changes apply to every selected day",
-  "old": "                and len(self._active_days()) > 1\n",
-  "new": "                and len(self._active_days()) > 0\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_one_day_block_does_not_say_changes_apply_to_every_selected_day"
+  "old": "        if self.existing && active.len() > 1 && !covered {\n",
+  "new": "        if self.existing && active.len() > 0 && !covered {\n",
+  "test": "cargo:flexweek-app:views_sheet_block:a_one_day_block_does_not_say_changes_apply_to_every_selected_day"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "the repeat note is never given to the sheet",
-  "old": "            \"repeatNote\": \"\" if locked else REPEAT_NOTE,\n",
+  "old": "            \"repeatNote\": if locked { \"\" } else { REPEAT_NOTE },\n",
   "new": "            \"repeatNote\": \"\",\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_new_fixed_time_says_to_pick_more_days_to_repeat_it"
+  "test": "cargo:flexweek-app:views_sheet_block:a_new_fixed_time_says_to_pick_every_day"
  },
  {
   "file": "engine/app/src/views/sheet_rules.rs",
@@ -140,39 +140,39 @@
   "test": "cargo:flexweek-app:views_copy:the_repeat_note_says_to_pick_every_day"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "the apply-to row shows for a block that does not repeat",
-  "old": "            \"showScope\": bool(self.series and self.occurrence_day is not None),\n",
-  "new": "            \"showScope\": bool(self.existing and self.occurrence_day is not None),\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_the_apply_to_row_is_hidden_for_a_block_that_does_not_repeat"
+  "old": "            \"showScope\": self.series && self.occurrence_day.is_some(),\n",
+  "new": "            \"showScope\": self.existing && self.occurrence_day.is_some(),\n",
+  "test": "cargo:flexweek-app:views_sheet_block:the_apply_to_row_is_hidden_for_a_block_that_does_not_repeat"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "a start moved late runs the end past the end of the day",
-  "old": "        end = min(minute + self.length, DAY_END)\n",
-  "new": "        end = minute + self.length\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_start_moved_late_ends_the_day_and_says_so"
+  "old": "        let end = (minute + self.length).min(DAY_END);\n",
+  "new": "        let end = minute + self.length;\n",
+  "test": "cargo:flexweek-app:views_sheet_block:a_start_moved_late_ends_at_the_end_of_the_day"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "an end set by hand moves when the start moves",
-  "old": "        if self.end_by_hand:\n            self.moved = \"\"\n            return\n",
-  "new": "        if False:\n            self.moved = \"\"\n            return\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_an_end_set_by_hand_is_not_moved_when_the_start_moves"
+  "old": "        if self.end_by_hand {\n",
+  "new": "        if false {\n",
+  "test": "cargo:flexweek-app:views_sheet_block:an_end_set_by_hand_stays_when_the_start_moves"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "a block ending at 24:00 reopens a minute short",
-  "old": "        self.end: int = min(self.start + self.length, DAY_END)\n",
-  "new": "        self.end: int = min(self.start + self.length, DAY_END - 1)\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_block_ending_at_the_end_of_the_day_saves_and_reopens_unchanged"
+  "old": "        let end = (start + length).min(DAY_END);\n",
+  "new": "        let end = (start + length).min(DAY_END - 1);\n",
+  "test": "cargo:flexweek-app:views_sheet_block:a_block_ending_at_the_end_of_the_day_reopens_at_the_end"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "the missed switch is never offered",
-  "old": "            \"showMissed\": bool(self.existing and self.occurrence_day is not None),\n",
-  "new": "            \"showMissed\": False,\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_passed_block_offers_i_missed_it_and_ticking_it_marks_the_day_missed"
+  "old": "            \"showMissed\": self.existing && self.occurrence_day.is_some(),\n",
+  "new": "            \"showMissed\": false,\n",
+  "test": "cargo:flexweek-app:views_sheet_block:the_missed_switch_is_offered_for_one_day_of_a_block"
  },
  {
   "file": "desktop/native/material/bridge_sheets.py",
@@ -182,11 +182,11 @@
   "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_passed_block_offers_i_missed_it_and_ticking_it_marks_the_day_missed"
  },
  {
-  "file": "desktop/native/material/sheet_block.py",
+  "file": "engine/app/src/views/sheet_block.rs",
   "name": "unticking i missed it keeps the day missed",
-  "old": "            restored = None if self.missed else self.occurrence_day\n",
-  "new": "            restored = None\n",
-  "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_unticking_i_missed_it_undoes_the_missed_day"
+  "old": "            .filter(|_| !self.missed)\n",
+  "new": "            .filter(|_| false)\n",
+  "test": "cargo:flexweek-app:views_sheet_block:unticking_i_missed_it_removes_the_day"
  },
  {
   "file": "engine/app/src/views/sheet_rules.rs",
