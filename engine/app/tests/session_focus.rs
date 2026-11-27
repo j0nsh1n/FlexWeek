@@ -1613,10 +1613,7 @@ fn an_unreadable_focus_file_is_dropped_and_is_not_an_error() {
 fn a_focus_file_from_a_later_format_is_dropped() {
     // A newer format is not loaded, and the answer says the file must be left on disk.
     let later = json!({ "format": 2, "accounts": { "7": running_payload() } }).to_string();
-    assert_eq!(
-        load_text(&later),
-        json!({ "entries": [], "sealed": true })
-    );
+    assert_eq!(load_text(&later), json!({ "entries": [], "sealed": true }));
     assert_eq!(
         load_text(&json!({ "format": 0, "accounts": { "7": running_payload() } }).to_string()),
         json!({ "entries": [], "sealed": true })
@@ -2050,35 +2047,36 @@ fn a_timer_at_the_apps_own_limits_is_kept() {
 
 #[test]
 fn an_out_of_range_kept_timer_is_dropped() {
-    let edits: Vec<(&str, fn(&mut Value))> = vec![
-        ("1", |payload| payload["day"] = json!(true)),
-        ("2", |payload| payload["day"] = json!(7)),
-        ("3", |payload| payload["day"] = json!(-1)),
-        ("4", |payload| payload["cycles"] = json!(false)),
-        ("5", |payload| payload["cycles"] = json!(-1)),
-        ("6", |payload| payload["cycles"] = json!(10_000)),
-        ("7", |payload| payload["cycles"] = json!(i64::MAX)),
-        ("8", |payload| payload["workMin"] = json!(181)),
-        ("9", |payload| payload["workMin"] = json!(0)),
-        ("10", |payload| payload["workMin"] = json!(true)),
-        ("11", |payload| payload["remainingMs"] = json!(18446744073709551615u64)),
-        ("12", |payload| payload["endsAt"] = json!(18446744073709551615u64)),
-        ("13", |payload| payload["remainingMs"] = json!(-1)),
-        ("14", |payload| payload["endsAt"] = json!(-1)),
-        ("15", |payload| {
-            payload["endsAt"] = Value::Null;
-            payload["remainingMs"] = Value::Null;
-        }),
-        ("16", |payload| payload["breakMin"] = json!(61)),
-        ("17", |payload| payload["longBreakMin"] = json!(121)),
-        ("18", |payload| payload["startedAt"] = json!(-1)),
+    let bad = [
+        ("1", "day", json!(true)),
+        ("2", "day", json!(7)),
+        ("3", "day", json!(-1)),
+        ("4", "cycles", json!(false)),
+        ("5", "cycles", json!(-1)),
+        ("6", "cycles", json!(10_000)),
+        ("7", "cycles", json!(i64::MAX)),
+        ("8", "workMin", json!(181)),
+        ("9", "workMin", json!(0)),
+        ("10", "workMin", json!(true)),
+        ("11", "remainingMs", json!(18446744073709551615u64)),
+        ("12", "endsAt", json!(18446744073709551615u64)),
+        ("13", "remainingMs", json!(-1)),
+        ("14", "endsAt", json!(-1)),
+        ("16", "breakMin", json!(61)),
+        ("17", "longBreakMin", json!(121)),
+        ("18", "startedAt", json!(-1)),
     ];
     let mut accounts = serde_json::Map::new();
-    for (id, edit) in edits {
+    for (id, key, value) in bad {
         let mut payload = running_payload();
-        edit(&mut payload);
+        payload[key] = value;
         accounts.insert(id.to_string(), payload);
     }
+    // Neither clock is set, so this is not a timer the app can restore.
+    let mut open = running_payload();
+    open["endsAt"] = Value::Null;
+    open["remainingMs"] = Value::Null;
+    accounts.insert("15".to_string(), open);
     // The one that stays: an ended timer the app can write, with a time left of zero.
     accounts.insert(
         "20".to_string(),
