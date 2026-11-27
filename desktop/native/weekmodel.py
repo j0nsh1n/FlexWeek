@@ -64,7 +64,7 @@ def clock_text(minute: int) -> str:
 
 def end_after_start_words(start: str) -> str:
     """The line when an End is not after its Start; `start` is written as the clock writes it."""
-    return f"End needs to be later than Start ({start})."
+    return str(flexweek_engine.hours_end_after_start_words(start))
 
 
 def hhmm_text(hhmm: str) -> str:
@@ -96,27 +96,7 @@ def length_label(minutes: int) -> str:
 
 
 def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
-    overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
-    carried = sum(item.get("left_over_state") == "left_from_last_week" for item in left_over)
-    minutes = {item.get("assignment_id"): int(item.get("minutes", 0)) for item in needed}
-    # In a week that is over a missed session's minutes are said as missed: they are planned from this week.
-    missed = sum({item.get("assignment_id"): int(item.get("missed_min", 0)) for item in needed}.values())
-    pinned = sum({item.get("assignment_id"): int(item.get("pinned_min", 0)) for item in needed}.values())
-    total = sum(minutes.values()) - missed - pinned
-    if not overdue and not carried and not total and not missed and not pinned:
-        return "Everything has a time."
-    words = []
-    if overdue:
-        words.append(f"{overdue} overdue")
-    if carried:
-        words.append(f"{carried} left from last week")
-    if total:
-        words.append(f"{length_label(total)} still needs a time")
-    if missed:
-        words.append(f"{length_label(missed)} missed")
-    if pinned:
-        words.append(f"{length_label(pinned)} pinned, in the past")
-    return " · ".join(words)
+    return str(flexweek_engine.hours_homework_time_sentence(plain(left_over), plain(needed)))
 
 
 def planned_line(planned_min: int, done_min: int) -> str:

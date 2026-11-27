@@ -3,36 +3,25 @@ and the deadline give it. No drawing, so the Widgets canvas and Material's lists
 
 from __future__ import annotations
 
-from datetime import date
+import flexweek_engine  # type: ignore[import-untyped]
 
-from desktop.native.weekmodel import Occurrence, length_label, range_label
+from desktop.native.weekmodel import Occurrence
 
 
 def plan_placed(item: Occurrence) -> bool:
     """Homework that Plan placed and nobody has moved since. A hand move or a chosen time pins it, and
     a finished or missed session has nothing left for Plan to place (N11)."""
-    return item.work and not item.pinned and not item.done and not item.missed
+    return bool(flexweek_engine.hours_plan_placed(item.work, item.pinned, item.done, item.missed))
 
 
 def tag_words(history: str, placed_by_plan: bool) -> tuple[str, ...]:
     """Pill labels on a block, in order: Overdue, Left from last week, Placed by Plan."""
-    tags: list[str] = []
-    if history == "Overdue":
-        tags.append("Overdue")
-    if history == "Left from last week":
-        tags.append("Left from last week")
-    if placed_by_plan:
-        tags.append("Placed by Plan")
-    return tuple(tags)
+    return tuple(flexweek_engine.hours_tag_words(history, placed_by_plan))
 
 
 def length_words(minutes: int, done: bool, missed: bool) -> str:
     """Its length, then what became of it: "1 h", "1 h · Missed"."""
-    words = length_label(minutes)
-    for flag, word in ((done, "Finished"), (missed, "Missed")):
-        if flag:
-            words += f" · {word}"
-    return words
+    return str(flexweek_engine.hours_length_words(minutes, done, missed))
 
 
 def tail_words(
@@ -45,15 +34,9 @@ def tail_words(
     placed_by_plan: bool,
 ) -> str:
     """`words` followed by the block's tags and Pinned, each after a dot."""
-    for tag in tag_words(history, placed_by_plan):
-        if tag.startswith("Overdue") and history_due:
-            try:
-                due = date.fromisoformat(history_due[:10])
-                tag = f"{tag}, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
-            except ValueError:
-                pass
-        words += f" · {tag}"
-    return words + " · Pinned" if pinned and not done else words
+    return str(
+        flexweek_engine.hours_tail_words(words, done, pinned, history, history_due, placed_by_plan)
+    )
 
 
 def detail_words(
@@ -68,11 +51,8 @@ def detail_words(
     placed_by_plan: bool = False,
 ) -> str:
     """Everything a block says under its name, on one line, for a screen reader and the tests."""
-    return tail_words(
-        f"{range_label(start, end)} · {length_words(end - start, done, missed)}",
-        done=done,
-        pinned=pinned,
-        history=history,
-        history_due=history_due,
-        placed_by_plan=placed_by_plan,
+    return str(
+        flexweek_engine.hours_detail_words(
+            start, end, done, missed, pinned, history, history_due, placed_by_plan
+        )
     )
