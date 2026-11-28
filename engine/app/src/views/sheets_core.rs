@@ -162,7 +162,20 @@ fn array<'a>(facts: &'a Value, key: &str) -> EngineResult<&'a Vec<Value>> {
 }
 
 fn lenient_text<'a>(facts: &'a Value, key: &str) -> EngineResult<Option<&'a str>> {
-    Ok(get(facts, key)?.as_str())
+    match get(facts, key)? {
+        Value::Null => Ok(None),
+        Value::String(text) => Ok(Some(text)),
+        _ => Err(type_error(format!("sheet facts: {key} must be text"))),
+    }
+}
+
+fn optional_object<'a>(facts: &'a Value, key: &str) -> EngineResult<&'a Value> {
+    let value = get(facts, key)?;
+    if value.is_null() || value.is_object() {
+        Ok(value)
+    } else {
+        Err(type_error(format!("sheet facts: {key} must be an object")))
+    }
 }
 
 /// `str(value or default)`.
@@ -380,7 +393,7 @@ pub fn open_block_at(facts: &Value) -> EngineResult<Value> {
         (second, first)
     };
     // One step is the shortest block a draw makes, as in the Widgets grid.
-    let chosen = get(facts, "preferences")?
+    let chosen = optional_object(facts, "preferences")?
         .get("drag_step_min")
         .filter(|value| !value.is_boolean())
         .and_then(Value::as_i64);
@@ -468,7 +481,7 @@ pub fn ask_delete_block(facts: &Value) -> EngineResult<Value> {
 pub fn close(facts: &Value) -> EngineResult<Value> {
     let kind = text(facts, "kind")?;
     let before = if kind == "update" {
-        vec![bridge("_defer_update_finish")]
+        vec![bridge("_finish_update")]
     } else {
         Vec::new()
     };
@@ -489,7 +502,7 @@ pub fn close(facts: &Value) -> EngineResult<Value> {
 }
 
 fn ask_is_open(facts: &Value) -> EngineResult<bool> {
-    Ok(truthy(Some(get(facts, "ask")?)))
+    Ok(truthy(Some(optional_object(facts, "ask")?)))
 }
 
 /// Esc, Cancel and a tap on the scrim. A sheet with typed work asks before dropping it.
@@ -498,7 +511,10 @@ pub fn close_sheet(facts: &Value) -> EngineResult<Value> {
         return steps(vec![bridge("_cancel_drag")]);
     }
     if ask_is_open(facts)? {
-        let edited = get(facts, "ask")?.get("id").and_then(Value::as_str) == Some("edited-weeks");
+        let edited = optional_object(facts, "ask")?
+            .get("id")
+            .and_then(Value::as_str)
+            == Some("edited-weeks");
         let dismisses = array(facts, "handlers")?
             .iter()
             .any(|name| name.as_str() == Some("dismiss"));
@@ -585,7 +601,7 @@ pub fn save_homework(facts: &Value) -> EngineResult<Value> {
         list.push(session("save", Vec::new(), json!({})));
     } else {
         list.push(session("add_homework", vec![made.clone()], json!({})));
-        let auto = get(facts, "preferences")?
+        let auto = optional_object(facts, "preferences")?
             .get("planning_style")
             .and_then(Value::as_str)
             == Some("auto");
@@ -719,8 +735,11 @@ pub fn repeat_after(facts: &Value) -> EngineResult<Value> {
 /// Days the student ticked back on are live this week. Days they left unticked stay removed.
 pub fn ticked_back(facts: &Value) -> EngineResult<Value> {
     let listed = |key: &str| -> EngineResult<Vec<Value>> {
-        let value = get(facts, key)?;
-        Ok(value.as_array().cloned().unwrap_or_default())
+        match get(facts, key)? {
+            Value::Null => Ok(Vec::new()),
+            Value::Array(days) => Ok(days.clone()),
+            _ => Err(type_error(format!("sheet facts: {key} must be a list"))),
+        }
     };
     let made = listed("made_removed")?;
     let restored: Vec<Value> = listed("original_removed")?
@@ -873,7 +892,7 @@ pub fn remove(facts: &Value) -> EngineResult<Value> {
 
 /// A button on the prompt that is up.
 pub fn answer(facts: &Value) -> EngineResult<Value> {
-    let asked = get(facts, "ask")?
+    let asked = optional_object(facts, "ask")?
         .get("id")
         .and_then(Value::as_str)
         .unwrap_or_default();
@@ -1012,7 +1031,7 @@ pub fn delete_block_standing_done(facts: &Value) -> EngineResult<Value> {
 // Alarms --------------------------------------------------------------------------------------
 
 pub fn alarms(facts: &Value) -> EngineResult<Value> {
-    let list = get(facts, "preferences")?
+    let list = optional_object(facts, "preferences")?
         .get("alarms")
         .and_then(Value::as_array)
         .cloned()
@@ -1022,7 +1041,7 @@ pub fn alarms(facts: &Value) -> EngineResult<Value> {
 
 /// Add (an empty id) or edit an alarm of Settings > Alerts.
 pub fn open_alarm(facts: &Value) -> EngineResult<Value> {
-    let preferences = get(facts, "preferences")?;
+    let preferences = optional_object(facts, "preferences")?;
     if !flag(facts, "account")? || preferences.is_null() {
         return steps(Vec::new());
     }
@@ -1143,8 +1162,9 @@ pub fn alarms_without(facts: &Value) -> EngineResult<Value> {
 pub fn saved(facts: &Value) -> EngineResult<Value> {
     let (stored, kind) = (flag(facts, "stored")?, text(facts, "kind")?);
     let words = get(facts, "words")?;
+    let has_words = truthy(Some(words));
     let mut list = Vec::new();
-    if truthy(Some(words)) {
+    if has_words {
         if stored {
             list.push(bridge("_close"));
             list.push(step("bridge", "_say", vec![words.clone()], json!({})));
@@ -1162,28 +1182,34 @@ pub fn saved(facts: &Value) -> EngineResult<Value> {
             list.push(publish());
         }
     }
-    if matches!(kind, "homework" | "block") {
+    if !(has_words && stored) && matches!(kind, "homework" | "block") {
         list.push(publish());
     }
-    let waiting = get(facts, "waiting")?;
-    if let Value::Array(pair) = waiting {
-        let (block_id, message) = match pair.as_slice() {
-            [block_id, message] => (block_id, message),
-            _ => return Err(EngineError::value("not enough values to unpack")),
-        };
-        let held = array(facts, "blocks")
-            .map(|blocks| blocks.iter().any(|item| item.get("id") == Some(block_id)))?;
-        if !stored {
-            list.push(set("_late_waiting", Value::Null));
-        } else if held {
-            list.push(set("_late_waiting", Value::Null));
-            list.push(step(
-                "bridge",
-                "_say",
-                vec![message.clone()],
-                json!({"undo": true}),
-            ));
+    match get(facts, "waiting")? {
+        Value::Null => {}
+        Value::Array(pair) => {
+            let (block_id, message) = match pair.as_slice() {
+                [block_id, message] => (block_id, message),
+                _ => return Err(EngineError::value("not enough values to unpack")),
+            };
+            if !stored {
+                list.push(set("_late_waiting", Value::Null));
+            } else {
+                let held = array(facts, "blocks")?
+                    .iter()
+                    .any(|item| item.get("id") == Some(block_id));
+                if held {
+                    list.push(set("_late_waiting", Value::Null));
+                    list.push(step(
+                        "bridge",
+                        "_say",
+                        vec![message.clone()],
+                        json!({"undo": true}),
+                    ));
+                }
+            }
         }
+        _ => return Err(type_error("sheet facts: waiting must be a list")),
     }
     steps(list)
 }

@@ -439,7 +439,7 @@ fn closing_an_update_sheet_finishes_the_update_and_a_late_one_clears_its_preview
     let plain = run("close", json!({"kind": "block", "late_preview": true}));
     assert_eq!(plain, json!({"before": [], "clear": []}));
     let update = run("close", json!({"kind": "update", "late_preview": false}));
-    assert_eq!(update["before"], json!([bridge("_defer_update_finish")]));
+    assert_eq!(update["before"], json!([bridge("_finish_update")]));
     assert_eq!(update["clear"], json!([]));
     let late = run("close", json!({"kind": "late", "late_preview": true}));
     assert_eq!(
@@ -1646,7 +1646,6 @@ fn a_stored_weekly_change_closes_the_sheet_and_waits_for_its_restore_point() {
             bridge("_close"),
             say("Club repeats.", false),
             set("_restore_words", json!("Club repeats.")),
-            bridge("_publish"),
         ])
     );
 }
@@ -1695,12 +1694,16 @@ fn a_late_move_waits_for_the_save_then_says_it_with_undo_once_the_block_is_there
         saved(json!({"waiting": waiting, "blocks": [{"id": "other"}]})),
         json!([])
     );
-    let refused = saved(json!({"waiting": waiting, "stored": false, "blocks": [{"id": "b1"}]}));
+    let refused = saved(json!({"waiting": waiting, "stored": false, "blocks": null}));
     assert_eq!(refused, json!([set("_late_waiting", Value::Null)]));
     let short = json!({
         "words": "", "stored": true, "said": "", "has_block": true, "kind": "", "waiting": ["b1"], "blocks": [],
     });
     assert_eq!(plan("saved", &short).unwrap_err().kind, ErrorKind::Value);
+    let wrong = json!({
+        "words": "", "stored": true, "said": "", "has_block": true, "kind": "", "waiting": "bad", "blocks": [],
+    });
+    assert_eq!(plan("saved", &wrong).unwrap_err().kind, ErrorKind::Type);
 }
 
 #[test]
@@ -2108,4 +2111,31 @@ fn the_more_menu_lists_entries_only_while_it_is_open() {
         run("more_source", json!({"more": false})),
         json!("_no_entries")
     );
+}
+
+#[test]
+fn optional_sheet_facts_refuse_values_of_the_wrong_shape() {
+    let cases = [
+        ("open_block", json!({"account": true, "armed": 42})),
+        (
+            "open_block_at",
+            json!({"account": true, "start_min": 600, "end_min": 660, "preferences": 42, "day": 0, "armed": null}),
+        ),
+        (
+            "answer",
+            json!({"ask": "bad", "choice": "keep", "has_handlers": false}),
+        ),
+        ("alarms", json!({"preferences": 42})),
+        (
+            "ticked_back",
+            json!({"made_removed": 42, "original_removed": [], "family": "club"}),
+        ),
+        (
+            "ticked_back",
+            json!({"made_removed": [], "original_removed": 42, "family": "club"}),
+        ),
+    ];
+    for (op, facts) in cases {
+        assert_eq!(plan(op, &facts).unwrap_err().kind, ErrorKind::Type, "{op}");
+    }
 }
