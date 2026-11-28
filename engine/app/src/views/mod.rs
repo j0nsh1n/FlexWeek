@@ -3,6 +3,7 @@
 //! fresh id and the local weekday. Nothing here reads a clock, draws a random id, or asks the
 //! operating system.
 
+pub mod account_auth;
 pub mod copy;
 pub mod day;
 pub mod focus;
