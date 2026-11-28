@@ -11,9 +11,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop.native.remind import ALARM_SNOOZE_MIN
+from desktop.native.material.bridge_alarms import ring_form
 from desktop.native.spotify import open_in_app
-from desktop.native.weekmodel import hhmm_text
 
 ALARM_MIN_WIDTH = 380
 ALARM_PAD = 20
@@ -35,13 +34,12 @@ class AlarmRingDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(ALARM_PAD, ALARM_PAD, ALARM_PAD, ALARM_PAD)
         layout.setSpacing(ALARM_GAP)
-        title = QLabel(alarm.get("name") or "Alarm")
+        shown = ring_form(alarm, spotify)
+        title = QLabel(shown["title"])
         title.setObjectName("alarmTitle")
         title.setWordWrap(True)
         layout.addWidget(title)
-        ringing = "Starting now" if alarm.get("block") else "Alarm is ringing"
-        when = str(alarm.get("time") or "")
-        detail = QLabel(f"{hhmm_text(when) if when else ''} · {ringing}")
+        detail = QLabel(shown["detail"])
         detail.setObjectName("alarmDetail")
         layout.addWidget(detail)
         layout.addSpacing(ALARM_GAP)
@@ -56,7 +54,7 @@ class AlarmRingDialog(QDialog):
             link.setMinimumHeight(ALARM_BUTTON_HEIGHT)
             link.clicked.connect(self._spotify)
             layout.addWidget(link)
-        snooze = QPushButton(f"Snooze {ALARM_SNOOZE_MIN} minutes")
+        snooze = QPushButton(shown["snoozeLabel"])
         snooze.setObjectName("alarmSnooze")
         snooze.setProperty("quiet", True)
         snooze.clicked.connect(self._snooze)
