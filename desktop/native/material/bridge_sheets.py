@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
-from functools import partial
 from typing import Any
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -84,8 +83,10 @@ def _never() -> bool:
     return False
 
 
-def _invoke(callback: Any) -> Any:
-    return callback()
+def _invoke(callback: Any, *args: Any) -> Any:
+    if callback is not None:
+        return callback(*args)
+    return None
 
 
 def _dirty(draft: Any) -> bool:
@@ -205,8 +206,7 @@ class SheetsBridge(QObject):
         self._routine_error = ""
         # The moved-day note the open sheet last showed; None until the sheet's first showing.
         self._noted = None
-        # What runs once the sheet is published again, and the figures a spread save took before it wrote.
-        self._after: list = []
+        # The figures a spread save took before it wrote.
         self._spread_plan: Any = None
         self._paused = False
         self._held = False
@@ -327,24 +327,6 @@ class SheetsBridge(QObject):
         }
         return getattr(targets[step["on"]], step["call"])(*step["args"], **step["kwargs"])
 
-    def _later(self, callback: Any) -> None:
-        """Keeps `callback` to run once the sheet has been published again."""
-        if callback is not None:
-            self._after.append(callback)
-
-    def _flush_after(self) -> None:
-        callbacks, self._after = self._after, []
-        tuple(map(_invoke, callbacks))
-
-    def _defer_edited(self, answer: Any) -> None:
-        """Takes the edited-weeks question's callback; it is answered once the sheet is published again."""
-        done, self._edited_done = self._edited_done, None
-        if done is not None:
-            self._after.append(partial(done, answer))
-
-    def _defer_update_finish(self) -> None:
-        self._later(self._finish_update())
-
     # Opening and closing ----------------------------------------------------------------
     def _open(self, kind: str) -> None:
         self._kind = kind
@@ -359,8 +341,8 @@ class SheetsBridge(QObject):
         plan = self._plan(
             "close", kind=self._kind, late_preview=getattr(self._session, "late_preview", None) is not None
         )
-        self._defer_edited(None)
-        self._run(plan["before"])
+        done, self._edited_done = self._edited_done, None
+        after = self._run(plan["before"])
         self._kind = ""
         self._ask = {}
         self._ask_handlers = None
@@ -372,7 +354,8 @@ class SheetsBridge(QObject):
         self._preview = None
         self._run(plan["clear"])
         self._publish()
-        self._flush_after()
+        _invoke(done, None)
+        tuple(map(_invoke, after))
 
     @Slot()
     def openHomework(self) -> None:
