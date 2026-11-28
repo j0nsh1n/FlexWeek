@@ -15,5 +15,6 @@ pub mod sheet_block;
 pub mod sheet_homework;
 pub mod sheet_preview;
 pub mod sheet_rules;
+pub mod sheets_core;
 pub mod theme;
 pub mod week;
