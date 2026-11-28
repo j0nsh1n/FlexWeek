@@ -860,15 +860,30 @@ pub fn unpin_done(facts: &Value) -> EngineResult<Value> {
     steps(list)
 }
 
-fn prompt(id: &str, title: &str, body: &str) -> Value {
+// Each prompt spells its id and title out in one literal: the desktop guard
+// test_every_prompt_the_code_can_raise_is_in_the_walk finds prompts by reading this source.
+fn delete_answers() -> Value {
+    json!([
+        {"id": "stay", "label": "Cancel", "kind": "text"},
+        {"id": "delete", "label": "Delete", "kind": "danger"},
+    ])
+}
+
+fn delete_homework_prompt(body: &str) -> Value {
     json!({
-        "id": id,
-        "title": title,
+        "id": "delete-homework",
+        "title": "Delete homework",
         "body": body,
-        "answers": [
-            {"id": "stay", "label": "Cancel", "kind": "text"},
-            {"id": "delete", "label": "Delete", "kind": "danger"},
-        ],
+        "answers": delete_answers(),
+    })
+}
+
+fn delete_alarm_prompt(body: &str) -> Value {
+    json!({
+        "id": "delete-alarm",
+        "title": "Delete alarm",
+        "body": body,
+        "answers": delete_answers(),
     })
 }
 
@@ -879,10 +894,7 @@ pub fn remove(facts: &Value) -> EngineResult<Value> {
         let body = format!(
             "Delete {title}? Its times on the calendar go too, in every week. You can undo this."
         );
-        return steps(vec![
-            set("_ask", prompt("delete-homework", "Delete homework", &body)),
-            publish(),
-        ]);
+        return steps(vec![set("_ask", delete_homework_prompt(&body)), publish()]);
     }
     if flag(facts, "block_existing")? && flag(facts, "has_session")? {
         return steps(vec![bridge("_ask_block_delete"), publish()]);
@@ -1140,10 +1152,7 @@ pub fn remove_alarm(facts: &Value) -> EngineResult<Value> {
     let name = text(facts, "name")?.trim();
     let name = if name.is_empty() { "this alarm" } else { name };
     let body = format!("Delete {name}? It will not ring again.");
-    steps(vec![
-        set("_ask", prompt("delete-alarm", "Delete alarm", &body)),
-        publish(),
-    ])
+    steps(vec![set("_ask", delete_alarm_prompt(&body)), publish()])
 }
 
 pub fn alarms_without(facts: &Value) -> EngineResult<Value> {
